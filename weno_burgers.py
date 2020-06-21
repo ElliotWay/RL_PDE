@@ -69,53 +69,92 @@ def weno(order, q):
         qL[i] = numpy.dot(w[:, i], q_stencils)
     
     return qL
+  
+def weno_stencils(order, q):
+  """
+  Compute WENO stencils
+  
+  Parameters
+  ----------
+  order : int
+    The stencil width.
+  q : numpy array
+    Scalar data to reconstruct.
 
+  Returns
+  -------
+  stencils
 
-def weno_M(order, q):
-    """
-    Do WENOM reconstruction following Gerolymos equation (18)
-    
-    Parameters
-    ----------
-    
-    order : int
-        The stencil width
-    q : numpy array
-        Scalar data to reconstruct
-        
-    Returns
-    -------
-    
-    qL : numpy array
-        Reconstructed data - boundary points are zero
-    """
-    C = weno_coefficients.C_all[order]
-    a = weno_coefficients.a_all[order]
-    sigma = weno_coefficients.sigma_all[order]
+  """
+  a = weno_coefficients.a_all[order]
+  np = len(q) - 2 * order
+  q_stencils = numpy.zeros((order, len(q)))
+  for i in range(order, np+order):   
+      for k in range(order):
+          for l in range(order):
+              q_stencils[k,i] += a[k, l] * q[i+k-l]
+  
+  return q_stencils
 
-    qL = numpy.zeros_like(q)
-    beta = numpy.zeros((order, len(q)))
-    w = numpy.zeros_like(beta)
-    np = len(q) - 2 * order
-    epsilon = 1e-16
-    for i in range(order, np+order):
-        q_stencils = numpy.zeros(order)
-        alpha_JS = numpy.zeros(order)
-        for k in range(order):
-            for l in range(order):
-                for m in range(l+1):
-                    beta[k, i] += sigma[k, l, m] * q[i+k-l] * q[i+k-m]
-            alpha_JS[k] = C[k] / (epsilon + beta[k, i]**2)
-            for l in range(order):
-                q_stencils[k] += a[k, l] * q[i+k-l]
-        w_JS = alpha_JS / numpy.sum(alpha_JS)
-        alpha = w_JS * (C + C**2 - 3 * C * w_JS + w_JS**2) / \
-                       (C**2 + w_JS * (1 - 2 * C))
-        w[:, i] = alpha / numpy.sum(alpha)
-        qL[i] = numpy.dot(w[:, i], q_stencils)
-    
-    return qL
+def weno_weights(order, q):
+  """
+  Compute WENO weights
 
+  Parameters
+  ----------
+  order : int
+    The stencil width.
+  q : numpy array
+    Scalar data to reconstruct.
+
+  Returns
+  -------
+  stencil weights
+
+  """
+  C = weno_coefficients.C_all[order]
+  sigma = weno_coefficients.sigma_all[order]
+
+  beta = numpy.zeros((order, len(q)))
+  w = numpy.zeros_like(beta)
+  np = len(q) - 2 * order
+  epsilon = 1e-16
+  for i in range(order, np+order):
+      alpha = numpy.zeros(order)
+      for k in range(order):
+          for l in range(order):
+              for m in range(l+1):
+                  beta[k, i] += sigma[k, l, m] * q[i+k-l] * q[i+k-m]
+          alpha[k] = C[k] / (epsilon + beta[k, i]**2)
+      w[:, i] = alpha / numpy.sum(alpha)
+  
+  return w
+
+def weno_new(order, q):
+  """
+  Compute WENO reconstruction
+
+  Parameters
+  ----------
+  order : TYPE
+    DESCRIPTION.
+  q : TYPE
+    DESCRIPTION.
+
+  Returns
+  -------
+  None.
+
+  """
+  
+  weights = weno_weights(order, q)
+  q_stencils = weno_stencils(order, q)
+  qL = numpy.zeros_like(q)
+  np = len(q) - 2 * order
+  for i in range(order, np+order):
+    qL[i] = numpy.dot(weights[:, i], q_stencils[:,i])
+    
+  return qL
 
 class WENOSimulation(burgers.Simulation):
     
@@ -143,16 +182,24 @@ class WENOSimulation(burgers.Simulation):
         g = self.grid
         g.fill_BCs()
         f = self.burgers_flux(g.u)
+        # get maximum velocity
         alpha = numpy.max(abs(g.u))
+        # Lax Friedrichs Flux Splitting
         fp = (f + alpha * g.u) / 2
         fm = (f - alpha * g.u) / 2
         fpr = g.scratch_array()
         fml = g.scratch_array()
         flux = g.scratch_array()
-        fpr[1:] = weno(self.weno_order, fp[:-1])
-        fml[-1::-1] = weno(self.weno_order, fm[-1::-1])
+        # compute fluxes at the cell edges
+        # compute f plus to the right
+        fpr[1:] = weno_new(self.weno_order, fp[:-1])
+        # compute f minus to the left
+        # pass the data in reverse order
+        fml[-1::-1] = weno_new(self.weno_order, fm[-1::-1])
+        # compute flux from fpr and fml
         flux[1:-1] = fpr[1:-1] + fml[1:-1]
         rhs = g.scratch_array()
+        
         rhs[1:-1] = 1/g.dx * (flux[1:-1] - flux[2:])
         return rhs
 
@@ -197,7 +244,7 @@ if __name__ == "__main__":
     
     xmin = 0.0
     xmax = 1.0
-    nx = 256
+    nx = 128
     order = 3
     ng = order+1
     g = burgers.Grid1d(nx, ng, bc="periodic")
@@ -229,7 +276,10 @@ if __name__ == "__main__":
     
     pyplot.xlabel("$x$")
     pyplot.ylabel("$u$")
-    pyplot.savefig("weno-burger-sine.pdf")
+    pyplot.show()
+    #pyplot.savefig("weno-burger-sine.pdf")
+    
+    '''
     
     # Compare the WENO and "standard" (from burgers.py) results at low res
     nx = 64
@@ -262,6 +312,7 @@ if __name__ == "__main__":
     pyplot.xlim(0.5, 0.9)
     pyplot.legend(frameon=False)
     pyplot.savefig("weno-vs-plm-burger.pdf")
+    
     
     
     #-----------------------------------------------------------------------------
@@ -362,3 +413,4 @@ if __name__ == "__main__":
 
     pyplot.legend(frameon=False)
     pyplot.savefig("weno-converge-burgers.pdf")
+    '''
