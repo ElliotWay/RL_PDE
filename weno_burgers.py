@@ -3,6 +3,7 @@ from matplotlib import pyplot
 import burgers
 import weno_coefficients
 from scipy.optimize import brentq
+import sys
 
 def burgers_sine_exact(x, t):
     """
@@ -69,7 +70,48 @@ def weno(order, q):
         qL[i] = numpy.dot(w[:, i], q_stencils)
     
     return qL
-  
+
+def weno_i(order, q):
+    """
+    Do WENO reconstruction
+    
+    Parameters
+    ----------
+    
+    order : int
+        The stencil width
+    q : numpy array
+        Scalar data to reconstruct
+        
+    Returns
+    -------
+    
+    qL : float
+        Reconstructed data - boundary points are zero
+    """
+    C = weno_coefficients.C_all[order]
+    a = weno_coefficients.a_all[order]
+    sigma = weno_coefficients.sigma_all[order]
+
+    qL = numpy.zeros_like(q)
+    beta = numpy.zeros((order))
+    w = numpy.zeros_like(beta)
+    epsilon = 1e-16
+    q_stencils = numpy.zeros(order)
+    alpha = numpy.zeros(order)
+    for k in range(order):
+        for l in range(order):
+            for m in range(l+1):
+                beta[k] += sigma[k, l, m] * q[order-1+k-l] * q[order-1+k-m]
+        alpha[k] = C[k] / (epsilon + beta[k]**2)
+        for l in range(order):
+            q_stencils[k] += a[k, l] * q[order-1+k-l]
+    w[:] = alpha / numpy.sum(alpha)
+    qL = numpy.dot(w[:], q_stencils)
+
+    return qL
+
+# split the WENO method into computing stencils and then weights
 def weno_stencils(order, q):
   """
   Compute WENO stencils
@@ -136,14 +178,15 @@ def weno_new(order, q):
 
   Parameters
   ----------
-  order : TYPE
-    DESCRIPTION.
+  order : int
+    Stencil Width.
   q : TYPE
-    DESCRIPTION.
+    Scalar data to reconstruct.
 
   Returns
   -------
-  None.
+  qL: numpy array
+    Reconstructed data.
 
   """
   
@@ -172,30 +215,85 @@ class WENOSimulation(burgers.Simulation):
         else:
             super().init_cond(type)
 
-
     def burgers_flux(self, q):
         return 0.5*q**2
 
-
     def rk_substep(self):
         
+        # get the solution data
         g = self.grid
+        
+        # apply boundary conditions
         g.fill_BCs()
+        
+        #comput flux at each point
         f = self.burgers_flux(g.u)
+        
         # get maximum velocity
         alpha = numpy.max(abs(g.u))
+        
         # Lax Friedrichs Flux Splitting
         fp = (f + alpha * g.u) / 2
         fm = (f - alpha * g.u) / 2
+        
         fpr = g.scratch_array()
         fml = g.scratch_array()
         flux = g.scratch_array()
+        
         # compute fluxes at the cell edges
         # compute f plus to the right
         fpr[1:] = weno_new(self.weno_order, fp[:-1])
         # compute f minus to the left
         # pass the data in reverse order
         fml[-1::-1] = weno_new(self.weno_order, fm[-1::-1])
+        
+        # compute flux from fpr and fml
+        flux[1:-1] = fpr[1:-1] + fml[1:-1]
+        rhs = g.scratch_array()
+        
+        rhs[1:-1] = 1/g.dx * (flux[1:-1] - flux[2:])
+        return rhs
+      
+    def rk_substep_loop(self):
+        
+        # get the solution data
+        g = self.grid
+        
+        # apply boundary conditions
+        g.fill_BCs()
+        
+        #comput flux at each point
+        f = self.burgers_flux(g.u)
+        
+        # get maximum velocity
+        alpha = numpy.max(abs(g.u))
+        
+        # Lax Friedrichs Flux Splitting
+        fp = (f + alpha * g.u) / 2
+        fm = (f - alpha * g.u) / 2
+        
+        fpr = g.scratch_array()
+        fml = g.scratch_array()
+        
+        flux = g.scratch_array()
+        
+        np = len(f) - 2*self.weno_order
+        for i in range(self.weno_order, np+self.weno_order):
+          fp_stencil = fp[i-2:i+3]
+          fm_stencil = fm[i-3:i+2]
+          
+          fpr[i+1] = weno_i(self.weno_order, fp_stencil)
+          fml[i] = weno_i(self.weno_order, fm_stencil)          
+        
+        # compute fluxes at the cell edges
+        # compute f plus to the right
+        #fpr[1:] = weno_new(self.weno_order, fp[:-1])
+  
+        
+        # compute f minus to the left
+        # pass the data in reverse order
+        #fml[-1::-1] = weno_new(self.weno_order, fm[-1::-1])
+        
         # compute flux from fpr and fml
         flux[1:-1] = fpr[1:-1] + fml[1:-1]
         rhs = g.scratch_array()
@@ -204,36 +302,113 @@ class WENOSimulation(burgers.Simulation):
         return rhs
 
 
+    def RK4(self, dt):
+      """
+      Compute one time step. Takes the actions and performs state transition for a discrete time step.
+      
+      Parameters
+      ----------
+      dt : float
+        timestep.
+
+      Returns
+      -------
+      Return state after taking one time step.
+
+      """
+      
+      g = self.grid
+      
+      # fill the boundary conditions
+      g.fill_BCs()
+      
+      # RK4
+      # Store the data at the start of the step
+      u_start = g.u.copy()
+      k1 = dt * self.rk_substep()
+      g.u = u_start + k1 / 2
+      k2 = dt * self.rk_substep()
+      g.u = u_start + k2 / 2
+      k3 = dt * self.rk_substep()
+      g.u = u_start + k3
+      k4 = dt * self.rk_substep()
+      g.u = u_start + (k1 + 2 * (k2 + k3) + k4) / 6
+
+    def RK4_loop(self, dt):
+      """
+      Compute one time step. Takes the actions and performs state transition for a discrete time step.
+      
+      Parameters
+      ----------
+      dt : float
+        timestep.
+
+      Returns
+      -------
+      Return state after taking one time step.
+
+      """
+      
+      g = self.grid
+      
+      # fill the boundary conditions
+      g.fill_BCs()
+      
+      # RK4
+      # Store the data at the start of the step
+      u_start = g.u.copy()
+      k1 = dt * self.rk_substep_loop()
+      g.u = u_start + k1 / 2
+      k2 = dt * self.rk_substep_loop()
+      g.u = u_start + k2 / 2
+      k3 = dt * self.rk_substep_loop()
+      g.u = u_start + k3
+      k4 = dt * self.rk_substep_loop()
+      g.u = u_start + (k1 + 2 * (k2 + k3) + k4) / 6
+
     def evolve(self, tmax):
         """ evolve the linear advection equation using RK4 """
         self.t = 0.0
-        g = self.grid
-
+        
         # main evolution loop
         while self.t < tmax:
-
-            # fill the boundary conditions
-            g.fill_BCs()
-
+          
             # get the timestep
             dt = self.timestep(self.C)
 
             if self.t + dt > tmax:
                 dt = tmax - self.t
 
-            # RK4
-            # Store the data at the start of the step
-            u_start = g.u.copy()
-            k1 = dt * self.rk_substep()
-            g.u = u_start + k1 / 2
-            k2 = dt * self.rk_substep()
-            g.u = u_start + k2 / 2
-            k3 = dt * self.rk_substep()
-            g.u = u_start + k3
-            k4 = dt * self.rk_substep()
-            g.u = u_start + (k1 + 2 * (k2 + k3) + k4) / 6
-
+            self.RK4_loop(dt)
+            
             self.t += dt
+            
+    def step(self, action):
+      """
+      Perform a single time step.
+
+      Parameters
+      ----------
+      action : numpy array
+        Weights for reconstructing WENO weights.
+
+      Returns
+      -------
+      state: numpy array
+        solution predicted using action
+      reward: float
+        scalar value - reward for current action
+      done: boolean
+        boolean signifying end of episode
+      info : dictionary
+        not passing anything now
+      """
+      
+      # Get the next state
+      
+      
+      
+      
 
 
 
@@ -244,7 +419,7 @@ if __name__ == "__main__":
     
     xmin = 0.0
     xmax = 1.0
-    nx = 128
+    nx = 64
     order = 3
     ng = order+1
     g = burgers.Grid1d(nx, ng, bc="periodic")
@@ -260,7 +435,7 @@ if __name__ == "__main__":
     
     for i in range(0, 10):
         tend = (i+1)*0.02*tmax
-        s.init_cond("sine")
+        s.init_cond("rarefaction")
     
         uinit = s.grid.u.copy()
     
