@@ -130,11 +130,38 @@ def weno_i_stencils(order, q):
   """
   a = weno_coefficients.a_all[order]
   q_stencils = numpy.zeros(order)
+  #TODO: remove these loops; generate matrix for q and do matmul
   for k in range(order):
     for l in range(order):
       q_stencils[k] += a[k, l] * q[order-1+k-l]
       
   return q_stencils
+
+def weno_i_stencils_batch(order, q_batch):
+  """
+  Take a batch of pieces of state and returns the stencil values.
+
+  Parameters
+  ----------
+  order : int
+    DESCRIPTION.
+  q_batch : numpy array
+    DESCRIPTION.
+
+  Returns
+  -------
+  Return a batch of stencils
+
+  """
+  
+  q_fp_stencil = []
+  q_fm_stencil = []
+  batch_size = q_batch.shape[1]
+  for i in range(batch_size):
+    q_fp_stencil.append(weno_i_stencils(order, q_batch[0,i,:]))
+    q_fm_stencil.append(weno_i_stencils(order, q_batch[1,i,:]))
+    
+  return numpy.array([q_fp_stencil, q_fm_stencil])
 
 def weno_i_weights(order, q):
   """
@@ -167,6 +194,32 @@ def weno_i_weights(order, q):
   w[:] = alpha / numpy.sum(alpha)
   
   return w
+
+def weno_i_weights_batch(order, q_batch):
+  """
+  Get WENO weights for a batch
+
+  Parameters
+  ----------
+  order : TYPE
+    DESCRIPTION.
+  q_batch : TYPE
+    DESCRIPTION.
+
+  Returns
+  -------
+  None.
+
+  """
+  
+  weights_fp_stencil = []
+  weights_fm_stencil = []
+  batch_size = q_batch.shape[1]
+  for i in range(batch_size):
+    weights_fp_stencil.append(weno_i_weights(order, q_batch[0,i,:]))
+    weights_fm_stencil.append(weno_i_weights(order, q_batch[1,i,:]))
+    
+  return numpy.array([weights_fp_stencil, weights_fm_stencil])
 
 def weno_i_split(order, q):
   """
@@ -292,7 +345,7 @@ def RandomInitialCondition(grid: burgers.Grid1d,
   
 class WENOSimulation(burgers.Simulation):
     
-    def __init__(self, grid, C=0.5, weno_order=3):
+    def __init__(self, grid, C=0.5, weno_order=3, timesteps=None):
         self.grid = grid
         self.t = 0.0 # simulation time
         self.C = C   # CFL number
@@ -300,6 +353,8 @@ class WENOSimulation(burgers.Simulation):
         
         ### GYM related
         self.current_state = None
+        self.tmax_episode = 0.02*(self.grid.xmax - self.grid.xmin)/1.0
+        self.timesteps_episode = timesteps
 
     def init_cond(self, type="tophat"):
         if type == "smooth_sine":
@@ -492,25 +547,54 @@ class WENOSimulation(burgers.Simulation):
       k4 = dt * self.rk_substep_loop()
       g.u = u_start + (k1 + 2 * (k2 + k3) + k4) / 6
 
-    def evolve_timesteps(self, timesteps):
+    def evolve_timesteps(self):
         """ evolve the Burger equation using RK4"""
         self.t = 0.0
         
         # main evolution loop
         #while self.t < tmax:
+        timesteps = self.timesteps_episode
         while timesteps > 0:
           
             # get the timestep
             dt = self.timestep(self.C)
 
-            if self.t + dt > tmax:
-                dt = tmax - self.t
+            #if self.t + dt > tmax:
+            #    dt = tmax - self.t
 
-            self.RK4(dt)
+            #self.RK4(dt)
+            self.Euler(dt)
             
             self.t += dt
             timesteps=timesteps-1
             
+    def evolve_onestep(self):
+        """ evolve the Burger equation using RK4"""
+        self.t = 0.0
+        
+        # main evolution loop
+        #while self.t < tmax:
+          
+        # get the timestep
+        dt = self.timestep(self.C)
+
+        #if self.t + dt > tmax:
+        #    dt = tmax - self.t
+
+        g = self.grid
+      
+        # fill the boundary conditions
+        g.fill_BCs()
+        
+        # RK4
+        # Store the data at the start of the step
+        u_start = g.u.copy()
+        k1 = dt * self.rk_substep()
+        g.u = u_start + k1
+        
+        self.t += dt
+        timesteps=timesteps-1
+        
     def evolve_tmax(self, tmax):
         """ evolve the Burger equation using RK4"""
         self.t = 0.0
@@ -578,7 +662,7 @@ class WENOSimulation(burgers.Simulation):
       #print("size of state is: {}".format(numpy.shape(state)))
       return state
     
-    def reset(self):
+    def reset(self, inittype):
       """
       Reset the environment.Tasks here:
         Reset initial conditions.
@@ -591,7 +675,11 @@ class WENOSimulation(burgers.Simulation):
       """
       
       self.t = 0.0
-      self.init_cond("random")
+      if inittype == None:
+        self.init_cond("random") # CHANGE THIS TO RANDOM
+      else:
+        self.init_cond(inittype)
+        
       return self.prep_state()
       
       
@@ -618,20 +706,166 @@ class WENOSimulation(burgers.Simulation):
         not passing anything now
       """
       
-      # Get the next state
+      done = False
+      g = self.grid
       
-      raise NotImplementedError
+      # Store the data at the start of the time step      
+      u_start = g.u.copy()
       
+      # get the timestep
+      dt = self.timestep(self.C)
+
+      # update current time
+      #if self.t + dt > self.tmax_episode:
+      #    dt = self.tmax_episode - self.t
+      #    done = True
+      #    print("number of time steps: {}".format(self.timesteps_episode+1))
+      
+      state = self.current_state
+      
+      q_stencils = weno_i_stencils_batch(self.weno_order, state)
+      
+      # storage
+      fpr = g.scratch_array()
+      fml = g.scratch_array()
+
+      flux = g.scratch_array()
+      
+      w_o = self.weno_order
+      np = len(flux) - 2*w_o
+      for i in range(w_o, np+w_o):      
+        # TODO vectorize with numpy.einsum ?
+        fpr[i+1] = numpy.dot(action[0,i-w_o,:], q_stencils[0,i-w_o,:]) #weno_i_split(self.weno_order, fp_stencil)
+        fml[i] = numpy.dot(action[1,i-w_o,:], q_stencils[1,i-w_o,:])#weno_i_split(self.weno_order, fm_stencil)          
+      
+      flux[1:-1] = fpr[1:-1] + fml[1:-1]
+      rhs = g.scratch_array()
+      
+      rhs[1:-1] = 1/g.dx * (flux[1:-1] - flux[2:])
+      
+      k1 = dt * rhs
+      g.u = u_start + k1
+      
+      #update the solution time
+      self.t += dt
+      self.timesteps_episode -= 1
+      
+      if self.timesteps_episode == 0:
+        done = True
+      
+      #compute reward
+      reward = 1.0
+      
+      return self.prep_state(), reward, done, None
+
+def test_evolve(args):
+  xmin = args["xmin"]
+  xmax = args["xmax"]
+  nx = args["nx"]
+  order = args["order"]
+  ng = args["ng"]
+  
+  timesteps = args["timesteps"]
+  
+  g = burgers.Grid1d(nx, ng, bc="periodic")
+  # maximum evolution time based on period for unit velocity
+  tmax = (xmax - xmin)/1.0
+  
+  C = args["C"]
+  
+  pyplot.clf()
+  
+  s = WENOSimulation(g, C, order, timesteps)
+  s.init_cond(args["inittype"])
+
+  uinit = s.grid.u.copy()
+
+  #tic = time.perf_counter()
+  #s.evolve_tmax(tmax)
+  #toc = time.perf_counter()
+  #print(f"Time for one episode is {toc - tic:0.4f} seconds")
+
+  uinit = s.grid.u.copy()
+
+  s.evolve_timesteps()
+  #fig,ax = pyplot.add_subplot()
+
+  #pyplot.plot(g.x[g.ilo:g.ihi+1], g.u[g.ilo:g.ihi+1], color="k", label="Final State")
+  
+  #pyplot.plot(g.x[g.ilo:g.ihi+1], uinit[g.ilo:g.ihi+1], ls=":", color="k", zorder=-1, label="Initial State")
+  
+  #pyplot.xlabel("$x$")
+  #pyplot.ylabel("$u$")
+  #pyplot.show()
+  return s.grid.u
     
       
-      
-      
-      
+def test_environment(args):
+  xmin = args["xmin"]
+  xmax = args["xmax"]
+  nx = args["nx"]
+  order = args["order"]
+  ng = args["ng"]
+  
+  timesteps = args["timesteps"]
+  g = burgers.Grid1d(nx, ng, bc="periodic")
+  
+  # maximum evolution time based on period for unit velocity
+  tmax = (xmax - xmin)/1.0
+  
+  C = args["C"]
+  
+  pyplot.clf()
+  
+  s = WENOSimulation(g, C, order, timesteps)
 
+  uinit = s.grid.u.copy()
+  
+  done = False
+  state = s.reset(args["inittype"])
+  while done == False:
+    actions = weno_i_weights_batch(order, state)
+    state, reward, done, info = s.step(actions)
+  
+  #pyplot.plot(g.x[g.ilo:g.ihi+1], g.u[g.ilo:g.ihi+1], ls=":", color="r")
+  #pyplot.plot(g.x[g.ilo:g.ihi+1], uinit[g.ilo:g.ihi+1], ls=":", color="r", zorder=-1, label="Initial State")
+    
+  #pyplot.xlabel("$x$")
+  #pyplot.ylabel("$u$")
+  #pyplot.show()
+  return s.grid.u
 
 
 if __name__ == "__main__":
+    xmin = 0.0
+    xmax = 1.0
+    nx = 128
+    order = 3
+    ng = order+1
+    C = 0.1
+    inittype = "sine"
+    timesteps = 300
+  
+    args ={}
+    args["xmax"] = xmin
+    args["xmin"] = xmin
+    args["nx"] = nx
+    args["order"] = order
+    args["ng"] = ng
+    args["C"] = C
+    args["inittype"] = inittype
+    args["timesteps"] = timesteps
+  
+    g = burgers.Grid1d(nx, ng, bc="periodic")
+    act = test_evolve(args)
+    pred = test_environment(args)
+    pyplot.plot(act[g.ilo:g.ihi+1], label = "actual")
+    pyplot.plot(pred[g.ilo:g.ihi+1],ls=":", color="k", label = "env")
+    pyplot.legend()
+    #pyplot.plot(numpy.abs(act[g.ilo:g.ihi+1]-pred[g.ilo:g.ihi+1]))
+    assert(numpy.allclose(act[g.ilo:g.ihi+1], pred[g.ilo:g.ihi+1], atol = 0.0, rtol = 1e-02))
 
+    '''
     #-----------------------------------------------------------------------------
     # sine
     
@@ -686,7 +920,7 @@ if __name__ == "__main__":
     
     #state = s.reset()
     
-    '''
+    
     
     # Compare the WENO and "standard" (from burgers.py) results at low res
     nx = 64
