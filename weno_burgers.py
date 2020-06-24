@@ -4,6 +4,7 @@ import burgers
 import weno_coefficients
 from scipy.optimize import brentq
 import sys
+import time
 
 def burgers_sine_exact(x, t):
     """
@@ -73,7 +74,7 @@ def weno(order, q):
 
 def weno_i(order, q):
     """
-    Do WENO reconstruction
+    Do WENO reconstruction at a given location
     
     Parameters
     ----------
@@ -110,6 +111,76 @@ def weno_i(order, q):
     qL = numpy.dot(w[:], q_stencils)
 
     return qL
+  
+def weno_i_stencils(order, q):
+  """
+  Get stencils at a given location in the grid
+
+  Parameters
+  ----------
+  order : int
+    The stencil width.
+  q : numpy array
+    flux vector for that stencil.
+
+  Returns
+  -------
+  None.
+
+  """
+  a = weno_coefficients.a_all[order]
+  q_stencils = numpy.zeros(order)
+  for k in range(order):
+    for l in range(order):
+      q_stencils[k] += a[k, l] * q[order-1+k-l]
+      
+  return q_stencils
+
+def weno_i_weights(order, q):
+  """
+  Get WENO weights at a given location in the grid
+
+  Parameters
+  ----------
+  order : int
+    The stencil width.
+  q : numpy array
+    flux vector for that stencil.
+
+  Returns
+  -------
+  None.
+
+  """
+  C = weno_coefficients.C_all[order]
+  sigma = weno_coefficients.sigma_all[order]
+
+  beta = numpy.zeros((order))
+  w = numpy.zeros_like(beta)
+  epsilon = 1e-16
+  alpha = numpy.zeros(order)
+  for k in range(order):
+      for l in range(order):
+          for m in range(l+1):
+              beta[k] += sigma[k, l, m] * q[order-1+k-l] * q[order-1+k-m]
+      alpha[k] = C[k] / (epsilon + beta[k]**2)
+  w[:] = alpha / numpy.sum(alpha)
+  
+  return w
+
+def weno_i_split(order, q):
+  """
+  Return WENO reconstruction at a given location
+
+  Returns
+  -------
+  None.
+
+  """
+  
+  weights = weno_i_weights(order, q)
+  q_stencils = weno_i_stencils(order,q)
+  return numpy.dot(weights, q_stencils)
 
 # split the WENO method into computing stencils and then weights
 def weno_stencils(order, q):
@@ -199,6 +270,26 @@ def weno_new(order, q):
     
   return qL
 
+def RandomInitialCondition(grid: burgers.Grid1d, 
+                           #seed: int = 44,
+                           #offset: float = 0.0,
+                           amplitude: float = 1.0,
+                           k_min: int = 2,
+                           k_max: int = 10):
+    """ Generate random initial conditions """
+    #rs = np.random.RandomState(seed)
+    if k_min % 2 == 1:
+      k_min += 1
+    if k_max % 2 == 2:
+      k_max += 1
+    step = (k_max-k_min)/2
+    k_values = numpy.arange(k_min, k_max,2)
+    #print(k_values)
+    k = numpy.random.choice(k_values, 1)
+    b = numpy.random.uniform(-amplitude, amplitude, 1)
+    a = 3.5 - numpy.abs(b)
+    return  a + b * numpy.sin(k*numpy.pi*grid.x/(grid.xmax-grid.xmin))
+  
 class WENOSimulation(burgers.Simulation):
     
     def __init__(self, grid, C=0.5, weno_order=3):
@@ -206,12 +297,17 @@ class WENOSimulation(burgers.Simulation):
         self.t = 0.0 # simulation time
         self.C = C   # CFL number
         self.weno_order = weno_order
+        
+        ### GYM related
+        self.current_state = None
 
     def init_cond(self, type="tophat"):
         if type == "smooth_sine":
             self.grid.u = numpy.sin(2 * numpy.pi * self.grid.x)
         elif type == "gaussian":
             self.grid.u = 1.0 + numpy.exp(-60.0*(self.grid.x - 0.5)**2)
+        elif type == "random":
+            self.grid.u = RandomInitialCondition(self.grid)
         else:
             super().init_cond(type)
 
@@ -277,13 +373,16 @@ class WENOSimulation(burgers.Simulation):
         
         flux = g.scratch_array()
         
-        np = len(f) - 2*self.weno_order
-        for i in range(self.weno_order, np+self.weno_order):
-          fp_stencil = fp[i-2:i+3]
-          fm_stencil = fm[i-3:i+2]
+        w_o = self.weno_order
+        np = len(f) - 2*w_o
+        for i in range(w_o, np+w_o):
+          #fp_stencil = fp[i-2:i+3]
+          #fm_stencil = fm[i-3:i+2]
+          fp_stencil = fp[i-w_o+1:i+w_o]
+          fm_stencil = fm[i-w_o:i+w_o-1]
           
-          fpr[i+1] = weno_i(self.weno_order, fp_stencil)
-          fml[i] = weno_i(self.weno_order, fm_stencil)          
+          fpr[i+1] = weno_i_split(self.weno_order, fp_stencil)
+          fml[i] = weno_i_split(self.weno_order, fm_stencil)          
         
         # compute fluxes at the cell edges
         # compute f plus to the right
@@ -304,7 +403,7 @@ class WENOSimulation(burgers.Simulation):
 
     def RK4(self, dt):
       """
-      Compute one time step. Takes the actions and performs state transition for a discrete time step.
+      Compute one Runge-Kutta time step. Performs state transition for a discrete time step using standard WENO.
       
       Parameters
       ----------
@@ -333,6 +432,33 @@ class WENOSimulation(burgers.Simulation):
       g.u = u_start + k3
       k4 = dt * self.rk_substep()
       g.u = u_start + (k1 + 2 * (k2 + k3) + k4) / 6
+
+    def Euler(self, dt):
+      """
+      Compute one time step using explicit Euler time stepping. Performs state transition for a discrete time step using standard WENO.
+      Euler time stepping is first order accurate in time. Should be run with a small time step.
+      
+      Parameters
+      ----------
+      dt : float
+        timestep.
+
+      Returns
+      -------
+      Return state after taking one time step.
+
+      """
+      
+      g = self.grid
+      
+      # fill the boundary conditions
+      g.fill_BCs()
+      
+      # RK4
+      # Store the data at the start of the step
+      u_start = g.u.copy()
+      k1 = dt * self.rk_substep()
+      g.u = u_start + k1
 
     def RK4_loop(self, dt):
       """
@@ -366,10 +492,29 @@ class WENOSimulation(burgers.Simulation):
       k4 = dt * self.rk_substep_loop()
       g.u = u_start + (k1 + 2 * (k2 + k3) + k4) / 6
 
-    def evolve(self, tmax):
-        """ evolve the linear advection equation using RK4 """
+    def evolve_timesteps(self, timesteps):
+        """ evolve the Burger equation using RK4"""
         self.t = 0.0
         
+        # main evolution loop
+        #while self.t < tmax:
+        while timesteps > 0:
+          
+            # get the timestep
+            dt = self.timestep(self.C)
+
+            if self.t + dt > tmax:
+                dt = tmax - self.t
+
+            self.RK4(dt)
+            
+            self.t += dt
+            timesteps=timesteps-1
+            
+    def evolve_tmax(self, tmax):
+        """ evolve the Burger equation using RK4"""
+        self.t = 0.0
+        timesteps=[]
         # main evolution loop
         while self.t < tmax:
           
@@ -379,10 +524,77 @@ class WENOSimulation(burgers.Simulation):
             if self.t + dt > tmax:
                 dt = tmax - self.t
 
-            self.RK4_loop(dt)
+            #self.RK4_loop(dt)
+            self.Euler(dt)
             
             self.t += dt
-            
+            timesteps.append(dt)
+        print("computed for {} timesteps with average time step size {}".format(len(timesteps), numpy.mean(numpy.array(timesteps))))
+    
+    def prep_state(self):
+      """
+      Return state at current time step. Returns fpr and fml vector slices.
+
+      Returns
+      -------
+      state: numpy array.
+        State vector to be sent to the policy. 
+        Size: 2 (one for fp and one for fm) BY grid_size BY stencil_size
+        Example: order =3, grid = 128
+
+      """
+      # get the solution data
+      g = self.grid
+      
+      # apply boundary conditions
+      g.fill_BCs()
+      
+      #comput flux at each point
+      f = self.burgers_flux(g.u)
+      
+      # get maximum velocity
+      alpha = numpy.max(abs(g.u))
+      
+      # Lax Friedrichs Flux Splitting
+      fp = (f + alpha * g.u) / 2
+      fm = (f - alpha * g.u) / 2
+      
+      w_o = self.weno_order
+      np = len(f) - 2*w_o
+      fp_stencils = []
+      fm_stencils = []
+      
+      for i in range(w_o, np+w_o):
+        fp_stencil = fp[i-w_o+1:i+w_o]
+        fp_stencils.append(fp_stencil)
+        fm_stencil = fm[i-w_o:i+w_o-1]
+        fm_stencils.append(fm_stencil)
+        
+      state = numpy.array([fp_stencils, fm_stencils])
+      
+      # save this state so that we can use it to compute next state
+      self.current_state = state
+      
+      #print("size of state is: {}".format(numpy.shape(state)))
+      return state
+    
+    def reset(self):
+      """
+      Reset the environment.Tasks here:
+        Reset initial conditions.
+        Set time to 0.
+
+      Returns
+      -------
+      None.
+
+      """
+      
+      self.t = 0.0
+      self.init_cond("random")
+      return self.prep_state()
+      
+      
     def step(self, action):
       """
       Perform a single time step.
@@ -390,11 +602,13 @@ class WENOSimulation(burgers.Simulation):
       Parameters
       ----------
       action : numpy array
-        Weights for reconstructing WENO weights.
+        Weights for reconstructing WENO weights. This will be multiplied with the output from weno_stencils
+        size: grid-points X order X 2
+        Note: at each i+1/2 location we have an fpl and fmr.
 
       Returns
       -------
-      state: numpy array
+      state: numpy array.
         solution predicted using action
       reward: float
         scalar value - reward for current action
@@ -405,6 +619,10 @@ class WENOSimulation(burgers.Simulation):
       """
       
       # Get the next state
+      
+      raise NotImplementedError
+      
+    
       
       
       
@@ -419,7 +637,7 @@ if __name__ == "__main__":
     
     xmin = 0.0
     xmax = 1.0
-    nx = 64
+    nx = 128
     order = 3
     ng = order+1
     g = burgers.Grid1d(nx, ng, bc="periodic")
@@ -427,19 +645,30 @@ if __name__ == "__main__":
     # maximum evolution time based on period for unit velocity
     tmax = (xmax - xmin)/1.0
     
-    C = 0.5
+    C = 0.05
     
     pyplot.clf()
     
     s = WENOSimulation(g, C, order)
+    s.init_cond("sine")
+
+    uinit = s.grid.u.copy()
+
+    #tic = time.perf_counter()
+    #s.evolve_tmax(tmax)
+    #toc = time.perf_counter()
+    #print(f"Time for one episode is {toc - tic:0.4f} seconds")
+
+    g = s.grid
+    #pyplot.plot(g.x[g.ilo:g.ihi+1], g.u[g.ilo:g.ihi+1], color='k', label="Final State")
     
     for i in range(0, 10):
         tend = (i+1)*0.02*tmax
-        s.init_cond("rarefaction")
+        s.init_cond("sine")
     
         uinit = s.grid.u.copy()
     
-        s.evolve(tend)
+        s.evolve_tmax(tend)
     
         c = 1.0 - (0.1 + i*0.1)
         g = s.grid
@@ -447,12 +676,15 @@ if __name__ == "__main__":
     
     
     g = s.grid
-    pyplot.plot(g.x[g.ilo:g.ihi+1], uinit[g.ilo:g.ihi+1], ls=":", color="0.9", zorder=-1)
+    pyplot.plot(g.x[g.ilo:g.ihi+1], uinit[g.ilo:g.ihi+1], ls=":", color="k", zorder=-1, label="Initial State")
     
     pyplot.xlabel("$x$")
     pyplot.ylabel("$u$")
     pyplot.show()
     #pyplot.savefig("weno-burger-sine.pdf")
+    
+    
+    #state = s.reset()
     
     '''
     
