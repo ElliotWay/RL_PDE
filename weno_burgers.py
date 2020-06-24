@@ -341,7 +341,7 @@ def RandomInitialCondition(grid: burgers.Grid1d,
     k = numpy.random.choice(k_values, 1)
     b = numpy.random.uniform(-amplitude, amplitude, 1)
     a = 3.5 - numpy.abs(b)
-    return  a + b * numpy.sin(k*numpy.pi*grid.x/(grid.xmax-grid.xmin))
+    return  a + b * numpy.sin(k*numpy.pi*grid.x/(grid.xmax-grid.xmin))  
   
 class WENOSimulation(burgers.Simulation):
     
@@ -365,6 +365,7 @@ class WENOSimulation(burgers.Simulation):
             self.grid.u = RandomInitialCondition(self.grid)
         else:
             super().init_cond(type)
+        self.grid.uactual[:] = self.grid.u[:] 
 
     def burgers_flux(self, q):
         return 0.5*q**2
@@ -404,7 +405,43 @@ class WENOSimulation(burgers.Simulation):
         
         rhs[1:-1] = 1/g.dx * (flux[1:-1] - flux[2:])
         return rhs
-      
+    
+    def rk_substep_actual(self):
+        
+        # get the solution data
+        g = self.grid
+        
+        # apply boundary conditions
+        g.fill_BCs()
+        
+        #comput flux at each point
+        f = self.burgers_flux(g.uactual)
+        
+        # get maximum velocity
+        alpha = numpy.max(abs(g.uactual))
+        
+        # Lax Friedrichs Flux Splitting
+        fp = (f + alpha * g.uactual) / 2
+        fm = (f - alpha * g.uactual) / 2
+        
+        fpr = g.scratch_array()
+        fml = g.scratch_array()
+        flux = g.scratch_array()
+        
+        # compute fluxes at the cell edges
+        # compute f plus to the right
+        fpr[1:] = weno_new(self.weno_order, fp[:-1])
+        # compute f minus to the left
+        # pass the data in reverse order
+        fml[-1::-1] = weno_new(self.weno_order, fm[-1::-1])
+        
+        # compute flux from fpr and fml
+        flux[1:-1] = fpr[1:-1] + fml[1:-1]
+        rhs = g.scratch_array()
+        
+        rhs[1:-1] = 1/g.dx * (flux[1:-1] - flux[2:])
+        return rhs
+    
     def rk_substep_loop(self):
         
         # get the solution data
@@ -515,6 +552,33 @@ class WENOSimulation(burgers.Simulation):
       k1 = dt * self.rk_substep()
       g.u = u_start + k1
 
+    def Euler_actual(self, dt):
+      """
+      Compute one time step using explicit Euler time stepping. Performs state transition for a discrete time step using standard WENO.
+      Euler time stepping is first order accurate in time. Should be run with a small time step.
+      
+      Parameters
+      ----------
+      dt : float
+        timestep.
+
+      Returns
+      -------
+      Return state after taking one time step.
+
+      """
+      
+      g = self.grid
+      
+      # fill the boundary conditions
+      g.fill_BCs()
+      
+      # RK4
+      # Store the data at the start of the step
+      u_start = g.uactual.copy()
+      k1 = dt * self.rk_substep_actual()
+      g.uactual = u_start + k1
+    
     def RK4_loop(self, dt):
       """
       Compute one time step. Takes the actions and performs state transition for a discrete time step.
@@ -557,7 +621,8 @@ class WENOSimulation(burgers.Simulation):
         while timesteps > 0:
           
             # get the timestep
-            dt = self.timestep(self.C)
+            # evolving with constant time step for testing. !!! CAUTION !!!
+            dt = self.timestep()
 
             #if self.t + dt > tmax:
             #    dt = tmax - self.t
@@ -676,7 +741,7 @@ class WENOSimulation(burgers.Simulation):
       
       self.t = 0.0
       if inittype == None:
-        self.init_cond("random") # CHANGE THIS TO RANDOM
+        self.init_cond("random") 
       else:
         self.init_cond(inittype)
         
@@ -713,7 +778,9 @@ class WENOSimulation(burgers.Simulation):
       u_start = g.u.copy()
       
       # get the timestep
-      dt = self.timestep(self.C)
+      # passing self.C will cause this to take variable time steps
+      # for now work with constant time step = 0.0005
+      dt = self.timestep()
 
       # update current time
       #if self.t + dt > self.tmax_episode:
@@ -754,7 +821,15 @@ class WENOSimulation(burgers.Simulation):
         done = True
       
       #compute reward
-      reward = 1.0
+      reward = 0.0
+      self.Euler_actual(dt)
+      
+      error = numpy.max(numpy.abs(g.u[g.ilo:g.ihi+1]-g.uactual[g.ilo:g.ihi+1]))
+      reward = -numpy.log(error)
+      
+      # should this reward be clipped?
+      if reward < 10:
+        reward = 0
       
       return self.prep_state(), reward, done, None
 
@@ -823,17 +898,20 @@ def test_environment(args):
   
   done = False
   state = s.reset(args["inittype"])
+  rewards = []
   while done == False:
-    actions = weno_i_weights_batch(order, state)
-    state, reward, done, info = s.step(actions)
+    actions = weno_i_weights_batch(order, state) # state.shape = (2 (fp, fm), # grid, stencil_size )
+    state, reward, done, info = s.step(actions) #action.shape = (2 (fp, fm), # grid, weight_vector_length )
+    rewards.append(reward)
   
-  #pyplot.plot(g.x[g.ilo:g.ihi+1], g.u[g.ilo:g.ihi+1], ls=":", color="r")
+  #pyplot.plot(g.x[g.ilo:g.ihi+1], g.u[g.ilo:g.ihi+1], color="r")
+  #pyplot.plot(g.x[g.ilo:g.ihi+1], g.uactual[g.ilo:g.ihi+1], ls=":", color="k")
   #pyplot.plot(g.x[g.ilo:g.ihi+1], uinit[g.ilo:g.ihi+1], ls=":", color="r", zorder=-1, label="Initial State")
     
   #pyplot.xlabel("$x$")
   #pyplot.ylabel("$u$")
   #pyplot.show()
-  return s.grid.u
+  return s.grid.u, rewards
 
 
 if __name__ == "__main__":
@@ -857,13 +935,14 @@ if __name__ == "__main__":
     args["timesteps"] = timesteps
   
     g = burgers.Grid1d(nx, ng, bc="periodic")
-    act = test_evolve(args)
-    pred = test_environment(args)
-    pyplot.plot(act[g.ilo:g.ihi+1], label = "actual")
-    pyplot.plot(pred[g.ilo:g.ihi+1],ls=":", color="k", label = "env")
-    pyplot.legend()
+    #act = test_evolve(args)
+    pred, rewards = test_environment(args)
+    #pyplot.plot(act[g.ilo:g.ihi+1], label = "actual")
+    #pyplot.plot(pred[g.ilo:g.ihi+1],ls=":", color="k", label = "env")
+    #pyplot.legend()
+    pyplot.plot(rewards)
     #pyplot.plot(numpy.abs(act[g.ilo:g.ihi+1]-pred[g.ilo:g.ihi+1]))
-    assert(numpy.allclose(act[g.ilo:g.ihi+1], pred[g.ilo:g.ihi+1], atol = 0.0, rtol = 1e-02))
+    #assert(numpy.allclose(act[g.ilo:g.ihi+1], pred[g.ilo:g.ihi+1], atol = 0.0, rtol = 1e-02))
 
     '''
     #-----------------------------------------------------------------------------

@@ -40,6 +40,9 @@ class Grid1d(object):
 
         # storage for the solution
         self.u = np.zeros((nx+2*ng), dtype=np.float64)
+        
+        # storage for actual solution
+        self.uactual = np.zeros((nx+2*ng), dtype=np.float64)
 
 
     def scratch_array(self):
@@ -54,17 +57,19 @@ class Grid1d(object):
 
             # left boundary
             self.u[0:self.ilo] = self.u[self.ihi-self.ng+1:self.ihi+1]
+            self.uactual[0:self.ilo] = self.uactual[self.ihi-self.ng+1:self.ihi+1]
 
             # right boundary
-            self.u[self.ihi+1:] = self.u[self.ilo:self.ilo+self.ng]
+            self.uactual[self.ihi+1:] = self.uactual[self.ilo:self.ilo+self.ng]
 
         elif self.bc == "outflow":
 
             # left boundary
             self.u[0:self.ilo] = self.u[self.ilo]
+            self.uactual[0:self.ilo] = self.uactual[self.ilo]
 
             # right boundary
-            self.u[self.ihi+1:] = self.u[self.ihi]
+            self.uactual[self.ihi+1:] = self.uactual[self.ihi]
 
         else:
             sys.exit("invalid BC")
@@ -106,9 +111,12 @@ class Simulation(object):
 
 
 
-    def timestep(self, C):
-        return C*self.grid.dx/max(abs(self.grid.u[self.grid.ilo:
-                                                  self.grid.ihi+1]))
+    def timestep(self, C=None):
+        if C is None: # return a constant time step
+          return 0.0005
+        else:
+          return C*self.grid.dx/max(abs(self.grid.u[self.grid.ilo:
+                                                    self.grid.ihi+1]))
 
     #new states
     def states_new(self, dt):
