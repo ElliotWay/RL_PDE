@@ -20,6 +20,26 @@ mpl.rcParams['figure.titlesize'] = 'medium'
 class Grid1d(object):
 
     def __init__(self, nx, ng, xmin=0.0, xmax=1.0, bc="outflow"):
+        """
+        Construct a 1D grid.
+        
+        This also represents grid cells "beyond" the boundary.
+
+        Parameters
+        ----------
+        
+        nx : int
+            number of indexes in the discretized grid
+        ng : int
+            size of the stencil used in calculation with this grid,
+            so we know how far past the boundary to calculate
+        xmin : float
+            coordinate of the beginning of the grid
+        xmax : float
+            coordinate of the end of the grid
+        bc : float
+            type of boundary condition
+        """
 
         self.nx = nx
         self.ng = ng
@@ -29,8 +49,8 @@ class Grid1d(object):
 
         self.bc=bc
 
-        # python is zero-based.  Make easy intergers to know where the
-        # real data lives
+        # 0 and len-1 are indexes for values beyond the boundary,
+        # so create ilo and ihi as indexes to real values
         self.ilo = ng
         self.ihi = ng+nx-1
 
@@ -48,6 +68,14 @@ class Grid1d(object):
     def scratch_array(self):
         """ return a scratch array dimensioned for our grid """
         return np.zeros((self.nx+2*self.ng), dtype=np.float64)
+
+    def real_length(self):
+        """ Return the number of indexes of real (within boundary) points """
+        return self.nx
+
+    def full_length(self):
+        """ Return the number of indexes of all points, including points beyond the boundary """
+        return self.nx + 2*self.ng
 
 
     def fill_BCs(self):
