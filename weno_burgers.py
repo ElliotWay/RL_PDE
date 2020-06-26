@@ -1,5 +1,7 @@
-import numpy
-from matplotlib import pyplot
+import numpy as np
+import matplotlib
+matplotlib.use("TkAgg")
+import matplotlib.pyplot as plt
 import burgers
 import weno_coefficients
 from scipy.optimize import brentq
@@ -14,16 +16,16 @@ def burgers_sine_exact(x, t):
 #        if x < 1/3 or x > 2/3:
 #            return 1
 #        else:
-#            return 1 + numpy.sin(6*numpy.pi*(x-1/3))/2
+#            return 1 + np.sin(6*np.pi*(x-1/3))/2
     def initial_smooth_sin(x):
-        return numpy.sin(2*numpy.pi*x)
+        return np.sin(2*np.pi*x)
     def initial_gaussian(x):
-        return 1.0 + numpy.exp(-60.0*(x - 0.5)**2)
+        return 1.0 + np.exp(-60.0*(x - 0.5)**2)
     def residual(x_at_t_0_guess, x_at_t):
         q = initial_gaussian(x_at_t_0_guess)
         return x_at_t_0_guess + q * t - x_at_t
     
-    q = numpy.zeros_like(x)
+    q = np.zeros_like(x)
     for i in range(len(q)):
         x_at_t_0 = brentq(residual, -2, 2, args=(x[i],))
         q[i] = initial_gaussian(x_at_t_0)
@@ -39,27 +41,27 @@ def weno(order, q):
     
     order : int
         The stencil width
-    q : numpy array
+    q : np array
         Scalar data to reconstruct
         
     Returns
     -------
     
-    qL : numpy array
+    qL : np array
         Reconstructed data - boundary points are zero
     """
     C = weno_coefficients.C_all[order]
     a = weno_coefficients.a_all[order]
     sigma = weno_coefficients.sigma_all[order]
 
-    qL = numpy.zeros_like(q)
-    beta = numpy.zeros((order, len(q)))
-    w = numpy.zeros_like(beta)
-    np = len(q) - 2 * order
+    qL = np.zeros_like(q)
+    beta = np.zeros((order, len(q)))
+    w = np.zeros_like(beta)
+    num_points = len(q) - 2 * order
     epsilon = 1e-16
-    for i in range(order, np+order):
-        q_stencils = numpy.zeros(order)
-        alpha = numpy.zeros(order)
+    for i in range(order, num_points+order):
+        q_stencils = np.zeros(order)
+        alpha = np.zeros(order)
         for k in range(order):
             for l in range(order):
                 for m in range(l+1):
@@ -67,8 +69,8 @@ def weno(order, q):
             alpha[k] = C[k] / (epsilon + beta[k, i]**2)
             for l in range(order):
                 q_stencils[k] += a[k, l] * q[i+k-l]
-        w[:, i] = alpha / numpy.sum(alpha)
-        qL[i] = numpy.dot(w[:, i], q_stencils)
+        w[:, i] = alpha / np.sum(alpha)
+        qL[i] = np.dot(w[:, i], q_stencils)
     
     return qL
 
@@ -81,7 +83,7 @@ def weno_i(order, q):
     
     order : int
         The stencil width
-    q : numpy array
+    q : np array
         Scalar data to reconstruct
         
     Returns
@@ -94,12 +96,12 @@ def weno_i(order, q):
     a = weno_coefficients.a_all[order]
     sigma = weno_coefficients.sigma_all[order]
 
-    qL = numpy.zeros_like(q)
-    beta = numpy.zeros((order))
-    w = numpy.zeros_like(beta)
+    qL = np.zeros_like(q)
+    beta = np.zeros((order))
+    w = np.zeros_like(beta)
     epsilon = 1e-16
-    q_stencils = numpy.zeros(order)
-    alpha = numpy.zeros(order)
+    q_stencils = np.zeros(order)
+    alpha = np.zeros(order)
     for k in range(order):
         for l in range(order):
             for m in range(l+1):
@@ -107,8 +109,8 @@ def weno_i(order, q):
         alpha[k] = C[k] / (epsilon + beta[k]**2)
         for l in range(order):
             q_stencils[k] += a[k, l] * q[order-1+k-l]
-    w[:] = alpha / numpy.sum(alpha)
-    qL = numpy.dot(w[:], q_stencils)
+    w[:] = alpha / np.sum(alpha)
+    qL = np.dot(w[:], q_stencils)
 
     return qL
   
@@ -120,16 +122,16 @@ def weno_i_stencils(order, q):
   ----------
   order : int
     The stencil width.
-  q : numpy array
+  q : np array
     flux vector for that stencil.
 
   Returns
   -------
-  None.
+  np array of stencils in q each of size order
 
   """
   a = weno_coefficients.a_all[order]
-  q_stencils = numpy.zeros(order)
+  q_stencils = np.zeros(order)
   #TODO: remove these loops; generate matrix for q and do matmul
   for k in range(order):
     for l in range(order):
@@ -144,9 +146,9 @@ def weno_i_stencils_batch(order, q_batch):
   Parameters
   ----------
   order : int
-    DESCRIPTION.
-  q_batch : numpy array
-    DESCRIPTION.
+    WENO sub-stencil width.
+  q_batch : np array
+    flux vectors for each location, shape is [2, grid_width, stencil_width].
 
   Returns
   -------
@@ -161,7 +163,7 @@ def weno_i_stencils_batch(order, q_batch):
     q_fp_stencil.append(weno_i_stencils(order, q_batch[0,i,:]))
     q_fm_stencil.append(weno_i_stencils(order, q_batch[1,i,:]))
     
-  return numpy.array([q_fp_stencil, q_fm_stencil])
+  return np.array([q_fp_stencil, q_fm_stencil])
 
 def weno_i_weights(order, q):
   """
@@ -171,7 +173,7 @@ def weno_i_weights(order, q):
   ----------
   order : int
     The stencil width.
-  q : numpy array
+  q : np array
     flux vector for that stencil.
 
   Returns
@@ -182,16 +184,16 @@ def weno_i_weights(order, q):
   C = weno_coefficients.C_all[order]
   sigma = weno_coefficients.sigma_all[order]
 
-  beta = numpy.zeros((order))
-  w = numpy.zeros_like(beta)
+  beta = np.zeros((order))
+  w = np.zeros_like(beta)
   epsilon = 1e-16
-  alpha = numpy.zeros(order)
+  alpha = np.zeros(order)
   for k in range(order):
       for l in range(order):
           for m in range(l+1):
               beta[k] += sigma[k, l, m] * q[order-1+k-l] * q[order-1+k-m]
       alpha[k] = C[k] / (epsilon + beta[k]**2)
-  w[:] = alpha / numpy.sum(alpha)
+  w[:] = alpha / np.sum(alpha)
   
   return w
 
@@ -219,7 +221,7 @@ def weno_i_weights_batch(order, q_batch):
     weights_fp_stencil.append(weno_i_weights(order, q_batch[0,i,:]))
     weights_fm_stencil.append(weno_i_weights(order, q_batch[1,i,:]))
     
-  return numpy.array([weights_fp_stencil, weights_fm_stencil])
+  return np.array([weights_fp_stencil, weights_fm_stencil])
 
 def weno_i_split(order, q):
   """
@@ -233,7 +235,7 @@ def weno_i_split(order, q):
   
   weights = weno_i_weights(order, q)
   q_stencils = weno_i_stencils(order,q)
-  return numpy.dot(weights, q_stencils)
+  return np.dot(weights, q_stencils)
 
 # split the WENO method into computing stencils and then weights
 def weno_stencils(order, q):
@@ -244,7 +246,7 @@ def weno_stencils(order, q):
   ----------
   order : int
     The stencil width.
-  q : numpy array
+  q : np array
     Scalar data to reconstruct.
 
   Returns
@@ -253,9 +255,9 @@ def weno_stencils(order, q):
 
   """
   a = weno_coefficients.a_all[order]
-  np = len(q) - 2 * order
-  q_stencils = numpy.zeros((order, len(q)))
-  for i in range(order, np+order):   
+  num_points = len(q) - 2 * order
+  q_stencils = np.zeros((order, len(q)))
+  for i in range(order, num_points+order):   
       for k in range(order):
           for l in range(order):
               q_stencils[k,i] += a[k, l] * q[i+k-l]
@@ -270,7 +272,7 @@ def weno_weights(order, q):
   ----------
   order : int
     The stencil width.
-  q : numpy array
+  q : np array
     Scalar data to reconstruct.
 
   Returns
@@ -281,18 +283,18 @@ def weno_weights(order, q):
   C = weno_coefficients.C_all[order]
   sigma = weno_coefficients.sigma_all[order]
 
-  beta = numpy.zeros((order, len(q)))
-  w = numpy.zeros_like(beta)
-  np = len(q) - 2 * order
+  beta = np.zeros((order, len(q)))
+  w = np.zeros_like(beta)
+  num_points = len(q) - 2 * order
   epsilon = 1e-16
-  for i in range(order, np+order):
-      alpha = numpy.zeros(order)
+  for i in range(order, num_points+order):
+      alpha = np.zeros(order)
       for k in range(order):
           for l in range(order):
               for m in range(l+1):
                   beta[k, i] += sigma[k, l, m] * q[i+k-l] * q[i+k-m]
           alpha[k] = C[k] / (epsilon + beta[k, i]**2)
-      w[:, i] = alpha / numpy.sum(alpha)
+      w[:, i] = alpha / np.sum(alpha)
   
   return w
 
@@ -309,17 +311,17 @@ def weno_new(order, q):
 
   Returns
   -------
-  qL: numpy array
+  qL: np array
     Reconstructed data.
 
   """
   
   weights = weno_weights(order, q)
   q_stencils = weno_stencils(order, q)
-  qL = numpy.zeros_like(q)
-  np = len(q) - 2 * order
-  for i in range(order, np+order):
-    qL[i] = numpy.dot(weights[:, i], q_stencils[:,i])
+  qL = np.zeros_like(q)
+  num_points = len(q) - 2 * order
+  for i in range(order, num_points+order):
+    qL[i] = np.dot(weights[:, i], q_stencils[:,i])
     
   return qL
 
@@ -336,12 +338,12 @@ def RandomInitialCondition(grid: burgers.Grid1d,
     if k_max % 2 == 2:
       k_max += 1
     step = (k_max-k_min)/2
-    k_values = numpy.arange(k_min, k_max,2)
+    k_values = np.arange(k_min, k_max,2)
     #print(k_values)
-    k = numpy.random.choice(k_values, 1)
-    b = numpy.random.uniform(-amplitude, amplitude, 1)
-    a = 3.5 - numpy.abs(b)
-    return  a + b * numpy.sin(k*numpy.pi*grid.x/(grid.xmax-grid.xmin))  
+    k = np.random.choice(k_values, 1)
+    b = np.random.uniform(-amplitude, amplitude, 1)
+    a = 3.5 - np.abs(b)
+    return  a + b * np.sin(k*np.pi*grid.x/(grid.xmax-grid.xmin))  
   
 class WENOSimulation(burgers.Simulation):
     
@@ -358,9 +360,9 @@ class WENOSimulation(burgers.Simulation):
 
     def init_cond(self, type="tophat"):
         if type == "smooth_sine":
-            self.grid.u = numpy.sin(2 * numpy.pi * self.grid.x)
+            self.grid.u = np.sin(2 * np.pi * self.grid.x)
         elif type == "gaussian":
-            self.grid.u = 1.0 + numpy.exp(-60.0*(self.grid.x - 0.5)**2)
+            self.grid.u = 1.0 + np.exp(-60.0*(self.grid.x - 0.5)**2)
         elif type == "random":
             self.grid.u = RandomInitialCondition(self.grid)
         else:
@@ -382,7 +384,7 @@ class WENOSimulation(burgers.Simulation):
         f = self.burgers_flux(g.u)
         
         # get maximum velocity
-        alpha = numpy.max(abs(g.u))
+        alpha = np.max(abs(g.u))
         
         # Lax Friedrichs Flux Splitting
         fp = (f + alpha * g.u) / 2
@@ -418,7 +420,7 @@ class WENOSimulation(burgers.Simulation):
         f = self.burgers_flux(g.uactual)
         
         # get maximum velocity
-        alpha = numpy.max(abs(g.uactual))
+        alpha = np.max(abs(g.uactual))
         
         # Lax Friedrichs Flux Splitting
         fp = (f + alpha * g.uactual) / 2
@@ -454,7 +456,7 @@ class WENOSimulation(burgers.Simulation):
         f = self.burgers_flux(g.u)
         
         # get maximum velocity
-        alpha = numpy.max(abs(g.u))
+        alpha = np.max(abs(g.u))
         
         # Lax Friedrichs Flux Splitting
         fp = (f + alpha * g.u) / 2
@@ -466,8 +468,7 @@ class WENOSimulation(burgers.Simulation):
         flux = g.scratch_array()
         
         w_o = self.weno_order
-        np = len(f) - 2*w_o
-        for i in range(w_o, np+w_o):
+        for i in range(w_o, g.full_length()-w_o):
           #fp_stencil = fp[i-2:i+3]
           #fm_stencil = fm[i-3:i+2]
           fp_stencil = fp[i-w_o+1:i+w_o]
@@ -678,7 +679,7 @@ class WENOSimulation(burgers.Simulation):
             
             self.t += dt
             timesteps.append(dt)
-        print("computed for {} timesteps with average time step size {}".format(len(timesteps), numpy.mean(numpy.array(timesteps))))
+        print("computed for {} timesteps with average time step size {}".format(len(timesteps), np.mean(np.array(timesteps))))
     
     def prep_state(self):
       """
@@ -686,7 +687,7 @@ class WENOSimulation(burgers.Simulation):
 
       Returns
       -------
-      state: numpy array.
+      state: np array.
         State vector to be sent to the policy. 
         Size: 2 (one for fp and one for fm) BY grid_size BY stencil_size
         Example: order =3, grid = 128
@@ -698,33 +699,32 @@ class WENOSimulation(burgers.Simulation):
       # apply boundary conditions
       g.fill_BCs()
       
-      #comput flux at each point
+      # compute flux at each point
       f = self.burgers_flux(g.u)
       
       # get maximum velocity
-      alpha = numpy.max(abs(g.u))
+      alpha = np.max(abs(g.u))
       
       # Lax Friedrichs Flux Splitting
       fp = (f + alpha * g.u) / 2
       fm = (f - alpha * g.u) / 2
       
       w_o = self.weno_order
-      np = len(f) - 2*w_o
       fp_stencils = []
       fm_stencils = []
       
-      for i in range(w_o, np+w_o):
+      for i in range(w_o, g.full_length()-w_o):
         fp_stencil = fp[i-w_o+1:i+w_o]
         fp_stencils.append(fp_stencil)
         fm_stencil = fm[i-w_o:i+w_o-1]
         fm_stencils.append(fm_stencil)
         
-      state = numpy.array([fp_stencils, fm_stencils])
+      state = np.array([fp_stencils, fm_stencils])
       
       # save this state so that we can use it to compute next state
       self.current_state = state
       
-      #print("size of state is: {}".format(numpy.shape(state)))
+      #print("size of state is: {}".format(np.shape(state)))
       return state
     
     def reset(self, inittype):
@@ -749,89 +749,113 @@ class WENOSimulation(burgers.Simulation):
       
       
     def step(self, action):
-      """
-      Perform a single time step.
+        """
+        Perform a single time step.
 
-      Parameters
-      ----------
-      action : numpy array
-        Weights for reconstructing WENO weights. This will be multiplied with the output from weno_stencils
-        size: grid-points X order X 2
-        Note: at each i+1/2 location we have an fpl and fmr.
+        Parameters
+        ----------
+        action : np array
+          Weights for reconstructing WENO weights. This will be multiplied with the output from weno_stencils
+          size: grid-points X order X 2
+          Note: at each i+1/2 location we have an fpl and fmr.
 
-      Returns
-      -------
-      state: numpy array.
-        solution predicted using action
-      reward: float
-        scalar value - reward for current action
-      done: boolean
-        boolean signifying end of episode
-      info : dictionary
-        not passing anything now
-      """
-      
-      done = False
-      g = self.grid
-      
-      # Store the data at the start of the time step      
-      u_start = g.u.copy()
-      
-      # get the timestep
-      # passing self.C will cause this to take variable time steps
-      # for now work with constant time step = 0.0005
-      dt = self.timestep()
-
-      # update current time
-      #if self.t + dt > self.tmax_episode:
-      #    dt = self.tmax_episode - self.t
-      #    done = True
-      #    print("number of time steps: {}".format(self.timesteps_episode+1))
-      
-      state = self.current_state
-      
-      q_stencils = weno_i_stencils_batch(self.weno_order, state)
-      
-      # storage
-      fpr = g.scratch_array()
-      fml = g.scratch_array()
-
-      flux = g.scratch_array()
-      
-      w_o = self.weno_order
-      np = len(flux) - 2*w_o
-      for i in range(w_o, np+w_o):      
-        # TODO vectorize with numpy.einsum ?
-        fpr[i+1] = numpy.dot(action[0,i-w_o,:], q_stencils[0,i-w_o,:]) #weno_i_split(self.weno_order, fp_stencil)
-        fml[i] = numpy.dot(action[1,i-w_o,:], q_stencils[1,i-w_o,:])#weno_i_split(self.weno_order, fm_stencil)          
-      
-      flux[1:-1] = fpr[1:-1] + fml[1:-1]
-      rhs = g.scratch_array()
-      
-      rhs[1:-1] = 1/g.dx * (flux[1:-1] - flux[2:])
-      
-      k1 = dt * rhs
-      g.u = u_start + k1
-      
-      #update the solution time
-      self.t += dt
-      self.timesteps_episode -= 1
-      
-      if self.timesteps_episode == 0:
-        done = True
-      
-      #compute reward
-      reward = 0.0
-      self.Euler_actual(dt)
-      
-      error = numpy.max(numpy.abs(g.u[g.ilo:g.ihi+1]-g.uactual[g.ilo:g.ihi+1]))
-      reward = -numpy.log(error)
-      
-      # should this reward be clipped?
-      if reward < 10:
-        reward = 0
-      
-      return self.prep_state(), reward, done, None
+        Returns
+        -------
+        state: np array.
+          solution predicted using action
+        reward: float
+          scalar value - reward for current action
+        done: boolean
+          boolean signifying end of episode
+        info : dictionary
+          not passing anything now
+        """
+        
+        done = False
+        g = self.grid
+        
+        # Store the data at the start of the time step      
+        u_start = g.u.copy()
+        
+        # get the timestep
+        # passing self.C will cause this to take variable time steps
+        # for now work with constant time step = 0.0005
+        dt = self.timestep()
+    
+        
+        state = self.current_state
+        
+        q_stencils = weno_i_stencils_batch(self.weno_order, state)
+        
+    
+        #original version, suggested modification below
+        #
+        """
+        # storage
+        fpr = g.scratch_array()
+        fml = g.scratch_array()
+    
+        flux = g.scratch_array()
+        
+        w_o = self.weno_order
+        for i in range(w_o, g.full_length()-w_o):      
+          # TODO vectorize with np.einsum ?
+          fpr[i+1] = np.dot(action[0,i-w_o,:], q_stencils[0,i-w_o,:]) #weno_i_split(self.weno_order, fp_stencil)
+          fml[i] = np.dot(action[1,i-w_o,:], q_stencils[1,i-w_o,:])#weno_i_split(self.weno_order, fm_stencil)          
+        
+        flux[1:-1] = fpr[1:-1] + fml[1:-1]
+        rhs = g.scratch_array()
+        
+        rhs[1:-1] = 1/g.dx * (flux[1:-1] - flux[2:])
+        """
+        #
+        #suggested (seems to be correct, only saves about 0.1 seconds over 300 timesteps)
+        #
+        
+        # Let's not overcomplicate things.
+        fpr, fml = np.sum(action * q_stencils, axis=-1)
+    
+        # Is this accurate?
+        # fpr and fml are 'offset' by one because fpr has an implied +1/2 and fml has an implied -1/2
+        # Adding them together, the resulting flux has the implied -1/2.
+        flux = np.zeros(g.real_length()+3)
+        flux[:-1] = fml
+        flux[1:] += fpr
+        # Why is it not this instead?
+        #flux = np.zeros(g.real_length()+1)
+        #flux[] = fml
+        #flux[] += fpr
+    
+        # rhs must be "full sized" so it can be added directly to the grid's array.
+        # Also, note that rhs indexes line up correctly again (albeit offset by the # of left ghost points).
+        rhs = np.zeros(g.full_length())
+        rhs[self.weno_order:-self.weno_order] = 1/g.dx * (flux[:-1] - flux[1:])
+        
+        #
+        #end suggested
+        
+        k1 = dt * rhs
+        g.u = u_start + k1
+        
+        #update the solution time
+        self.t += dt
+        self.timesteps_episode -= 1
+        
+        if self.timesteps_episode == 0:
+          done = True
+        
+        #compute reward
+        reward = 0.0
+        self.Euler_actual(dt)
+        
+        error = np.max(np.abs(g.u[g.ilo:g.ihi+1]-g.uactual[g.ilo:g.ihi+1]))
+        reward = -np.log(error)
+        
+        # should this reward be clipped?
+        if reward < 10:
+          reward = 0
+        
+        return self.prep_state(), reward, done, None
 
 def test_evolve(args):
   xmin = args["xmin"]
@@ -848,7 +872,7 @@ def test_evolve(args):
   
   C = args["C"]
   
-  pyplot.clf()
+  plt.clf()
   
   s = WENOSimulation(g, C, order, timesteps)
   s.init_cond(args["inittype"])
@@ -863,15 +887,15 @@ def test_evolve(args):
   uinit = s.grid.u.copy()
 
   s.evolve_timesteps()
-  #fig,ax = pyplot.add_subplot()
+  #fig,ax = plt.add_subplot()
 
-  #pyplot.plot(g.x[g.ilo:g.ihi+1], g.u[g.ilo:g.ihi+1], color="k", label="Final State")
+  #plt.plot(g.x[g.ilo:g.ihi+1], g.u[g.ilo:g.ihi+1], color="k", label="Final State")
   
-  #pyplot.plot(g.x[g.ilo:g.ihi+1], uinit[g.ilo:g.ihi+1], ls=":", color="k", zorder=-1, label="Initial State")
+  #plt.plot(g.x[g.ilo:g.ihi+1], uinit[g.ilo:g.ihi+1], ls=":", color="k", zorder=-1, label="Initial State")
   
-  #pyplot.xlabel("$x$")
-  #pyplot.ylabel("$u$")
-  #pyplot.show()
+  #plt.xlabel("$x$")
+  #plt.ylabel("$u$")
+  #plt.show()
   return s.grid.u
     
       
@@ -889,28 +913,34 @@ def test_environment(args):
   tmax = (xmax - xmin)/1.0
   
   C = args["C"]
-  
-  pyplot.clf()
-  
+ 
   s = WENOSimulation(g, C, order, timesteps)
 
   uinit = s.grid.u.copy()
   
+  t = 0
   done = False
   state = s.reset(args["inittype"])
   rewards = []
+
+  before = time.time()
   while done == False:
+    if t%10 == 0:
+        print("step " + str(t))
     actions = weno_i_weights_batch(order, state) # state.shape = (2 (fp, fm), # grid, stencil_size )
     state, reward, done, info = s.step(actions) #action.shape = (2 (fp, fm), # grid, weight_vector_length )
     rewards.append(reward)
+    t += 1
+  after = time.time()
+  print("Main loop took " + str(after - before) + " seconds.")
   
-  #pyplot.plot(g.x[g.ilo:g.ihi+1], g.u[g.ilo:g.ihi+1], color="r")
-  #pyplot.plot(g.x[g.ilo:g.ihi+1], g.uactual[g.ilo:g.ihi+1], ls=":", color="k")
-  #pyplot.plot(g.x[g.ilo:g.ihi+1], uinit[g.ilo:g.ihi+1], ls=":", color="r", zorder=-1, label="Initial State")
+  #plt.plot(g.x[g.ilo:g.ihi+1], g.u[g.ilo:g.ihi+1], color="r")
+  #plt.plot(g.x[g.ilo:g.ihi+1], g.uactual[g.ilo:g.ihi+1], ls=":", color="k")
+  #plt.plot(g.x[g.ilo:g.ihi+1], uinit[g.ilo:g.ihi+1], ls=":", color="r", zorder=-1, label="Initial State")
     
-  #pyplot.xlabel("$x$")
-  #pyplot.ylabel("$u$")
-  #pyplot.show()
+  #plt.xlabel("$x$")
+  #plt.ylabel("$u$")
+  #plt.show()
   return s.grid.u, rewards
 
 
@@ -937,12 +967,15 @@ if __name__ == "__main__":
     g = burgers.Grid1d(nx, ng, bc="periodic")
     #act = test_evolve(args)
     pred, rewards = test_environment(args)
-    #pyplot.plot(act[g.ilo:g.ihi+1], label = "actual")
-    #pyplot.plot(pred[g.ilo:g.ihi+1],ls=":", color="k", label = "env")
-    #pyplot.legend()
-    pyplot.plot(rewards)
-    #pyplot.plot(numpy.abs(act[g.ilo:g.ihi+1]-pred[g.ilo:g.ihi+1]))
-    #assert(numpy.allclose(act[g.ilo:g.ihi+1], pred[g.ilo:g.ihi+1], atol = 0.0, rtol = 1e-02))
+    #plt.plot(act[g.ilo:g.ihi+1], label = "actual")
+    plt.plot(pred[g.ilo:g.ihi+1],ls=":", color="k", label = "env")
+    #plt.legend()
+    #plt.plot(rewards)
+    #plt.plot(np.abs(act[g.ilo:g.ihi+1]-pred[g.ilo:g.ihi+1]))
+    #assert(np.allclose(act[g.ilo:g.ihi+1], pred[g.ilo:g.ihi+1], atol = 0.0, rtol = 1e-02))
+    plt.draw()
+    plt.savefig("test.png", bbox_inches='tight', pad_inches=0)
+    print("Saved plot to test.png.")
 
     '''
     #-----------------------------------------------------------------------------
@@ -960,7 +993,7 @@ if __name__ == "__main__":
     
     C = 0.05
     
-    pyplot.clf()
+    plt.clf()
     
     s = WENOSimulation(g, C, order)
     s.init_cond("sine")
@@ -973,7 +1006,7 @@ if __name__ == "__main__":
     #print(f"Time for one episode is {toc - tic:0.4f} seconds")
 
     g = s.grid
-    #pyplot.plot(g.x[g.ilo:g.ihi+1], g.u[g.ilo:g.ihi+1], color='k', label="Final State")
+    #plt.plot(g.x[g.ilo:g.ihi+1], g.u[g.ilo:g.ihi+1], color='k', label="Final State")
     
     for i in range(0, 10):
         tend = (i+1)*0.02*tmax
@@ -985,16 +1018,16 @@ if __name__ == "__main__":
     
         c = 1.0 - (0.1 + i*0.1)
         g = s.grid
-        pyplot.plot(g.x[g.ilo:g.ihi+1], g.u[g.ilo:g.ihi+1], color=str(c))
+        plt.plot(g.x[g.ilo:g.ihi+1], g.u[g.ilo:g.ihi+1], color=str(c))
     
     
     g = s.grid
-    pyplot.plot(g.x[g.ilo:g.ihi+1], uinit[g.ilo:g.ihi+1], ls=":", color="k", zorder=-1, label="Initial State")
+    plt.plot(g.x[g.ilo:g.ihi+1], uinit[g.ilo:g.ihi+1], ls=":", color="k", zorder=-1, label="Initial State")
     
-    pyplot.xlabel("$x$")
-    pyplot.ylabel("$u$")
-    pyplot.show()
-    #pyplot.savefig("weno-burger-sine.pdf")
+    plt.xlabel("$x$")
+    plt.ylabel("$u$")
+    plt.show()
+    #plt.savefig("weno-burger-sine.pdf")
     
     
     #state = s.reset()
@@ -1020,18 +1053,18 @@ if __name__ == "__main__":
     s = burgers.Simulation(g)
     s.init_cond("sine")
     s.evolve(C, tend)
-    pyplot.clf()
-    pyplot.plot(g_hires.x[g_hires.ilo:g_hires.ihi+1], 
+    plt.clf()
+    plt.plot(g_hires.x[g_hires.ilo:g_hires.ihi+1], 
                 g_hires.u[g_hires.ilo:g_hires.ihi+1], 'k--', label='High resolution')
-    pyplot.plot(g.x[g.ilo:g.ihi+1], g.u[g.ilo:g.ihi+1], 'gd', label='PLM, MC')
-    pyplot.plot(gW3.x[gW3.ilo:gW3.ihi+1], gW3.u[gW3.ilo:gW3.ihi+1], 'bo', label='WENO, r=3')
-    pyplot.plot(gW5.x[gW5.ilo:gW5.ihi+1], gW5.u[gW5.ilo:gW5.ihi+1], 'r^', label='WENO, r=5')
-    pyplot.xlabel("$x$")
-    pyplot.ylabel("$u$")
-    pyplot.legend()
-    pyplot.xlim(0.5, 0.9)
-    pyplot.legend(frameon=False)
-    pyplot.savefig("weno-vs-plm-burger.pdf")
+    plt.plot(g.x[g.ilo:g.ihi+1], g.u[g.ilo:g.ihi+1], 'gd', label='PLM, MC')
+    plt.plot(gW3.x[gW3.ilo:gW3.ihi+1], gW3.u[gW3.ilo:gW3.ihi+1], 'bo', label='WENO, r=3')
+    plt.plot(gW5.x[gW5.ilo:gW5.ihi+1], gW5.u[gW5.ilo:gW5.ihi+1], 'r^', label='WENO, r=5')
+    plt.xlabel("$x$")
+    plt.ylabel("$u$")
+    plt.legend()
+    plt.xlim(0.5, 0.9)
+    plt.legend(frameon=False)
+    plt.savefig("weno-vs-plm-burger.pdf")
     
     
     
@@ -1050,7 +1083,7 @@ if __name__ == "__main__":
     
     C = 0.5
     
-    pyplot.clf()
+    plt.clf()
     
     s = WENOSimulation(g, C, order)
     
@@ -1064,15 +1097,15 @@ if __name__ == "__main__":
         s.evolve(tend)
     
         c = 1.0 - (0.1 + i*0.1)
-        pyplot.plot(g.x[g.ilo:g.ihi+1], g.u[g.ilo:g.ihi+1], color=str(c))
+        plt.plot(g.x[g.ilo:g.ihi+1], g.u[g.ilo:g.ihi+1], color=str(c))
     
     
-    pyplot.plot(g.x[g.ilo:g.ihi+1], uinit[g.ilo:g.ihi+1], ls=":", color="0.9", zorder=-1)
+    plt.plot(g.x[g.ilo:g.ihi+1], uinit[g.ilo:g.ihi+1], ls=":", color="0.9", zorder=-1)
     
-    pyplot.xlabel("$x$")
-    pyplot.ylabel("$u$")
+    plt.xlabel("$x$")
+    plt.ylabel("$u$")
     
-    pyplot.savefig("weno-burger-rarefaction.pdf")
+    plt.savefig("weno-burger-rarefaction.pdf")
 
     #-----------------------------------------------------------------------
     # Convergence test at t = 0.1 using gaussian data
@@ -1085,7 +1118,7 @@ if __name__ == "__main__":
     tmax = 0.05
     orders = [3, 4]
     N = [64, 81, 108, 128, 144, 192, 256]
-    #N = 2**numpy.arange(5,10)
+    #N = 2**np.arange(5,10)
     C = 0.5
 
     errs = []
@@ -1108,29 +1141,29 @@ if __name__ == "__main__":
         
             errs[-1].append(gu.norm(gu.u - uexact))
     
-    pyplot.clf()
-    N = numpy.array(N, dtype=numpy.float64)
+    plt.clf()
+    N = np.array(N, dtype=np.float64)
     for n_order, order in enumerate(orders):
-        pyplot.scatter(N, errs[n_order],
+        plt.scatter(N, errs[n_order],
                        color=colors[n_order],
                        label=r"WENO, $r={}$".format(order))
-    pyplot.plot(N, errs[0][-2]*(N[-2]/N)**(5),
+    plt.plot(N, errs[0][-2]*(N[-2]/N)**(5),
                 linestyle="--", color=colors[0],
                 label=r"$\mathcal{{O}}(\Delta x^{{{}}})$".format(5))
-    pyplot.plot(N, errs[1][-3]*(N[-3]/N)**(7),
+    plt.plot(N, errs[1][-3]*(N[-3]/N)**(7),
                 linestyle="--", color=colors[1],
                 label=r"$\mathcal{{O}}(\Delta x^{{{}}})$".format(7))
 
-    ax = pyplot.gca()
-    ax.set_ylim(numpy.min(errs)/5, numpy.max(errs)*5)
+    ax = plt.gca()
+    ax.set_ylim(np.min(errs)/5, np.max(errs)*5)
     ax.set_xscale('log')
     ax.set_yscale('log')
 
-    pyplot.xlabel("N")
-    pyplot.ylabel(r"$\| a^\mathrm{final} - a^\mathrm{init} \|_2$",
+    plt.xlabel("N")
+    plt.ylabel(r"$\| a^\mathrm{final} - a^\mathrm{init} \|_2$",
                fontsize=16)
-    pyplot.title("Convergence of Burger's, Gaussian, RK4")
+    plt.title("Convergence of Burger's, Gaussian, RK4")
 
-    pyplot.legend(frameon=False)
-    pyplot.savefig("weno-converge-burgers.pdf")
+    plt.legend(frameon=False)
+    plt.savefig("weno-converge-burgers.pdf")
     '''

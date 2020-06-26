@@ -31,8 +31,8 @@ class Grid1d(object):
         nx : int
             number of indexes in the discretized grid
         ng : int
-            size of the stencil used in calculation with this grid,
-            so we know how far past the boundary to calculate
+            how many indexes beyond the boundary to include to represent
+            boundary conditions, probably related to stencil size
         xmin : float
             coordinate of the beginning of the grid
         xmax : float
@@ -61,7 +61,7 @@ class Grid1d(object):
         # storage for the solution
         self.u = np.zeros((nx+2*ng), dtype=np.float64)
         
-        # storage for actual solution
+        # storage for actual solution (for comparison to our approximated solution)
         self.uactual = np.zeros((nx+2*ng), dtype=np.float64)
 
 
@@ -70,11 +70,11 @@ class Grid1d(object):
         return np.zeros((self.nx+2*self.ng), dtype=np.float64)
 
     def real_length(self):
-        """ Return the number of indexes of real (within boundary) points """
+        """ Return the number of indexes of real (non-ghost) points """
         return self.nx
 
     def full_length(self):
-        """ Return the number of indexes of all points, including points beyond the boundary """
+        """ Return the number of indexes of all points, including ghost points """
         return self.nx + 2*self.ng
 
 
@@ -88,6 +88,7 @@ class Grid1d(object):
             self.uactual[0:self.ilo] = self.uactual[self.ihi-self.ng+1:self.ihi+1]
 
             # right boundary
+            self.u[self.ihi+1:] = self.u[self.ilo:self.ilo+self.ng]
             self.uactual[self.ihi+1:] = self.uactual[self.ilo:self.ilo+self.ng]
 
         elif self.bc == "outflow":
@@ -97,6 +98,7 @@ class Grid1d(object):
             self.uactual[0:self.ilo] = self.uactual[self.ilo]
 
             # right boundary
+            self.u[self.ihi+1:] = self.u[self.ihi]
             self.uactual[self.ihi+1:] = self.uactual[self.ihi]
 
         else:
