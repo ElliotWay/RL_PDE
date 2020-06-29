@@ -1,0 +1,4 @@
+Book1.xlsx
+*.pdf
+__pycache__/
+test.png

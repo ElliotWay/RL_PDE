@@ -228,7 +228,6 @@ def weno_i_weights_batch(order, q_batch):
 
   """
   
-  #original - delete if new version is working
   #TODO: vectorize properly
   weights_fp_stencil = []
   weights_fm_stencil = []
@@ -994,7 +993,7 @@ if __name__ == "__main__":
     args["timesteps"] = timesteps
   
     g = burgers.Grid1d(nx, ng, bc="periodic")
-    #act = test_evolve(args)
+
     pred, rewards = test_environment(args)
     #plt.plot(act[g.ilo:g.ihi+1], label = "actual")
     plt.plot(pred[g.ilo:g.ihi+1],ls=":", color="k", label = "env")
