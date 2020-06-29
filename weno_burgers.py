@@ -8,6 +8,7 @@ from scipy.optimize import brentq
 import sys
 import time
 
+#Used in testing. Should be moved elsewhere.
 def burgers_sine_exact(x, t):
     """
     Compute the exact solution of Burger's given the 'sine' initial data
@@ -32,6 +33,8 @@ def burgers_sine_exact(x, t):
     return q
         
 
+#Where is this used?
+#This function directly approximates all the flux values from the flux array.
 def weno(order, q):
     """
     Do WENO reconstruction
@@ -74,6 +77,9 @@ def weno(order, q):
     
     return qL
 
+#Where is this used?
+#This function directly approximates the target flux from the flux stencil.
+#(Combining weno_weights, weno_stencils, and the step function.)
 def weno_i(order, q):
     """
     Do WENO reconstruction at a given location
@@ -113,17 +119,20 @@ def weno_i(order, q):
     qL = np.dot(w[:], q_stencils)
 
     return qL
-  
+
+#Used in weno_i_stencils_batch below.
 def weno_i_stencils(order, q):
   """
-  Get stencils at a given location in the grid
+  Get sub-stencil approximations at a given location in the grid.
+  That is, approximate the target value multiple times using polynomial interpolation for different sets of points.
+  This function relies on external coefficients for the polynomial interpolation.
 
   Parameters
   ----------
   order : int
-    The stencil width.
+    The sub-stencil width.
   q : np array
-    flux vector for that stencil.
+    flux vector stencil from which to create sub-stencils.
 
   Returns
   -------
@@ -139,6 +148,7 @@ def weno_i_stencils(order, q):
       
   return q_stencils
 
+#Used in step function to extract all the stencils.
 def weno_i_stencils_batch(order, q_batch):
   """
   Take a batch of pieces of state and returns the stencil values.
@@ -156,6 +166,8 @@ def weno_i_stencils_batch(order, q_batch):
 
   """
   
+  #original version - delete if new version is working
+  #TODO: vectorize properly, possibly combine with weno_i_stencils
   q_fp_stencil = []
   q_fm_stencil = []
   batch_size = q_batch.shape[1]
@@ -165,6 +177,7 @@ def weno_i_stencils_batch(order, q_batch):
     
   return np.array([q_fp_stencil, q_fm_stencil])
 
+#Used in weno_i_weights_batch below.
 def weno_i_weights(order, q):
   """
   Get WENO weights at a given location in the grid
@@ -197,16 +210,17 @@ def weno_i_weights(order, q):
   
   return w
 
+#Used in test environment to get default actions.
 def weno_i_weights_batch(order, q_batch):
   """
   Get WENO weights for a batch
 
   Parameters
   ----------
-  order : TYPE
-    DESCRIPTION.
-  q_batch : TYPE
-    DESCRIPTION.
+  order : int
+    Size of the sub-stencil.
+  q_batch : numpy array
+    Batch of weights of size 4 (fml, fpl, fmr, fpr) X grid length X number of sub-stencils
 
   Returns
   -------
@@ -214,6 +228,8 @@ def weno_i_weights_batch(order, q_batch):
 
   """
   
+  #original - delete if new version is working
+  #TODO: vectorize properly
   weights_fp_stencil = []
   weights_fm_stencil = []
   batch_size = q_batch.shape[1]
@@ -223,6 +239,7 @@ def weno_i_weights_batch(order, q_batch):
     
   return np.array([weights_fp_stencil, weights_fm_stencil])
 
+#Used in default WENO methods.
 def weno_i_split(order, q):
   """
   Return WENO reconstruction at a given location
@@ -237,6 +254,7 @@ def weno_i_split(order, q):
   q_stencils = weno_i_stencils(order,q)
   return np.dot(weights, q_stencils)
 
+#Used in weno_new, below.
 # split the WENO method into computing stencils and then weights
 def weno_stencils(order, q):
   """
@@ -264,6 +282,7 @@ def weno_stencils(order, q):
   
   return q_stencils
 
+#Used in weno_new, below.
 def weno_weights(order, q):
   """
   Compute WENO weights
@@ -298,6 +317,7 @@ def weno_weights(order, q):
   
   return w
 
+#Used in default WENO methods.
 def weno_new(order, q):
   """
   Compute WENO reconstruction
@@ -369,9 +389,13 @@ class WENOSimulation(burgers.Simulation):
             super().init_cond(type)
         self.grid.uactual[:] = self.grid.u[:] 
 
+    #This one might belong somewhere else too? Does it make sense to paramterize the environment around the flux function?
     def burgers_flux(self, q):
         return 0.5*q**2
 
+
+    #TODO: remove these functions down to prep state, they belong in an example agent, not the environment
+    #Possible exception is "actual" functions.
     def rk_substep(self):
         
         # get the solution data
@@ -822,9 +846,10 @@ class WENOSimulation(burgers.Simulation):
         flux[:-1] = fml
         flux[1:] += fpr
         # Why is it not this instead?
+        # TODO: understand why it's not this and change it so this works.
         #flux = np.zeros(g.real_length()+1)
-        #flux[] = fml
-        #flux[] += fpr
+        #flux = fml
+        #flux += fpr
     
         # rhs must be "full sized" so it can be added directly to the grid's array.
         # Also, note that rhs indexes line up correctly again (albeit offset by the # of left ghost points).
@@ -845,6 +870,7 @@ class WENOSimulation(burgers.Simulation):
           done = True
         
         #compute reward
+        # Error-based reward.
         reward = 0.0
         self.Euler_actual(dt)
         
@@ -854,6 +880,9 @@ class WENOSimulation(burgers.Simulation):
         # should this reward be clipped?
         if reward < 10:
           reward = 0
+
+        # Conservation-based reward.
+        #reward = -np.log(np.sum(rhs[g.ilo:g.ihi+1]))
         
         return self.prep_state(), reward, done, None
 
