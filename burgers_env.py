@@ -304,11 +304,19 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         fp = (f + alpha * g.u) / 2
         fm = (f - alpha * g.u) / 2
         
-        w_o = self.weno_order
-        fp_stencils = []
-        fm_stencils = []
+        stencil_size = self.weno_order*2 - 1
+        num_stencils = g.real_length() + 1
+        offset = g.ng - self.weno_order
+        # Adding a row vector and column vector gives us an "outer product" matrix where each row is a stencil.
+        sliding_window_indexes = offset + np.arange(stencil_size)[None, :] + np.arange(num_stencils)[:, None]
         
-        #TODO: vectorize properly
+        # These are the same stencils for fp and fm, can that be right?
+        # Still getting lost in the exact formulation.
+        # Maybe the fp_stencils are shifted by -1/2 and the fm_stencils by +1/2?
+        # Seems to work anyway.
+        fp_stencils = fp[sliding_window_indexes]
+        fm_stencils = fm[sliding_window_indexes]
+        
         """
         for i in range(w_o, g.full_length()-w_o):
             fp_stencil = fp[i-w_o+1:i+w_o]
@@ -316,18 +324,9 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
             fm_stencil = fm[i-w_o:i+w_o-1]
             fm_stencils.append(fm_stencil)
             """
-  
-        for i in range(g.real_length() + 1):
-            # These are the same slices into fp and fm, can that be right?
-            # Still getting lost in the exact formulation - maybe the fp_stencils are shifted by -1/2 and the fm_stencils by +1/2?
-            # Seems to work anyway.
-            fp_stencil = fp[g.ng + i - w_o : g.ng + i + w_o - 1]
-            fp_stencils.append(fp_stencil)
-            fm_stencil = fm[g.ng + i - w_o : g.ng + i + w_o - 1]
-            fm_stencils.append(fm_stencil)
-          
+
         state = np.array([fp_stencils, fm_stencils])
-        
+
         #TODO: transpose state so nx is first dimension. This makes it the batch dimension.
         
         # save this state so that we can use it to compute next state
