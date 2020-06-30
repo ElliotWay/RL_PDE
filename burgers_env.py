@@ -6,6 +6,8 @@ from gym import spaces
 
 import burgers
 import weno_coefficients
+
+#TODO: write in a way that does not require ng=order
        
 #Used in weno_i_stencils_batch below.
 def weno_i_stencils(order, q):
@@ -275,61 +277,71 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
       g.uactual = u_start + k1
    
     def prep_state(self):
-      """
-      Return state at current time step. Returns fpr and fml vector slices.
-
-      Returns
-      -------
-      state: np array.
-        State vector to be sent to the policy. 
-        Size: 2 (one for fp and one for fm) BY grid_size BY stencil_size
-        Example: order =3, grid = 128
-
-      """
-      # get the solution data
-      g = self.grid
-      
-      # apply boundary conditions
-      g.fill_BCs()
-      
-      # compute flux at each point
-      f = self.burgers_flux(g.u)
-      
-      # get maximum velocity
-      alpha = np.max(abs(g.u))
-      
-      # Lax Friedrichs Flux Splitting
-      fp = (f + alpha * g.u) / 2
-      fm = (f - alpha * g.u) / 2
-      
-      w_o = self.weno_order
-      fp_stencils = []
-      fm_stencils = []
-      
-      for i in range(w_o, g.full_length()-w_o):
-        fp_stencil = fp[i-w_o+1:i+w_o]
-        fp_stencils.append(fp_stencil)
-        fm_stencil = fm[i-w_o:i+w_o-1]
-        fm_stencils.append(fm_stencil)
+        """
+        Return state at current time step. Returns fpr and fml vector slices.
+  
+        Returns
+        -------
+        state: np array.
+            State vector to be sent to the policy. 
+            Size: 2 (one for fp and one for fm) BY grid_size BY stencil_size
+            Example: order =3, grid = 128
+  
+        """
+        # get the solution data
+        g = self.grid
         
-      state = np.array([fp_stencils, fm_stencils])
-      
-      #TODO: transpose state so nx is first dimension. This makes it the batch dimension.
-      
-      # save this state so that we can use it to compute next state
-      self.current_state = state
-      
-      return state
+        # apply boundary conditions
+        g.fill_BCs()
+        
+        # compute flux at each point
+        f = self.burgers_flux(g.u)
+        
+        # get maximum velocity
+        alpha = np.max(abs(g.u))
+        
+        # Lax Friedrichs Flux Splitting
+        fp = (f + alpha * g.u) / 2
+        fm = (f - alpha * g.u) / 2
+        
+        w_o = self.weno_order
+        fp_stencils = []
+        fm_stencils = []
+        
+        #TODO: vectorize properly
+        """
+        for i in range(w_o, g.full_length()-w_o):
+            fp_stencil = fp[i-w_o+1:i+w_o]
+            fp_stencils.append(fp_stencil)
+            fm_stencil = fm[i-w_o:i+w_o-1]
+            fm_stencils.append(fm_stencil)
+            """
+  
+        for i in range(g.real_length() + 1):
+            # These are the same slices into fp and fm, can that be right?
+            # Still getting lost in the exact formulation - maybe the fp_stencils are shifted by -1/2 and the fm_stencils by +1/2?
+            # Seems to work anyway.
+            fp_stencil = fp[g.ng + i - w_o : g.ng + i + w_o - 1]
+            fp_stencils.append(fp_stencil)
+            fm_stencil = fm[g.ng + i - w_o : g.ng + i + w_o - 1]
+            fm_stencils.append(fm_stencil)
+          
+        state = np.array([fp_stencils, fm_stencils])
+        
+        #TODO: transpose state so nx is first dimension. This makes it the batch dimension.
+        
+        # save this state so that we can use it to compute next state
+        self.current_state = state
+        
+        return state
     
     def reset(self):
         """
-        Reset the environment.Tasks here:
-          Reset initial conditions.
-          Set time to 0.
+        Reset the environment.
 
         Returns
         -------
-        None.
+        Initial state.
 
         """
       
@@ -370,7 +382,7 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         g = self.grid
         
         # Store the data at the start of the time step      
-        u_start = g.u.copy()
+        u_copy = g.u.copy()
         
         # passing self.C will cause this to take variable time steps
         # for now work with constant time step = 0.0005
@@ -382,25 +394,12 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
        
         fpr, fml = np.sum(action * q_stencils, axis=-1)
     
-        # Is this accurate?
-        # fpr and fml are 'offset' by one because fpr has an implied +1/2 and fml has an implied -1/2
-        # Adding them together, the resulting flux has the implied -1/2.
-        flux = np.zeros(g.real_length()+3)
-        flux[:-1] = fml
-        flux[1:] += fpr
-        # Why is it not this instead?
-        # TODO: understand why it's not this and change it so this works.
-        #flux = np.zeros(g.real_length()+1)
-        #flux = fml
-        #flux += fpr
+        flux = fml + fpr
     
-        # rhs must be "full sized" so it can be added directly to the grid's array.
-        # Also, note that rhs indexes line up correctly again (albeit offset by the # of left ghost points).
-        rhs = np.zeros(g.full_length())
-        rhs[self.weno_order:-self.weno_order] = 1/g.dx * (flux[:-1] - flux[1:])
+        rhs = (flux[:-1] - flux[1:]) / g.dx
         
-        k1 = dt * rhs
-        g.u = u_start + k1
+        u_copy[self.grid.ng:-self.grid.ng] += dt * rhs
+        g.u = u_copy
         
         #update the solution time
         self.t += dt

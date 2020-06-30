@@ -57,7 +57,7 @@ class StandardWENOAgent():
         Parameters
         ----------
         q_batch : numpy array
-          Batch of flux stencils of size 2 (fp, fm) X grid length X stencil size
+          Batch of flux stencils of size 2 (fp, fm) X grid length + 1 X stencil size
   
         Returns
         -------
