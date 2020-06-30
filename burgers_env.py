@@ -21,7 +21,7 @@ def weno_i_stencils(order, q):
   order : int
     The sub-stencil width.
   q : np array
-    flux vector stencil from which to create sub-stencils.
+    stencil from which to create sub-stencils.
 
   Returns
   -------
@@ -31,6 +31,7 @@ def weno_i_stencils(order, q):
   a = weno_coefficients.a_all[order]
   q_stencils = np.zeros(order)
   #TODO: remove these loops; generate matrix for q and do matmul
+  #q_stencils = a.matmul(q[sliding_window_indexes])?
   for k in range(order):
     for l in range(order):
       q_stencils[k] += a[k, l] * q[order-1+k-l]
@@ -47,7 +48,7 @@ def weno_i_stencils_batch(order, q_batch):
   order : int
     WENO sub-stencil width.
   q_batch : np array
-    flux vectors for each location, shape is [2, grid_width, stencil_width].
+    stencils for each location, shape is [2, grid_width, stencil_width].
 
   Returns
   -------
