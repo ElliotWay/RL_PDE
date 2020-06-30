@@ -8,62 +8,46 @@ import burgers
 import weno_coefficients
 
 #TODO: write in a way that does not require ng=order
-       
-#Used in weno_i_stencils_batch below.
-def weno_i_stencils(order, q):
-  """
-  Get sub-stencil approximations at a given location in the grid.
-  That is, approximate the target value multiple times using polynomial interpolation for different sets of points.
-  This function relies on external coefficients for the polynomial interpolation.
-
-  Parameters
-  ----------
-  order : int
-    The sub-stencil width.
-  q : np array
-    flux vector stencil from which to create sub-stencils.
-
-  Returns
-  -------
-  np array of stencils in q each of size order
-
-  """
-  a = weno_coefficients.a_all[order]
-  q_stencils = np.zeros(order)
-  #TODO: remove these loops; generate matrix for q and do matmul
-  for k in range(order):
-    for l in range(order):
-      q_stencils[k] += a[k, l] * q[order-1+k-l]
-      
-  return q_stencils
 
 #Used in step function to extract all the stencils.
 def weno_i_stencils_batch(order, q_batch):
-  """
-  Take a batch of pieces of state and returns the stencil values.
-
-  Parameters
-  ----------
-  order : int
-    WENO sub-stencil width.
-  q_batch : np array
-    flux vectors for each location, shape is [2, grid_width, stencil_width].
-
-  Returns
-  -------
-  Return a batch of stencils
-
-  """
+    """
+    Take a batch of of stencils and approximate the target value in each sub-stencil.
+    That is, for each stencil, approximate the target value multiple times using polynomial interpolation
+    for different subsets of the stencil.
+    This function relies on external coefficients for the polynomial interpolation.
   
-  #TODO: vectorize properly, possibly combine with weno_i_stencils
-  q_fp_stencil = []
-  q_fm_stencil = []
-  batch_size = q_batch.shape[1]
-  for i in range(batch_size):
-    q_fp_stencil.append(weno_i_stencils(order, q_batch[0,i,:]))
-    q_fm_stencil.append(weno_i_stencils(order, q_batch[1,i,:]))
-    
-  return np.array([q_fp_stencil, q_fm_stencil])
+    Parameters
+    ----------
+    order : int
+      WENO sub-stencil width.
+    q_batch : numpy array
+      stencils for each location, shape is [2, grid_width+1, stencil_width].
+  
+    Returns
+    -------
+    Return a batch of stencils
+  
+    """
+  
+    a_mat = weno_coefficients.a_all[order]
+
+    # These weights are "backwards" in the original formulation.
+    # This is easier in the original formulation because we can add the k for our kth stencil to the index.
+    # then subtract by a variable amount to get each value, but there's no need to do that here, and flipping
+    # it back around makes the expression simpler.
+    a_mat = np.flip(a_mat, axis=-1)
+
+    sub_stencil_size = order
+    num_sub_stencils = order
+    # Adding a row vector and column vector gives us an "outer product" matrix where each row is a sub-stencil.
+    sliding_window_indexes = np.arange(sub_stencil_size)[None, :] + np.arange(num_sub_stencils)[:, None]
+
+                                    #[0,:,indexes] causes output to be transposed for some reason
+    q_fp_stencil = np.sum(a_mat * q_batch[0][:, sliding_window_indexes], axis=-1)
+    q_fm_stencil = np.sum(a_mat * q_batch[1][:, sliding_window_indexes], axis=-1)
+      
+    return np.array([q_fp_stencil, q_fm_stencil])
 
 #Used in weno_new, below.
 def weno_stencils(order, q):
