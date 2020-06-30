@@ -1,6 +1,9 @@
 import time
 import numpy as np
 
+import gym
+from gym import spaces
+
 import burgers
 import weno_coefficients
        
@@ -172,20 +175,26 @@ def RandomInitialCondition(grid: burgers.Grid1d,
     a = 3.5 - np.abs(b)
     return  a + b * np.sin(k*np.pi*grid.x/(grid.xmax-grid.xmin))  
   
-#TODO: implement render function
-class WENOBurgersEnv(burgers.Simulation):
+class WENOBurgersEnv(burgers.Simulation, gym.Env):
+
+    metadata = {'render.modes':['human', 'file']}
     
-    def __init__(self, grid, C=0.5, weno_order=3, timesteps=300, init_type="sine"):
+    def __init__(self, grid, C=0.5, weno_order=3, episode_length=300, init_type="sine"):
         self.grid = grid
         self.t = 0.0 # simulation time
         self.C = C   # CFL number
         self.weno_order = weno_order
         self.init_type = init_type
+
+        self.episode_length = episode_length
+        self.steps = 0
+
+        #TODO: transpose so grid length is first dimension
+        self.action_space = spaces.Box(low=0.0, high=1.0, shape=(2, self.grid.real_length() + 1, weno_order), dtype=np.float64)
+        self.state_space = spaces.Box(low=-np.inf, high=np.inf, shape=(2, self.grid.real_length() + 1, 2*weno_order - 1), dtype=np.float64)
         
-        ### GYM related
-        self.current_state = None
-        self.tmax_episode = 0.02*(self.grid.xmax - self.grid.xmin)/1.0
-        self.timesteps_episode = timesteps
+        #What did this do?
+        #self.tmax_episode = 0.02*(self.grid.xmax - self.grid.xmin)/1.0
 
     def init_cond(self, type="tophat"):
         if type == "smooth_sine":
@@ -325,6 +334,7 @@ class WENOBurgersEnv(burgers.Simulation):
         """
       
         self.t = 0.0
+        self.steps = 0
         if self.init_type is None:
             self.init_cond("random")
         else:
@@ -355,25 +365,21 @@ class WENOBurgersEnv(burgers.Simulation):
         info : dictionary
           not passing anything now
         """
-        
+
         done = False
         g = self.grid
         
         # Store the data at the start of the time step      
         u_start = g.u.copy()
         
-        # get the timestep
         # passing self.C will cause this to take variable time steps
         # for now work with constant time step = 0.0005
         dt = self.timestep()
     
-        
         state = self.current_state
         
         q_stencils = weno_i_stencils_batch(self.weno_order, state)
-        
        
-        # Let's not overcomplicate things.
         fpr, fml = np.sum(action * q_stencils, axis=-1)
     
         # Is this accurate?
@@ -398,9 +404,9 @@ class WENOBurgersEnv(burgers.Simulation):
         
         #update the solution time
         self.t += dt
-        self.timesteps_episode -= 1
-        
-        if self.timesteps_episode == 0:
+
+        self.steps += 1
+        if self.steps >= self.episode_length:
           done = True
         
         #compute reward
@@ -417,5 +423,17 @@ class WENOBurgersEnv(burgers.Simulation):
 
         # Conservation-based reward.
         #reward = -np.log(np.sum(rhs[g.ilo:g.ihi+1]))
-        
+
         return self.prep_state(), reward, done, None
+
+    def render(self, mode='file'):
+        print("Render not currently implemented")
+        #TODO implement
+
+    def close(self):
+        #Delete references for easier garbage collection.
+        self.grid = None
+
+    def seed(self):
+        #The official Env class has this as part of its interface, but I don't think we need it. Better to set the seed at the experiment level then the environment level
+        pass

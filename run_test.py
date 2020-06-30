@@ -41,7 +41,7 @@ def do_test(env, agent, args):
         rewards.append(reward)
         total_reward += reward
 
-        if t >= args.timesteps * (next_update / 10):
+        if t >= args.ep_length * (next_update / 10):
             print("t = " + str(t))
             next_update += 1
 
@@ -69,7 +69,7 @@ def build_env(args):
     if args.env == "weno_burgers":
         num_ghosts = args.order + 1 #TODO change back to just args.order
         grid = Grid1d(nx=args.nx, ng=num_ghosts, xmin=args.xmin, xmax=args.xmax, bc=args.boundary)
-        env = WENOBurgersEnv(grid=grid, C=args.C, weno_order=args.order, timesteps=args.timesteps, init_type=args.init_type)
+        env = WENOBurgersEnv(grid=grid, C=args.C, weno_order=args.order, episode_length=args.ep_length, init_type=args.init_type)
     else:
         print("Unrecognized environment type: \"" + str(args.env) + "\".")
         sys.exit(0)
@@ -88,8 +88,8 @@ def main():
             help="Name of the environment in which to deploy the agent.")
     parser.add_argument('--log-dir', type=str, default=None,
             help="Directory to place log file and other results. TODO: implement, create default log dir")
-    parser.add_argument('--timesteps', type=int, default=300,
-            help="Steps in an episode.")
+    parser.add_argument('--ep-length', type=int, default=300,
+            help="Number of timesteps in an episode.")
     parser.add_argument('--seed', type=int, default=1,
             help="Set random seed for reproducibility.")
 

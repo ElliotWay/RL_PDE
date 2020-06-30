@@ -23,13 +23,13 @@ class StandardWENOAgent():
         Parameters
         ----------
         order : int
-          The stencil width.
-        q : np array
+          The sub-stencil width.
+        q : numpy array
           flux vector for that stencil.
   
         Returns
         -------
-        Weights at given location.
+        Weights for sub-stencils in flux vector.
   
         """
         order = self.order
@@ -57,7 +57,7 @@ class StandardWENOAgent():
         Parameters
         ----------
         q_batch : numpy array
-          Batch of weights of size 2 (fp, fm) X grid length X number of sub-stencils
+          Batch of flux stencils of size 2 (fp, fm) X grid length X stencil size
   
         Returns
         -------
