@@ -4,6 +4,7 @@ import numpy as np
 import gym
 from gym import spaces
 
+from util.softmax_box import SoftmaxBox
 import burgers
 import weno_coefficients
 
@@ -176,7 +177,7 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         self.steps = 0
 
         #TODO: transpose so grid length is first dimension
-        self.action_space = spaces.Box(low=0.0, high=1.0, shape=(2, self.grid.real_length() + 1, weno_order), dtype=np.float64)
+        self.action_space = SoftmaxBox(low=0.0, high=1.0, shape=(2, self.grid.real_length() + 1, weno_order), dtype=np.float64)
         #self.action_space = spaces.Box(low=0.0, high=1.0, shape=(2 * (self.grid.real_length() + 1) * weno_order,),
         #                               dtype=np.float64)
         #self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(2, self.grid.real_length() + 1, 2*weno_order - 1), dtype=np.float64)
