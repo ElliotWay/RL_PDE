@@ -177,10 +177,12 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
 
         #TODO: transpose so grid length is first dimension
         self.action_space = spaces.Box(low=0.0, high=1.0, shape=(2, self.grid.real_length() + 1, weno_order), dtype=np.float64)
-        self.state_space = spaces.Box(low=-np.inf, high=np.inf, shape=(2, self.grid.real_length() + 1, 2*weno_order - 1), dtype=np.float64)
-        
-        #What did this do?
-        #self.tmax_episode = 0.02*(self.grid.xmax - self.grid.xmin)/1.0
+        #self.action_space = spaces.Box(low=0.0, high=1.0, shape=(2 * (self.grid.real_length() + 1) * weno_order,),
+        #                               dtype=np.float64)
+        #self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(2, self.grid.real_length() + 1, 2*weno_order - 1), dtype=np.float64)
+        self.observation_space = spaces.Box(low=-1e10, high=1e10,
+                                            shape=(2, self.grid.real_length() + 1, 2 * weno_order - 1),
+                                            dtype=np.float64)
 
     def init_cond(self, type="tophat"):
         if type == "smooth_sine":
@@ -392,22 +394,28 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         reward = -np.log(error)
         
         # should this reward be clipped?
-        if reward < 10:
-          reward = 0
+        #if reward < 10:
+          #reward = 0
 
         # Conservation-based reward.
         #reward = -np.log(np.sum(rhs[g.ilo:g.ihi+1]))
 
-        return self.prep_state(), reward, done, None
+        # Give a penalty and end the episode if we're way off.
+        state = self.prep_state()
+        if np.max(state) > 1e10 or np.isnan(np.max(state)):
+            reward -= 100
+            done = True
+
+        return self.prep_state(), reward, done, {}
 
     def render(self, mode='file'):
         print("Render not currently implemented")
-        #TODO implement
+        #TODO: implement
 
     def close(self):
-        #Delete references for easier garbage collection.
+        # Delete references for easier garbage collection.
         self.grid = None
 
     def seed(self):
-        #The official Env class has this as part of its interface, but I don't think we need it. Better to set the seed at the experiment level then the environment level
+        # The official Env class has this as part of its interface, but I don't think we need it. Better to set the seed at the experiment level then the environment level
         pass
