@@ -1,8 +1,8 @@
 import tensorflow as tf
 import numpy as np
-from gym.spaces import Box
 
-from stable_baselines.common.policies import BasePolicy, nature_cnn, register_policy
+from stable_baselines.sac.policies import SACPolicy, gaussian_likelihood, gaussian_entropy, apply_squashing_func
+from stable_baselines.common.policies import nature_cnn, register_policy
 from stable_baselines.common.tf_layers import mlp
 
 EPS = 1e-6  # Avoid NaN (prevents division by zero or log of zero)
@@ -64,83 +64,7 @@ def apply_squashing_func(mu_, pi_, logp_pi):
     return deterministic_policy, policy, logp_pi
 
 
-class SACPolicy(BasePolicy):
-    """
-    Policy object that implements a SAC-like actor critic
-
-    :param sess: (TensorFlow session) The current TensorFlow session
-    :param ob_space: (Gym Space) The observation space of the environment
-    :param ac_space: (Gym Space) The action space of the environment
-    :param n_env: (int) The number of environments to run
-    :param n_steps: (int) The number of steps to run for each environment
-    :param n_batch: (int) The number of batch to run (n_envs * n_steps)
-    :param reuse: (bool) If the policy is reusable or not
-    :param scale: (bool) whether or not to scale the input
-    """
-
-    def __init__(self, sess, ob_space, ac_space, n_env=1, n_steps=1, n_batch=None, reuse=False, scale=False):
-        super(SACPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse=reuse, scale=scale)
-        assert isinstance(ac_space, Box), "Error: the action space must be of type gym.spaces.Box"
-
-        self.qf1 = None
-        self.qf2 = None
-        self.value_fn = None
-        self.policy = None
-        self.deterministic_policy = None
-        self.act_mu = None
-        self.std = None
-
-    def make_actor(self, obs=None, reuse=False, scope="pi"):
-        """
-        Creates an actor object
-
-        :param obs: (TensorFlow Tensor) The observation placeholder (can be None for default placeholder)
-        :param reuse: (bool) whether or not to reuse parameters
-        :param scope: (str) the scope name of the actor
-        :return: (TensorFlow Tensor) the output tensor
-        """
-        raise NotImplementedError
-
-    def make_critics(self, obs=None, action=None, reuse=False,
-                     scope="values_fn", create_vf=True, create_qf=True):
-        """
-        Creates the two Q-Values approximator along with the Value function
-
-        :param obs: (TensorFlow Tensor) The observation placeholder (can be None for default placeholder)
-        :param action: (TensorFlow Tensor) The action placeholder
-        :param reuse: (bool) whether or not to reuse parameters
-        :param scope: (str) the scope name
-        :param create_vf: (bool) Whether to create Value fn or not
-        :param create_qf: (bool) Whether to create Q-Values fn or not
-        :return: ([tf.Tensor]) Mean, action and log probability
-        """
-        raise NotImplementedError
-
-    def step(self, obs, state=None, mask=None, deterministic=False):
-        """
-        Returns the policy for a single step
-
-        :param obs: ([float] or [int]) The current observation of the environment
-        :param state: ([float]) The last states (used in recurrent policies)
-        :param mask: ([float]) The last masks (used in recurrent policies)
-        :param deterministic: (bool) Whether or not to return deterministic actions.
-        :return: ([float]) actions
-        """
-        raise NotImplementedError
-
-    def proba_step(self, obs, state=None, mask=None):
-        """
-        Returns the action probability params (mean, std) for a single step
-
-        :param obs: ([float] or [int]) The current observation of the environment
-        :param state: ([float]) The last states (used in recurrent policies)
-        :param mask: ([float]) The last masks (used in recurrent policies)
-        :return: ([float], [float])
-        """
-        raise NotImplementedError
-
-
-class FeedForwardPolicy(SACPolicy):
+class ScaledFeedForwardPolicy(SACPolicy):
     """
     Policy object that implements a DDPG-like actor critic, using a feed forward neural network.
 
@@ -163,7 +87,7 @@ class FeedForwardPolicy(SACPolicy):
     def __init__(self, sess, ob_space, ac_space, n_env=1, n_steps=1, n_batch=None, reuse=False, layers=None,
                  cnn_extractor=nature_cnn, feature_extraction="cnn", reg_weight=0.0,
                  layer_norm=False, act_fun=tf.nn.relu, **kwargs):
-        super(FeedForwardPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
+        super(ScaledFeedForwardPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
                                                 reuse=reuse, scale=(feature_extraction == "cnn"))
 
         self._kwargs_check(feature_extraction, kwargs)
@@ -262,71 +186,17 @@ class FeedForwardPolicy(SACPolicy):
 
     def step(self, obs, state=None, mask=None, deterministic=False):
         if deterministic:
-            return self.sess.run(self.deterministic_policy, {self.obs_ph: obs})
-        return self.sess.run(self.policy, {self.obs_ph: obs})
+            a = self.sess.run(self.deterministic_policy, {self.obs_ph: obs})
+        else:
+            a = self.sess.run(self.policy, {self.obs_ph: obs})
+        a = a / a.sum()
+        return a
 
     def proba_step(self, obs, state=None, mask=None):
         return self.sess.run([self.act_mu, self.std], {self.obs_ph: obs})
 
 
-class CnnPolicy(FeedForwardPolicy):
-    """
-    Policy object that implements actor critic, using a CNN (the nature CNN)
-
-    :param sess: (TensorFlow session) The current TensorFlow session
-    :param ob_space: (Gym Space) The observation space of the environment
-    :param ac_space: (Gym Space) The action space of the environment
-    :param n_env: (int) The number of environments to run
-    :param n_steps: (int) The number of steps to run for each environment
-    :param n_batch: (int) The number of batch to run (n_envs * n_steps)
-    :param reuse: (bool) If the policy is reusable or not
-    :param _kwargs: (dict) Extra keyword arguments for the nature CNN feature extraction
-    """
-
-    def __init__(self, sess, ob_space, ac_space, n_env=1, n_steps=1, n_batch=None, reuse=False, **_kwargs):
-        super(CnnPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse,
-                                        feature_extraction="cnn", **_kwargs)
-
-
-class LnCnnPolicy(FeedForwardPolicy):
-    """
-    Policy object that implements actor critic, using a CNN (the nature CNN), with layer normalisation
-
-    :param sess: (TensorFlow session) The current TensorFlow session
-    :param ob_space: (Gym Space) The observation space of the environment
-    :param ac_space: (Gym Space) The action space of the environment
-    :param n_env: (int) The number of environments to run
-    :param n_steps: (int) The number of steps to run for each environment
-    :param n_batch: (int) The number of batch to run (n_envs * n_steps)
-    :param reuse: (bool) If the policy is reusable or not
-    :param _kwargs: (dict) Extra keyword arguments for the nature CNN feature extraction
-    """
-
-    def __init__(self, sess, ob_space, ac_space, n_env=1, n_steps=1, n_batch=None, reuse=False, **_kwargs):
-        super(LnCnnPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse,
-                                          feature_extraction="cnn", layer_norm=True, **_kwargs)
-
-
-class MlpPolicy(FeedForwardPolicy):
-    """
-    Policy object that implements actor critic, using a MLP (2 layers of 64)
-
-    :param sess: (TensorFlow session) The current TensorFlow session
-    :param ob_space: (Gym Space) The observation space of the environment
-    :param ac_space: (Gym Space) The action space of the environment
-    :param n_env: (int) The number of environments to run
-    :param n_steps: (int) The number of steps to run for each environment
-    :param n_batch: (int) The number of batch to run (n_envs * n_steps)
-    :param reuse: (bool) If the policy is reusable or not
-    :param _kwargs: (dict) Extra keyword arguments for the nature CNN feature extraction
-    """
-
-    def __init__(self, sess, ob_space, ac_space, n_env=1, n_steps=1, n_batch=None, reuse=False, **_kwargs):
-        super(MlpPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse,
-                                        feature_extraction="mlp", **_kwargs)
-
-
-class LnMlpPolicy(FeedForwardPolicy):
+class LnScaledMlpPolicy(ScaledFeedForwardPolicy):
     """
     Policy object that implements actor critic, using a MLP (2 layers of 64), with layer normalisation
 
@@ -341,11 +211,8 @@ class LnMlpPolicy(FeedForwardPolicy):
     """
 
     def __init__(self, sess, ob_space, ac_space, n_env=1, n_steps=1, n_batch=None, reuse=False, **_kwargs):
-        super(LnMlpPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse,
+        super(LnScaledMlpPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse,
                                           feature_extraction="mlp", layer_norm=True, **_kwargs)
 
 
-register_policy("CnnPolicy", CnnPolicy)
-register_policy("LnCnnPolicy", LnCnnPolicy)
-register_policy("MlpPolicy", MlpPolicy)
-register_policy("LnMlpPolicy", LnMlpPolicy)
+register_policy("LnScaledMlpPolicy", LnScaledMlpPolicy)
