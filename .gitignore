@@ -1,4 +1,6 @@
 Book1.xlsx
 *.pdf
 __pycache__/
-test.png
+*.png
+!test_good.png
+!good_*.png
