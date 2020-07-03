@@ -69,7 +69,7 @@ class SACBatch(OffPolicyRLModel):
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False,
                  seed=None, n_cpu_tf_sess=None):
 
-        super(SAC, self).__init__(policy=policy, env=env, replay_buffer=None, verbose=verbose,
+        super(SACBatch, self).__init__(policy=policy, env=env, replay_buffer=None, verbose=verbose,
                                   policy_base=SACPolicy, requires_vec_env=False, policy_kwargs=policy_kwargs,
                                   seed=seed, n_cpu_tf_sess=n_cpu_tf_sess)
 
@@ -136,11 +136,12 @@ class SACBatch(OffPolicyRLModel):
             self.setup_model()
 
     #pretrain not supported, would need to change function in base class
-    #def _get_pretrain_placeholders(self):
+    def _get_pretrain_placeholders(self):
         #policy = self.policy_tf
         ## Rescale
         #deterministic_action = unscale_action(self.action_space, self.deterministic_action)
         #return policy.obs_ph, self.actions_ph, deterministic_action
+        raise Exception("Pretrain not supported.")
 
     def setup_model(self):
         with SetVerbosity(self.verbose):
@@ -397,7 +398,7 @@ class SACBatch(OffPolicyRLModel):
                 self.action_noise.reset()
             obs = self.env.reset()
             #PDE Convert raw obs to batch of obs.
-            obs_Batch = obs.transpose((1,0,2))
+            obs_batch = obs.transpose((1,0,2))
             # Retrieve unnormalized observation for saving into the buffer
             if self._vec_normalize_env is not None:
                 obs_ = self._vec_normalize_env.get_original_obs().squeeze()
@@ -426,6 +427,7 @@ class SACBatch(OffPolicyRLModel):
                     #PDE Need to collect a batch of actions along the spatial dimension.
                     #PDE However, the step function already accepts observations in batches.
                     action = self.policy_tf.step(obs_batch, deterministic=False).flatten()
+                    action = action.reshape((-1,)+(self.i_action_space.shape))
 
                     #PDE Need to change batch of actions to expected shape.
                     action_batch = action
@@ -581,11 +583,13 @@ class SACBatch(OffPolicyRLModel):
         if is_batch:
             observation = observation.transpose((1,0,2))
             actions = self.policy_tf.step(observation, deterministic=deterministic)
+            actions = actions.reshape((-1,) + self.i_action_space.shape)
             actions = actions.transpose((1,0,2))
 
             return actions, None
         else:
             action = self.policy_tf.step(observation, deterministic=deterministic)
+            actions = actions.reshape(self.i_action_space.shape)
 
             return action, None
 

@@ -119,10 +119,11 @@ class ScaledFeedForwardPolicy(SACPolicy):
 
             pi_h = mlp(pi_h, self.layers, self.activ_fn, layer_norm=self.layer_norm)
 
-            self.act_mu = mu_ = tf.layers.dense(pi_h, self.ac_space.shape[0], activation=None)
+            #PDE Our actions are not flat, but the output needs to be.
+            self.act_mu = mu_ = tf.layers.dense(pi_h, np.prod(self.ac_space.shape), activation=None)
             # Important difference with SAC and other algo such as PPO:
             # the std depends on the state, so we cannot use stable_baselines.common.distribution
-            log_std = tf.layers.dense(pi_h, self.ac_space.shape[0], activation=None)
+            log_std = tf.layers.dense(pi_h, np.prod(self.ac_space.shape), activation=None)
 
         # Regularize policy output (not used for now)
         # reg_loss = self.reg_weight * 0.5 * tf.reduce_mean(log_std ** 2)
@@ -168,7 +169,9 @@ class ScaledFeedForwardPolicy(SACPolicy):
 
             if create_qf:
                 # Concatenate preprocessed state and action
-                qf_h = tf.concat([critics_h, action], axis=-1)
+                #PDE Our actions are not flat, but they need to be for this.
+                flattened_action = tf.layers.flatten(action)
+                qf_h = tf.concat([critics_h, flattened_action], axis=-1)
 
                 # Double Q values to reduce overestimation
                 with tf.variable_scope('qf1', reuse=reuse):

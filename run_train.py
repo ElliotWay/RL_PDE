@@ -4,6 +4,9 @@ import argparse
 from argparse import Namespace
 import numpy as np
 
+import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -41,7 +44,7 @@ def main():
             help="Directory to place log file and other results. TODO: implement, create default log dir")
     parser.add_argument('--ep-length', type=int, default=300,
             help="Number of timesteps in an episode.")
-    parser.add_argument('--total_timesteps', type=int, default=1e6,
+    parser.add_argument('--total_timesteps', type=int, default=int(1e6),
             help="Total number of timesteps to train.")
     parser.add_argument('--log_freq', type=int, default=10,
             help="Number of timesteps to wait between logging information.")
