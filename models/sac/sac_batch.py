@@ -13,7 +13,7 @@ from stable_baselines.sac.policies import SACPolicy
 from stable_baselines import logger
 
 
-class SAC(OffPolicyRLModel):
+class SACBatch(OffPolicyRLModel):
     """
     Soft Actor-Critic (SAC)
     Off-Policy Maximum Entropy Deep Reinforcement Learning with a Stochastic Actor,
@@ -376,6 +376,8 @@ class SAC(OffPolicyRLModel):
             if self.action_noise is not None:
                 self.action_noise.reset()
             obs = self.env.reset()
+            #PDE Convert raw obs to batch of obs.
+            obs_Batch = obs.transpose((1,0,2))
             # Retrieve unnormalized observation for saving into the buffer
             if self._vec_normalize_env is not None:
                 obs_ = self._vec_normalize_env.get_original_obs().squeeze()
@@ -392,22 +394,38 @@ class SAC(OffPolicyRLModel):
                 # Afterwards, use the learned policy
                 # if random_exploration is set to 0 (normal setting)
                 if self.num_timesteps < self.learning_starts or np.random.rand() < self.random_exploration:
+                    #PDE Sampling directly from the action space returns a batch.
+                    unscaled_action = self.env.action_space.sample()
                     # actions sampled from action space are from range specific to the environment
                     # but algorithm operates on tanh-squashed actions therefore simple scaling is used
-                    unscaled_action = self.env.action_space.sample()
+                    #TODO probably need to change action scaling
                     action = scale_action(self.action_space, unscaled_action)
+                    #PDE Need to store batch actions in buffer later.
+                    action_batch = action.transpose((1,0,2))
                 else:
-                    action = self.policy_tf.step(obs[None], deterministic=False).flatten()
+                    #PDE Need to collect a batch of actions along the spatial dimension.
+                    #PDE However, the step function already accepts observations in batches.
+                    action = self.policy_tf.step(obs_batch, deterministic=False).flatten()
+
+                    #PDE Need to change batch of actions to expected shape.
+                    action_batch = action
+                    action = action_batch.transpose((1,0,2))
+
                     # Add noise to the action (improve exploration,
                     # not needed in general)
                     if self.action_noise is not None:
                         action = np.clip(action + self.action_noise(), -1, 1)
                     # inferred actions need to be transformed to environment action_space before stepping
+                    #TODO probably need to change action scaling
                     unscaled_action = unscale_action(self.action_space, action)
+                    
 
                 assert action.shape == self.env.action_space.shape
 
                 new_obs, reward, done, info = self.env.step(unscaled_action)
+
+                #PDE Convert raw obs to batch.
+                new_obs_batch = new_obs.transpose((1,0,2))
 
                 self.num_timesteps += 1
 
@@ -417,6 +435,7 @@ class SAC(OffPolicyRLModel):
                 if callback.on_step() is False:
                     break
 
+                #TODO change or disable state/reward normalization?
                 # Store only the unnormalized version
                 if self._vec_normalize_env is not None:
                     new_obs_ = self._vec_normalize_env.get_original_obs().squeeze()
@@ -426,8 +445,14 @@ class SAC(OffPolicyRLModel):
                     obs_, new_obs_, reward_ = obs, new_obs, reward
 
                 # Store transition in the replay buffer.
-                self.replay_buffer_add(obs_, action, reward_, new_obs_, done, info)
+                #PDE Need to store entire batch.
+                #PDE Currently give each trajectory same reward (and done and info).
+                for o, a, new_o in zip(obs_batch, action_batch, new_obs_batch):
+                    self.replay_buffer_add(o, a, reward_, new_o, done, info)
                 obs = new_obs
+                obs_batch = new_obs_batch
+
+                #TODO change or disable state normalization?
                 # Save the unnormalized observation
                 if self._vec_normalize_env is not None:
                     obs_ = new_obs_
@@ -529,6 +554,7 @@ class SAC(OffPolicyRLModel):
         observation = observation.reshape((-1,) + self.observation_space.shape)
         actions = self.policy_tf.step(observation, deterministic=deterministic)
         actions = actions.reshape((-1,) + self.action_space.shape)  # reshape to the correct action shape
+        #TODO probably need to change action scaling
         actions = unscale_action(self.action_space, actions)  # scale the output for the prediction
 
         if not vectorized_env:
