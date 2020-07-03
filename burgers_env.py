@@ -392,7 +392,8 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         self.Euler_actual(dt)
         
         error = np.max(np.abs(g.u[g.ilo:g.ihi+1]-g.uactual[g.ilo:g.ihi+1]))
-        reward = -np.log(error)
+        #reward = -np.log(error)
+        reward = -np.arctan(error)
         
         # should this reward be clipped?
         #if reward < 10:
