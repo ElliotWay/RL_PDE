@@ -35,7 +35,7 @@ def do_test(env, agent, args):
 
         # The agent's policy function takes a batch of states and returns a batch of actions.
         # However, we take that batch of actions and pass it to the environment like a single action.
-        actions = agent.policy(state)
+        actions = agent.predict(state)
         state, reward, done, info = env.step(actions)
 
         rewards.append(reward)

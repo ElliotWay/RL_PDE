@@ -7,7 +7,7 @@ class StandardWENOAgent():
     def __init__(self, order=3):
         self.order = order
 
-    def policy(self, state):
+    def predict(self, state):
         #TODO: note that later the state will be formatted better as a batch,
         #i.e. (nx+1) X 2 X stencil_size instead of 2 X (nx+1) X stencil_size
         #which this assumes now.
