@@ -50,6 +50,8 @@ def main():
             help="Number of timesteps to wait between logging information.")
     parser.add_argument('--seed', type=int, default=1,
             help="Set random seed for reproducibility.")
+    parser.add_argument('--render', type=str, default="file",
+            help="How to render output. Options are file, human, and none.")
 
     main_args, rest = parser.parse_known_args()
 
@@ -103,7 +105,10 @@ def main():
     else:
         print("Algorithm type \"" + str(args.algo) + "\" not implemented.")
 
-    model.learn(total_timesteps=args.total_timesteps, log_interval=args.log_freq)
+    if args.render == "none":
+        args.render = None
+
+    model.learn(total_timesteps=args.total_timesteps, log_interval=args.log_freq, render=args.render)
     model.save("sac_burgers") #TODO save to log directory
 
 

@@ -373,7 +373,8 @@ class SACBatch(OffPolicyRLModel):
         return policy_loss, qf1_loss, qf2_loss, value_loss, entropy
 
     def learn(self, total_timesteps, callback=None,
-              log_interval=4, tb_log_name="SAC", reset_num_timesteps=True, replay_wrapper=None):
+              log_interval=4, tb_log_name="SAC", reset_num_timesteps=True, replay_wrapper=None,
+              render=None):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
         callback = self._init_callback(callback)
@@ -520,6 +521,8 @@ class SACBatch(OffPolicyRLModel):
 
                 episode_rewards[-1] += reward_
                 if done:
+                    if render is not None and log_interval is not None and len(episode_rewards) % log_interval == 0:
+                        self.env.render(mode=render, suffix="_ep" + str(len(episode_rewards)))
                     if self.action_noise is not None:
                         self.action_noise.reset()
                     if not isinstance(self.env, VecEnv):
@@ -538,6 +541,8 @@ class SACBatch(OffPolicyRLModel):
                 num_episodes = len(episode_rewards)
                 # Display training infos
                 if self.verbose >= 1 and done and log_interval is not None and len(episode_rewards) % log_interval == 0:
+                    if render is not None:
+                        self.env.render(mode=render, suffix="ep" + str(len(episode_rewards)))
                     fps = int(step / (time.time() - start_time))
                     logger.logkv("episodes", num_episodes)
                     logger.logkv("mean 100 episode reward", mean_reward)

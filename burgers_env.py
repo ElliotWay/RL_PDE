@@ -1,8 +1,10 @@
+import os
 import time
 import numpy as np
 
 import gym
 from gym import spaces
+import matplotlib.pyplot as plt
 
 from util.softmax_box import SoftmaxBox
 import burgers
@@ -184,6 +186,8 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         self.observation_space = spaces.Box(low=-1e10, high=1e10,
                                             shape=(2, self.grid.real_length() + 1, 2 * weno_order - 1),
                                             dtype=np.float64)
+
+        self._lines = None
 
     def init_cond(self, type="tophat"):
         if type == "smooth_sine":
@@ -410,9 +414,34 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
 
         return self.prep_state(), reward, done, {}
 
-    def render(self, mode='file'):
-        print("Render not currently implemented")
-        #TODO: implement
+    def render(self, mode='file', **kwargs):
+        if mode == "file":
+            self.save_plot(**kwargs)
+        else:
+            print("Render mode: " + str(mode)+ " not currently implemented.")
+            sys.exit(0)
+
+
+    def save_plot(self, suffix=None):
+        if self._lines is None:
+            self._step_precision = int(np.ceil(np.log(self.episode_length) / np.log(10)))
+        else:
+            for line in self._lines:
+                line.remove()
+        
+        data = self.grid.u
+        data = data[self.grid.ilo:self.grid.ihi+1]
+        self._lines = plt.plot(data,ls=":", color="k", label = "env")
+
+        #TODO get log dir
+        #log_dir = ???
+        if suffix is None:
+            suffix = ("_{:0" + str(self._step_precision) + "}").format(self.steps)
+        log_dir = "temp_log"
+        filename = 'burgers' + suffix + '.png'
+        filename = os.path.join(log_dir, filename)
+        plt.savefig(filename)
+        print('Saved plot to ' + filename + '.')
 
     def close(self):
         # Delete references for easier garbage collection.
