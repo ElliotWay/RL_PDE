@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from burgers import Grid1d
 from burgers_env import WENOBurgersEnv
 from weno_agent import StandardWENOAgent
+from stationary_agent import StationaryAgent
 
 
 def do_test(env, agent, args):
@@ -57,7 +58,8 @@ def do_test(env, agent, args):
     #TODO more general means of saving final output
     ufinal = env.grid.u.copy()
     plt.plot(uinit[env.grid.ilo:env.grid.ihi+1],ls="-", color="k", label = "start")
-    plt.plot(ufinal[env.grid.ilo:env.grid.ihi+1],ls=":", color="k", label = "env")
+    plt.plot(ufinal[env.grid.ilo:env.grid.ihi+1],ls=":", color="b", label = "predict")
+    plt.legend()
     plt.draw()
     #TODO save figures to log directory
     plt.savefig("test.png", bbox_inches='tight', pad_inches=0)
@@ -142,6 +144,8 @@ def main():
     #TODO build agent
     if args.agent == "default":
         agent = StandardWENOAgent(order=args.order)
+    elif args.agent == "stationary":
+        agent = StationaryAgent(order=args.order)
 
     do_test(env, agent, args)
 
