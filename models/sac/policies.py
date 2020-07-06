@@ -192,7 +192,7 @@ class ScaledFeedForwardPolicy(SACPolicy):
             a = self.sess.run(self.deterministic_policy, {self.obs_ph: obs})
         else:
             a = self.sess.run(self.policy, {self.obs_ph: obs})
-        a = a / a.sum()
+        #PDE changed here, moved scaling from policy to agent
         return a
 
     def proba_step(self, obs, state=None, mask=None):

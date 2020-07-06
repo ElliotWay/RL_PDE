@@ -440,6 +440,9 @@ class SACBatch(OffPolicyRLModel):
                     # inferred actions need to be transformed to environment action_space before stepping
                     #TODO probably need to change action scaling
                     unscaled_action = unscale_action(self.action_space, action)
+                    # PDE Make sure the actions sum up to 1 before taking a step
+                    unscaled_action = unscaled_action / np.sum(unscaled_action, axis=-1)[:, :, np.newaxis]
+                    action = scale_action(self.action_space, unscaled_action)
                     
 
                 assert action.shape == self.env.action_space.shape
