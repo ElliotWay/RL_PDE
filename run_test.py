@@ -45,6 +45,7 @@ def do_test(env, agent, args):
         if t >= args.ep_length * (next_update / 10):
             print("t = " + str(t))
             next_update += 1
+            env.render()
 
         #TODO log other information
 
@@ -69,7 +70,7 @@ def do_test(env, agent, args):
 #TODO put this in separate environment file
 def build_env(args):
     if args.env == "weno_burgers":
-        num_ghosts = args.order
+        num_ghosts = args.order + 1
         grid = Grid1d(nx=args.nx, ng=num_ghosts, xmin=args.xmin, xmax=args.xmax, bc=args.boundary)
         env = WENOBurgersEnv(grid=grid, C=args.C, weno_order=args.order, episode_length=args.ep_length, init_type=args.init_type)
     else:

@@ -382,6 +382,9 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         #update the solution time
         self.t += dt
 
+        # Calculate new state.
+        state = self.prep_state()
+
         self.steps += 1
         if self.steps >= self.episode_length:
           done = True
@@ -403,12 +406,11 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         #reward = -np.log(np.sum(rhs[g.ilo:g.ihi+1]))
 
         # Give a penalty and end the episode if we're way off.
-        state = self.prep_state()
         if np.max(state) > 1e10 or np.isnan(np.max(state)):
             reward -= 100
             done = True
 
-        return self.prep_state(), reward, done, {}
+        return state, reward, done, {}
 
     def render(self, mode='file', **kwargs):
         if mode == "file":
@@ -427,13 +429,16 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
                 line.remove()
             self._lines = []
 
+        x_values = self.grid.x
+        x_values = x_values[self.grid.ilo:self.grid.ihi+1]
+
         true_data = self.grid.uactual
         true_data = true_data[self.grid.ilo:self.grid.ihi+1]
-        self._lines += plt.plot(true_data, ls="-", color="b", label="true")
+        self._lines += plt.plot(x_values, true_data, ls="-", color="b", label="true")
         
         data = self.grid.u
         data = data[self.grid.ilo:self.grid.ihi+1]
-        self._lines += plt.plot(data, ls="-", color="k", label="predict")
+        self._lines += plt.plot(x_values, data, ls="-", color="k", label="predict")
 
         plt.legend()
 
@@ -446,7 +451,7 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         #TODO get log dir
         #log_dir = ???
         if suffix is None:
-            suffix = ("_{:0" + str(self._step_precision) + "}").format(self.steps)
+            suffix = ("_t{:0" + str(self._step_precision) + "}").format(self.steps)
         log_dir = "temp_log"
         filename = 'burgers' + suffix + '.png'
         filename = os.path.join(log_dir, filename)
