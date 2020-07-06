@@ -541,8 +541,6 @@ class SACBatch(OffPolicyRLModel):
                 num_episodes = len(episode_rewards)
                 # Display training infos
                 if self.verbose >= 1 and done and log_interval is not None and len(episode_rewards) % log_interval == 0:
-                    if render is not None:
-                        self.env.render(mode=render, suffix="ep" + str(len(episode_rewards)))
                     fps = int(step / (time.time() - start_time))
                     logger.logkv("episodes", num_episodes)
                     logger.logkv("mean 100 episode reward", mean_reward)

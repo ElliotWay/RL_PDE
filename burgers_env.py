@@ -250,10 +250,6 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
       dt : float
         timestep.
 
-      Returns
-      -------
-      Return state after taking one time step.
-
       """
       
       g = self.grid
@@ -418,20 +414,34 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         if mode == "file":
             self.save_plot(**kwargs)
         else:
-            print("Render mode: " + str(mode)+ " not currently implemented.")
+            print("Render mode: \"" + str(mode)+ "\" not currently implemented.")
             sys.exit(0)
 
 
     def save_plot(self, suffix=None):
         if self._lines is None:
             self._step_precision = int(np.ceil(np.log(self.episode_length) / np.log(10)))
+            self._lines = []
         else:
             for line in self._lines:
                 line.remove()
+            self._lines = []
+
+        true_data = self.grid.uactual
+        true_data = true_data[self.grid.ilo:self.grid.ihi+1]
+        self._lines += plt.plot(true_data, ls="-", color="b", label="true")
         
         data = self.grid.u
         data = data[self.grid.ilo:self.grid.ihi+1]
-        self._lines = plt.plot(data,ls=":", color="k", label = "env")
+        self._lines += plt.plot(data, ls="-", color="k", label="predict")
+
+        plt.legend()
+
+        ax = plt.gca()
+
+        # Recalculate automatic axis scaling.
+        ax.relim()
+        ax.autoscale_view()
 
         #TODO get log dir
         #log_dir = ???
