@@ -373,7 +373,8 @@ class SACBatch(OffPolicyRLModel):
         return policy_loss, qf1_loss, qf2_loss, value_loss, entropy
 
     def learn(self, total_timesteps, callback=None,
-              log_interval=4, tb_log_name="SAC", reset_num_timesteps=True, replay_wrapper=None):
+              log_interval=4, tb_log_name="SAC", reset_num_timesteps=True, replay_wrapper=None,
+              render=None):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
         callback = self._init_callback(callback)
@@ -447,7 +448,10 @@ class SACBatch(OffPolicyRLModel):
 
                 assert action.shape == self.env.action_space.shape
 
+                #PDE The reward may now be a vector. Convert if still a scalar.
                 new_obs, reward, done, info = self.env.step(unscaled_action)
+                if not hasattr(reward, '__len__'):
+                    reward = np.full(new_obs.shape[1], reward)
 
                 #PDE Convert raw obs to batch.
                 new_obs_batch = new_obs.transpose((1,0,2))
@@ -471,9 +475,8 @@ class SACBatch(OffPolicyRLModel):
 
                 # Store transition in the replay buffer.
                 #PDE Need to store entire batch.
-                #PDE Currently give each trajectory same reward (and done and info).
-                for o, a, new_o in zip(obs_batch, action_batch, new_obs_batch):
-                    self.replay_buffer_add(o, a, reward_, new_o, done, info)
+                for o, a, r, new_o in zip(obs_batch, action_batch, reward, new_obs_batch):
+                    self.replay_buffer_add(o, a, r, new_o, done, info)
                 obs = new_obs
                 obs_batch = new_obs_batch
 
@@ -523,6 +526,8 @@ class SACBatch(OffPolicyRLModel):
 
                 episode_rewards[-1] += reward_
                 if done:
+                    if render is not None and log_interval is not None and len(episode_rewards) % log_interval == 0:
+                        self.env.render(mode=render, suffix="_ep" + str(len(episode_rewards)))
                     if self.action_noise is not None:
                         self.action_noise.reset()
                     if not isinstance(self.env, VecEnv):

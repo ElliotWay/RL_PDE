@@ -11,11 +11,13 @@ import matplotlib.pyplot as plt
 from burgers import Grid1d
 from burgers_env import WENOBurgersEnv
 from weno_agent import StandardWENOAgent
+from stationary_agent import StationaryAgent
 
 
 def do_test(env, agent, args):
 
-    #TODO possibly put rollouts in a separate file
+    if args.plot_weights:
+        env.set_record_weights(True)
 
     state = env.reset()
 
@@ -44,6 +46,8 @@ def do_test(env, agent, args):
         if t >= args.ep_length * (next_update / 10):
             print("t = " + str(t))
             next_update += 1
+            if not args.plot_weights:
+                env.render()
 
         #TODO log other information
 
@@ -54,20 +58,17 @@ def do_test(env, agent, args):
     print("Test finished in " + str(end_time - start_time) + " seconds.")
     print("Total reward was " + str(total_reward) + ".")
 
-    #TODO more general means of saving final output
-    ufinal = env.grid.u.copy()
-    plt.plot(uinit[env.grid.ilo:env.grid.ihi+1],ls="-", color="k", label = "start")
-    plt.plot(ufinal[env.grid.ilo:env.grid.ihi+1],ls=":", color="k", label = "env")
-    plt.draw()
-    #TODO save figures to log directory
-    plt.savefig("test.png", bbox_inches='tight', pad_inches=0)
-    print("Saved plot to test.png.")
+    if not args.plot_weights:
+        env.render()
+
+    if args.plot_weights:
+        env.plot_weights()
 
 
 #TODO put this in separate environment file
 def build_env(args):
     if args.env == "weno_burgers":
-        num_ghosts = args.order
+        num_ghosts = args.order + 1
         grid = Grid1d(nx=args.nx, ng=num_ghosts, xmin=args.xmin, xmax=args.xmax, bc=args.boundary)
         env = WENOBurgersEnv(grid=grid, C=args.C, weno_order=args.order, episode_length=args.ep_length, init_type=args.init_type)
     else:
@@ -92,6 +93,8 @@ def main():
             help="Number of timesteps in an episode.")
     parser.add_argument('--seed', type=int, default=1,
             help="Set random seed for reproducibility.")
+    parser.add_argument('--plot-weights', default=False, action='store_true',
+            help="Plot a comparison of weights across the episode instead of plotting the state.")
 
     main_args, rest = parser.parse_known_args()
 
@@ -142,6 +145,8 @@ def main():
     #TODO build agent
     if args.agent == "default":
         agent = StandardWENOAgent(order=args.order)
+    elif args.agent == "stationary":
+        agent = StationaryAgent(order=args.order)
 
     do_test(env, agent, args)
 
