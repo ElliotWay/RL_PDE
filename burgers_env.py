@@ -416,7 +416,11 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         reward = 0.0
         self.Euler_actual(dt)
 
-        error = np.max(np.abs(g.u[g.ilo:g.ihi+1]-g.uactual[g.ilo:g.ihi+1]))
+        # max error
+        #error = np.max(np.abs(g.u[g.ilo:g.ihi+1]-g.uactual[g.ilo:g.ihi+1]))
+
+        # square error vector
+        error = (g.u[g.ilo:g.ihi+1]-g.uactual[g.ilo:g.ihi+1])**2
         #reward = -np.log(error)
         reward = -np.arctan(error)
         

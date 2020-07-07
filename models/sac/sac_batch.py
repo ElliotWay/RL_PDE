@@ -445,7 +445,10 @@ class SACBatch(OffPolicyRLModel):
 
                 assert action.shape == self.env.action_space.shape
 
+                #PDE The reward may now be a vector. Convert if still a scalar.
                 new_obs, reward, done, info = self.env.step(unscaled_action)
+                if not hasattr(reward, '__len__'):
+                    reward = np.full(new_obs.shape[1], reward)
 
                 #PDE Convert raw obs to batch.
                 new_obs_batch = new_obs.transpose((1,0,2))
@@ -469,9 +472,8 @@ class SACBatch(OffPolicyRLModel):
 
                 # Store transition in the replay buffer.
                 #PDE Need to store entire batch.
-                #PDE Currently give each trajectory same reward (and done and info).
-                for o, a, new_o in zip(obs_batch, action_batch, new_obs_batch):
-                    self.replay_buffer_add(o, a, reward_, new_o, done, info)
+                for o, a, r, new_o in zip(obs_batch, action_batch, reward, new_obs_batch):
+                    self.replay_buffer_add(o, a, r, new_o, done, info)
                 obs = new_obs
                 obs_batch = new_obs_batch
 
