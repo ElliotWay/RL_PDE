@@ -16,7 +16,8 @@ from stationary_agent import StationaryAgent
 
 def do_test(env, agent, args):
 
-    #TODO possibly put rollouts in a separate file
+    if args.plot_weights:
+        env.set_record_weights(True)
 
     state = env.reset()
 
@@ -45,7 +46,8 @@ def do_test(env, agent, args):
         if t >= args.ep_length * (next_update / 10):
             print("t = " + str(t))
             next_update += 1
-            env.render()
+            if not args.plot_weights:
+                env.render()
 
         #TODO log other information
 
@@ -56,15 +58,11 @@ def do_test(env, agent, args):
     print("Test finished in " + str(end_time - start_time) + " seconds.")
     print("Total reward was " + str(total_reward) + ".")
 
-    #TODO more general means of saving final output
-    ufinal = env.grid.u.copy()
-    plt.plot(uinit[env.grid.ilo:env.grid.ihi+1],ls="-", color="k", label = "start")
-    plt.plot(ufinal[env.grid.ilo:env.grid.ihi+1],ls=":", color="b", label = "predict")
-    plt.legend()
-    plt.draw()
-    #TODO save figures to log directory
-    plt.savefig("test.png", bbox_inches='tight', pad_inches=0)
-    print("Saved plot to test.png.")
+    if not args.plot_weights:
+        env.render()
+
+    if args.plot_weights:
+        env.plot_weights()
 
 
 #TODO put this in separate environment file
@@ -95,6 +93,8 @@ def main():
             help="Number of timesteps in an episode.")
     parser.add_argument('--seed', type=int, default=1,
             help="Set random seed for reproducibility.")
+    parser.add_argument('--plot-weights', default=False, action='store_true',
+            help="Plot a comparison of weights across the episode instead of plotting the state.")
 
     main_args, rest = parser.parse_known_args()
 
