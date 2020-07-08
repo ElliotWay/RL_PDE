@@ -7,6 +7,8 @@ import gym
 from gym import spaces
 import matplotlib.pyplot as plt
 
+from stable_baselines import logger
+
 from util.softmax_box import SoftmaxBox
 import burgers
 import weno_coefficients
@@ -474,11 +476,9 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         ax.relim()
         ax.autoscale_view()
 
-        #TODO get log dir
-        #log_dir = ???
+        log_dir = logger.get_dir()
         if suffix is None:
             suffix = ("_t{:0" + str(self._step_precision) + "}").format(self.steps)
-        log_dir = "temp_log"
         filename = 'burgers' + suffix + '.png'
         filename = os.path.join(log_dir, filename)
         plt.savefig(filename)
@@ -510,8 +510,7 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
                 ax.set_ylabel("actual")
                 ax.plot(learned_weights[row,col,:], actual_weights[row,col,:], '.')
 
-        #TODO: get log dir
-        log_dir = "temp_log"
+        log_dir = logger.get_dir()
         filename = 'burgers_weights_comparison.png'
         filename = os.path.join(log_dir, filename)
         plt.savefig(filename)

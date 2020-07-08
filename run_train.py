@@ -1,4 +1,6 @@
 import sys
+import os
+import signal
 import time
 import argparse
 from argparse import Namespace
@@ -11,17 +13,20 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from stable_baselines import logger
+
 from burgers import Grid1d
 from burgers_env import WENOBurgersEnv
 from weno_agent import StandardWENOAgent
 
 from models.sac import SACBatch
 from models.sac import LnScaledMlpPolicy
+from util import metadata
 
 #TODO put this in separate environment file
 def build_env(args):
     if args.env == "weno_burgers":
-        num_ghosts = args.order
+        num_ghosts = args.order + 1
         grid = Grid1d(nx=args.nx, ng=num_ghosts, xmin=args.xmin, xmax=args.xmax, bc=args.boundary)
         env = WENOBurgersEnv(grid=grid, C=args.C, weno_order=args.order, episode_length=args.ep_length, init_type=args.init_type)
     else:
@@ -41,7 +46,7 @@ def main():
     parser.add_argument('--env', type=str, default="weno_burgers",
             help="Name of the environment in which to deploy the agent.")
     parser.add_argument('--log-dir', type=str, default=None,
-            help="Directory to place log file and other results. TODO: implement, create default log dir")
+            help="Directory to place log file and other results. Default is log/env/algo/timestamp.")
     parser.add_argument('--ep-length', type=int, default=300,
             help="Number of timesteps in an episode.")
     parser.add_argument('--total_timesteps', type=int, default=int(1e6),
@@ -96,9 +101,6 @@ def main():
 
     env = build_env(args)
 
-    #TODO build log directory
-    #TODO save parameters + git commit id to log directory
-
     if args.algo == "sac":
         policy_kwargs = dict(layers = [128, 128])
         model = SACBatch(LnScaledMlpPolicy, env, policy_kwargs=policy_kwargs, verbose=1)  # tensorboard_log="./sac_tensorboard/"
@@ -108,8 +110,44 @@ def main():
     if args.render == "none":
         args.render = None
 
-    model.learn(total_timesteps=args.total_timesteps, log_interval=args.log_freq, render=args.render)
-    model.save("sac_burgers") #TODO save to log directory
+    # Set up logging.
+    start_time = time.localtime()
+    if args.log_dir is None:
+        timestamp = time.strftime("%y%m%d_%H%M%S")
+        default_log_dir = os.path.join("log", args.env, args.algo, timestamp)
+        args.log_dir = default_log_dir
+        print("Using default log directory: {}".format(default_log_dir))
+    try:
+        os.makedirs(args.log_dir)
+    except FileExistsError:
+        _ignore = input("\"{}\" already exists! Hit <Enter> to overwrite and"
+                + " continue, Ctrl-C to stop.".format(args.log_dir))
+        shutil.rmtree(args.log_dir)
+        os.makedirs(args.log_dir)
+
+    metadata.create_meta_file(args.log_dir, args)
+
+    # Put stable-baselines logs in same directory.
+    logger.configure(folder=args.log_dir, format_strs=['stdout','log','csv']) #,tensorboard'
+    logger.set_level(logger.DEBUG) #logger.INFO
+
+
+    # Call model.learn().
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    stopped_by_interrupt = False
+    try:
+        model.learn(total_timesteps=args.total_timesteps, log_interval=args.log_freq, render=args.render)
+    except KeyboardInterrupt:
+        print("Training stopped by interrupt.")
+        stopped_by_interrupt = True
+
+
+    metadata.log_finish_time(args.log_dir, interrupt=stopped_by_interrupt)
+
+    # If we were stopped by an interrupt, it's not safe to save.
+    if not stopped_by_interrupt:
+        model_file_name = os.path.join(args.log_dir, "model")
+        model.save(model_file_name) #TODO save to log directory
 
 
 if __name__ == "__main__":

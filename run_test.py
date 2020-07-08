@@ -1,4 +1,6 @@
 import sys
+import os
+import signal
 import time
 import argparse
 from argparse import Namespace
@@ -8,11 +10,13 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from stable_baselines import logger
+
 from burgers import Grid1d
 from burgers_env import WENOBurgersEnv
 from weno_agent import StandardWENOAgent
 from stationary_agent import StationaryAgent
-
+from util import metadata
 
 def do_test(env, agent, args):
 
@@ -20,9 +24,6 @@ def do_test(env, agent, args):
         env.set_record_weights(True)
 
     state = env.reset()
-
-    #Ugly and possibly Burgers specific. How to replace?
-    uinit = env.grid.u.copy()
 
     done = False
     t = 0
@@ -49,7 +50,7 @@ def do_test(env, agent, args):
             if not args.plot_weights:
                 env.render()
 
-        #TODO log other information
+            #TODO: log other information, probably
 
         t += 1
 
@@ -88,7 +89,7 @@ def main():
     parser.add_argument('--env', type=str, default="weno_burgers",
             help="Name of the environment in which to deploy the agent.")
     parser.add_argument('--log-dir', type=str, default=None,
-            help="Directory to place log file and other results. TODO: implement, create default log dir")
+            help="Directory to place log file and other results. Default is test/env/agent/timestamp.")
     parser.add_argument('--ep-length', type=int, default=300,
             help="Number of timesteps in an episode.")
     parser.add_argument('--seed', type=int, default=1,
@@ -139,16 +140,44 @@ def main():
 
     env = build_env(args)
 
-    #TODO build log directory
-    #TODO save parameters + git commit id to log directory
+    # Set up logging.
+    start_time = time.localtime()
+    if args.log_dir is None:
+        timestamp = time.strftime("%y%m%d_%H%M%S")
+        default_log_dir = os.path.join("test", args.env, args.agent, timestamp)
+        args.log_dir = default_log_dir
+        print("Using default log directory: {}".format(default_log_dir))
+    try:
+        os.makedirs(args.log_dir)
+    except FileExistsError:
+        _ignore = input("\"{}\" already exists! Hit <Enter> to overwrite and"
+                + " continue, Ctrl-C to stop.".format(args.log_dir))
+        shutil.rmtree(args.log_dir)
+        os.makedirs(args.log_dir)
 
-    #TODO build agent
+    metadata.create_meta_file(args.log_dir, args)
+
+    # Put stable-baselines logs in same directory.
+    logger.configure(folder=args.log_dir, format_strs=['stdout']) #,tensorboard'
+    logger.set_level(logger.DEBUG) #logger.INFO
+
+
+    #TODO build agent from file
     if args.agent == "default":
         agent = StandardWENOAgent(order=args.order)
     elif args.agent == "stationary":
         agent = StationaryAgent(order=args.order)
 
-    do_test(env, agent, args)
+
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    stopped_by_interrupt = False
+    try:
+        do_test(env, agent, args)
+    except KeyboardInterrupt:
+        print("Test stopped by interrupt.")
+        stopped_by_interrupt = True
+
+    metadata.log_finish_time(args.log_dir, interrupt=stopped_by_interrupt)
 
 
 if __name__ == "__main__":
