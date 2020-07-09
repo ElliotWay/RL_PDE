@@ -5,8 +5,10 @@ import shutil
 import time
 import re
 
+META_FILE_NAME = "meta.txt"
+
 def create_meta_file(log_dir, args):
-    meta_filename = os.path.join(log_dir, 'meta.log')
+    meta_filename = os.path.join(log_dir, META_FILE_NAME)
     meta_file = open(meta_filename, 'x')
 
     start_time = time.localtime()
@@ -37,6 +39,11 @@ def create_meta_file(log_dir, args):
         else:
             meta_file.write("git commit id: {}".format(commit_id)) #commit_id already has \n
 
+            if os.system("git diff --quiet"):
+                meta_file.write("git status: uncommited changes\n")
+            else:
+                meta_file.write("git status: clean\n")
+
     pid = os.getpid()
     meta_file.write("pid: {}\n".format(pid))
 
@@ -48,7 +55,7 @@ def create_meta_file(log_dir, args):
     meta_file.close()
 
 def log_finish_time(log_dir, interrupt=False):
-    meta_filename = os.path.join(log_dir, 'meta.log')
+    meta_filename = os.path.join(log_dir, META_FILE_NAME)
 
     end_time = time.localtime()
     time_str = time.strftime("%Y/%m/%d, %I:%M:%S %p (%Z), %a", end_time)
