@@ -457,16 +457,34 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
                 line.remove()
             self._lines = []
 
-        x_values = self.grid.x
-        x_values = x_values[self.grid.ilo:self.grid.ihi+1]
 
-        true_data = self.grid.uactual
-        true_data = true_data[self.grid.ilo:self.grid.ihi+1]
-        self._lines += plt.plot(x_values, true_data, ls="-", color="b", label="true")
+        full_x = self.grid.x
+        real_x = full_x[self.grid.ilo:self.grid.ihi+1]
+
+        full_actual = self.grid.uactual
+        real_actual = full_actual[self.grid.ilo:self.grid.ihi+1]
+        self._lines += plt.plot(real_x, real_actual, ls='-', color='b', label="true")
         
-        data = self.grid.u
-        data = data[self.grid.ilo:self.grid.ihi+1]
-        self._lines += plt.plot(x_values, data, ls="-", color="k", label="predict")
+        full_learned = self.grid.u
+        real_learned = full_learned[self.grid.ilo:self.grid.ihi+1]
+        self._lines += plt.plot(real_x, real_learned, ls='-', color='k', label="predict")
+
+        show_ghost = True
+        # The ghost arrays slice off one real point so the line connects to the real points.
+        # Leave off labels for these lines so they don't show up in the legend.
+        if show_ghost:
+            ghost_x_left = full_x[:self.grid.ilo+1]
+            ghost_x_right = full_x[self.grid.ihi:]
+            ghost_actual_left = full_actual[:self.grid.ilo+1]
+            ghost_actual_right = full_actual[self.grid.ihi:]
+            ghost_blue = "#80b0ff"
+            self._lines += plt.plot(ghost_x_left, ghost_actual_left, ls='-', color=ghost_blue)
+            self._lines += plt.plot(ghost_x_right, ghost_actual_right, ls='-', color=ghost_blue)
+            ghost_learned_left = full_learned[:self.grid.ilo+1]
+            ghost_learned_right = full_learned[self.grid.ihi:]
+            ghost_black = "#808080" #ie grey
+            self._lines += plt.plot(ghost_x_left, ghost_learned_left, ls='-', color=ghost_black)
+            self._lines += plt.plot(ghost_x_right, ghost_learned_right, ls='-', color=ghost_black)
 
         plt.legend()
 
