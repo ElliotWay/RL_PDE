@@ -134,15 +134,15 @@ def main():
 
     # Call model.learn().
     signal.signal(signal.SIGINT, signal.default_int_handler)
-    stopped_by_interrupt = False
+    stop_message = "Finished cleanly"
     try:
         model.learn(total_timesteps=args.total_timesteps, log_interval=args.log_freq, render=args.render)
     except KeyboardInterrupt:
-        print("Training stopped by interrupt.")
-        stopped_by_interrupt = True
+        stop_message = "Training stopped by interrupt"
 
+    print(stop_message)
 
-    metadata.log_finish_time(args.log_dir, interrupt=stopped_by_interrupt)
+    metadata.log_finish_time(args.log_dir, status=stop_message)
 
     # If we were stopped by an interrupt, it's not safe to save.
     if not stopped_by_interrupt:

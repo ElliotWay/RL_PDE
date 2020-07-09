@@ -14,7 +14,9 @@ def create_meta_file(log_dir, args):
     start_time = time.localtime()
     time_str = time.strftime("%Y/%m/%d, %I:%M:%S %p (%Z), %a", start_time)
     meta_file.write("time started: {}\n".format(time_str))
+
     meta_file.write("time finished: ????\n")
+    meta_file.write("status: running")
 
     current_user = pwd.getpwuid(os.getuid()).pw_name
     meta_file.write("initated by user: {}\n".format(current_user))
@@ -54,7 +56,7 @@ def create_meta_file(log_dir, args):
 
     meta_file.close()
 
-def log_finish_time(log_dir, interrupt=False):
+def log_finish_time(log_dir, status="finished"):
     meta_filename = os.path.join(log_dir, META_FILE_NAME)
 
     end_time = time.localtime()
@@ -63,18 +65,25 @@ def log_finish_time(log_dir, interrupt=False):
     meta_file = open(meta_filename, 'r')
     all_lines = [line for line in meta_file]
     meta_file.close()
-    never_found = True
+    no_finish_time = True
+    no_status = True
     for index, line in enumerate(all_lines):
-        if re.match("^time finished:", line):
-            never_found = False
-            new_line = "time finished: " + time_str
-            if interrupt:
-                new_line += " (stopped by interrupt)"
-            new_line += '\n'
+        if no_finish_time and re.match("^time finished:", line):
+            no_finish_time = False
+            new_line = "time finished: {}\n".format(time_str)
             all_lines[index] = new_line
+        elif no_status and re.match("^status:", line):
+            no_status = False
+            new_line = "status: {}\n".format(status)
+            all_lines[index] = new_line
+
+        if not (no_finish_time or no_status):
             break
-    if never_found:
-        all_lines.append("time finished: " + time_str)
+
+    if no_finish_time:
+        all_lines.append("time finished: {}\n".format(time_str))
+    if no_status:
+        all_lines.append("status: {}\n".format(status))
 
     meta_file = open(meta_filename, 'w')
     for line in all_lines:

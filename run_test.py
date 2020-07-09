@@ -170,14 +170,15 @@ def main():
 
 
     signal.signal(signal.SIGINT, signal.default_int_handler)
-    stopped_by_interrupt = False
+    stop_message = "Finished cleanly"
     try:
         do_test(env, agent, args)
     except KeyboardInterrupt:
-        print("Test stopped by interrupt.")
-        stopped_by_interrupt = True
+        stop_message = "Test stopped by interrupt"
 
-    metadata.log_finish_time(args.log_dir, interrupt=stopped_by_interrupt)
+    print(stop_message)
+
+    metadata.log_finish_time(args.log_dir, status = stop_message)
 
 
 if __name__ == "__main__":
