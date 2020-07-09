@@ -181,8 +181,6 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         self.episode_length = episode_length
         self.steps = 0
         self.record_weights = record_weights
-        self._all_learned_weights = []
-        self._all_actual_weights = []
 
         #TODO: transpose so grid length is first dimension
         self.action_space = SoftmaxBox(low=0.0, high=1.0, shape=(2, self.grid.real_length() + 1, weno_order), dtype=np.float64)
@@ -194,6 +192,8 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
                                             dtype=np.float64)
 
         self._lines = None
+
+        self.reset()
 
     def set_record_weights(self, record_weights):
         self.record_weights = record_weights

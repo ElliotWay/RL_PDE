@@ -1,6 +1,7 @@
 import sys
 import os
 import signal
+import shutil
 import time
 import argparse
 from argparse import Namespace
@@ -119,7 +120,7 @@ def main():
     sub_parser.add_argument('--C', type=float, default=0.1,
             help="Constant used in choosing variable timestep.")
 
-    sub_parser.add_argument('--init_type', type=str, default="sine",
+    sub_parser.add_argument('--init_type', '--init-type', type=str, default="sine",
             help="Shape of the initial state.")
     sub_parser.add_argument('--boundary', '--bc', type=str, default="periodic")
 
@@ -150,8 +151,8 @@ def main():
     try:
         os.makedirs(args.log_dir)
     except FileExistsError:
-        _ignore = input("\"{}\" already exists! Hit <Enter> to overwrite and"
-                + " continue, Ctrl-C to stop.".format(args.log_dir))
+        _ignore = input(("\"{}\" already exists! Hit <Enter> to overwrite and"
+                + " continue, Ctrl-C to stop.").format(args.log_dir))
         shutil.rmtree(args.log_dir)
         os.makedirs(args.log_dir)
 
