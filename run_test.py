@@ -169,16 +169,20 @@ def main():
         agent = StationaryAgent(order=args.order)
 
 
+    # Run test.
     signal.signal(signal.SIGINT, signal.default_int_handler)
-    stop_message = "Finished cleanly"
     try:
         do_test(env, agent, args)
     except KeyboardInterrupt:
-        stop_message = "Test stopped by interrupt"
+        print("Test stopped by interrupt.")
+        metadata.log_finish_time(args.log_dir, status="stopped by interrupt")
+        sys.exit(0)
+    except Exception as e:
+        metadata.log_finish_time(args.log_dir, status="stopped by exception: {}".format(type(e).__name__))
+        raise # Re-raise so exception is also printed.
 
-    print(stop_message)
-
-    metadata.log_finish_time(args.log_dir, status = stop_message)
+    print("Done.")
+    metadata.log_finish_time(args.log_dir, status="finished cleanly")
 
 
 if __name__ == "__main__":

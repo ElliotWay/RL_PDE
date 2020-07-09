@@ -8,6 +8,8 @@ import re
 META_FILE_NAME = "meta.txt"
 
 def create_meta_file(log_dir, args):
+    #If adding new metadata, remember that lines must end with \n.
+
     meta_filename = os.path.join(log_dir, META_FILE_NAME)
     meta_file = open(meta_filename, 'x')
 
@@ -16,7 +18,7 @@ def create_meta_file(log_dir, args):
     meta_file.write("time started: {}\n".format(time_str))
 
     meta_file.write("time finished: ????\n")
-    meta_file.write("status: running")
+    meta_file.write("status: running\n")
 
     current_user = pwd.getpwuid(os.getuid()).pw_name
     meta_file.write("initated by user: {}\n".format(current_user))

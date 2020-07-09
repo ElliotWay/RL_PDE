@@ -134,20 +134,21 @@ def main():
 
     # Call model.learn().
     signal.signal(signal.SIGINT, signal.default_int_handler)
-    stop_message = "Finished cleanly"
     try:
         model.learn(total_timesteps=args.total_timesteps, log_interval=args.log_freq, render=args.render)
     except KeyboardInterrupt:
-        stop_message = "Training stopped by interrupt"
+        print("Training stopped by interrupt.")
+        metadata.log_finish_time(args.log_dir, status="stopped by interrupt")
+        sys.exit(0)
+    except Exception as e:
+        metadata.log_finish_time(args.log_dir, status="stopped by exception: {}".format(type(e).__name__))
+        raise # Re-raise so excption is also printed.
 
-    print(stop_message)
+    print("Finished!")
+    metadata.log_finish_time(args.log_dir, status="finished cleanly")
 
-    metadata.log_finish_time(args.log_dir, status=stop_message)
-
-    # If we were stopped by an interrupt, it's not safe to save.
-    if not stopped_by_interrupt:
-        model_file_name = os.path.join(args.log_dir, "model")
-        model.save(model_file_name) #TODO save to log directory
+    model_file_name = os.path.join(args.log_dir, "model")
+    model.save(model_file_name)
 
 
 if __name__ == "__main__":
