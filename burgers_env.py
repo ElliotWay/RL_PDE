@@ -421,14 +421,17 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         # max error
         #error = np.max(np.abs(g.u[g.ilo:g.ihi+1]-g.uactual[g.ilo:g.ihi+1]))
 
-        # square error vector
-        # We need a reward at each interface, so take one extra cell on either side
-        # and compute the average error between each pair.
-        error = (g.u[g.ilo-1:g.ihi+2]-g.uactual[g.ilo-1:g.ihi+2])**2
-        avg_error = (error[:-1] + error[1:]) / 2
+        # avg square error between cells
+        # TODO calculate error for each interface in a way that doesn't go into the ghost cells
+        #error = (g.u[g.ilo:g.ihi]-g.uactual[g.ilo:g.ihi])**2
+        #error = (error[:-1] + error[1:]) / 2
+
+        # square error on right (misses reward for rightmost interface)
+        error = (g.u[g.ilo:g.ihi]-g.uactual[g.ilo:g.ihi])**2
+
 
         #reward = -np.log(error)
-        reward = -np.arctan(avg_error)
+        reward = -np.arctan(error)
         
         # should this reward be clipped?
         #if reward < 10:
