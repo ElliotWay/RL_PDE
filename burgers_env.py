@@ -258,27 +258,27 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         return rhs
 
     def Euler_actual(self, dt):
-      """
-      Compute one time step using explicit Euler time stepping. Performs state transition for a discrete time step using standard WENO.
-      Euler time stepping is first order accurate in time. Should be run with a small time step.
-      
-      Parameters
-      ----------
-      dt : float
-        timestep.
-
-      """
-      
-      g = self.grid
-      
-      # fill the boundary conditions
-      g.fill_BCs()
-      
-      # RK4
-      # Store the data at the start of the step
-      u_start = g.uactual.copy()
-      k1 = dt * self.rk_substep_actual()
-      g.uactual = u_start + k1
+        """
+        Compute one time step using explicit Euler time stepping. Performs state transition for a discrete time step using standard WENO.
+        Euler time stepping is first order accurate in time. Should be run with a small time step.
+        
+        Parameters
+        ----------
+        dt : float
+          timestep.
+  
+        """
+        
+        g = self.grid
+        
+        # fill the boundary conditions
+        g.fill_BCs()
+        
+        # RK4
+        # Store the data at the start of the step
+        u_start = g.uactual.copy()
+        k1 = dt * self.rk_substep_actual()
+        g.uactual[g.ilo:g.ihi+1] = u_start[g.ilo:g.ihi+1] + k1[g.ilo:g.ihi+1]
    
     def prep_state(self):
         """
