@@ -586,20 +586,24 @@ class SACBatch(OffPolicyRLModel):
 
         is_batch = (len(observation.shape) == 3)
         if not is_batch:
-            assert(len(observations.shape) == 2)
+            assert(len(observation.shape) == 2)
 
         if is_batch:
             observation = observation.transpose((1,0,2))
             actions = self.policy_tf.step(observation, deterministic=deterministic)
             actions = actions.reshape((-1,) + self.i_action_space.shape)
             actions = actions.transpose((1,0,2))
-
-            return actions, None
+            unscaled_action = unscale_action(self.action_space, actions)
+            # PDE Make sure the actions sum up to 1 before taking a step
+            unscaled_action = unscaled_action / np.sum(unscaled_action, axis=-1)[..., np.newaxis]
+            return unscaled_action, None
         else:
             action = self.policy_tf.step(observation, deterministic=deterministic)
-            actions = actions.reshape(self.i_action_space.shape)
-
-            return action, None
+            actions = action.reshape(self.i_action_space.shape)
+            unscaled_action = unscale_action(self.action_space, actions)
+            # PDE Make sure the actions sum up to 1 before taking a step
+            unscaled_action = unscaled_action / np.sum(unscaled_action, axis=-1)[..., np.newaxis]
+            return unscaled_action, None
 
     def get_parameter_list(self):
         return (self.params +
