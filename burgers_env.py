@@ -369,7 +369,7 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         state: np array.
           solution predicted using action
         reward: float
-          scalar value - reward for current action
+          reward for current action
         done: boolean
           boolean signifying end of episode
         info : dictionary
@@ -422,9 +422,13 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         #error = np.max(np.abs(g.u[g.ilo:g.ihi+1]-g.uactual[g.ilo:g.ihi+1]))
 
         # square error vector
-        error = (g.u[g.ilo:g.ihi+1]-g.uactual[g.ilo:g.ihi+1])**2
+        # We need a reward at each interface, so take one extra cell on either side
+        # and compute the average error between each pair.
+        error = (g.u[g.ilo-1:g.ihi+2]-g.uactual[g.ilo-1:g.ihi+2])**2
+        avg_error = (error[:-1] + error[1:]) / 2
+
         #reward = -np.log(error)
-        reward = -np.arctan(error)
+        reward = -np.arctan(avg_error)
         
         # should this reward be clipped?
         #if reward < 10:
