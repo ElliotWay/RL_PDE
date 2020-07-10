@@ -1,9 +1,8 @@
-import tensorflow as tf
 import numpy as np
-
-from stable_baselines.sac.policies import SACPolicy, gaussian_likelihood, gaussian_entropy, apply_squashing_func
+import tensorflow as tf
 from stable_baselines.common.policies import nature_cnn, register_policy
 from stable_baselines.common.tf_layers import mlp
+from stable_baselines.sac.policies import SACPolicy, gaussian_likelihood, gaussian_entropy, apply_squashing_func
 
 EPS = 1e-6  # Avoid NaN (prevents division by zero or log of zero)
 # CAP the standard deviation of the actor
@@ -88,7 +87,7 @@ class ScaledFeedForwardPolicy(SACPolicy):
                  cnn_extractor=nature_cnn, feature_extraction="cnn", reg_weight=0.0,
                  layer_norm=False, act_fun=tf.nn.relu, **kwargs):
         super(ScaledFeedForwardPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
-                                                reuse=reuse, scale=(feature_extraction == "cnn"))
+                                                      reuse=reuse, scale=(feature_extraction == "cnn"))
 
         self._kwargs_check(feature_extraction, kwargs)
         self.layer_norm = layer_norm
@@ -119,7 +118,7 @@ class ScaledFeedForwardPolicy(SACPolicy):
 
             pi_h = mlp(pi_h, self.layers, self.activ_fn, layer_norm=self.layer_norm)
 
-            #PDE Our actions are not flat, but the output needs to be.
+            # PDE Our actions are not flat, but the output needs to be.
             self.act_mu = mu_ = tf.layers.dense(pi_h, np.prod(self.ac_space.shape), activation=None)
             # Important difference with SAC and other algo such as PPO:
             # the std depends on the state, so we cannot use stable_baselines.common.distribution
@@ -169,7 +168,7 @@ class ScaledFeedForwardPolicy(SACPolicy):
 
             if create_qf:
                 # Concatenate preprocessed state and action
-                #PDE Our actions are not flat, but they need to be for this.
+                # PDE Our actions are not flat, but they need to be for this.
                 flattened_action = tf.layers.flatten(action)
                 qf_h = tf.concat([critics_h, flattened_action], axis=-1)
 
@@ -192,7 +191,7 @@ class ScaledFeedForwardPolicy(SACPolicy):
             a = self.sess.run(self.deterministic_policy, {self.obs_ph: obs})
         else:
             a = self.sess.run(self.policy, {self.obs_ph: obs})
-        #PDE changed here, moved scaling from policy to agent
+        # PDE changed here, moved scaling from policy to agent
         return a
 
     def proba_step(self, obs, state=None, mask=None):
@@ -215,7 +214,7 @@ class LnScaledMlpPolicy(ScaledFeedForwardPolicy):
 
     def __init__(self, sess, ob_space, ac_space, n_env=1, n_steps=1, n_batch=None, reuse=False, **_kwargs):
         super(LnScaledMlpPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch, reuse,
-                                          feature_extraction="mlp", layer_norm=True, **_kwargs)
+                                                feature_extraction="mlp", layer_norm=True, **_kwargs)
 
 
 register_policy("LnScaledMlpPolicy", LnScaledMlpPolicy)

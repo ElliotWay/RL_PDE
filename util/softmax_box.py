@@ -2,7 +2,8 @@ import numpy as np
 
 from gym.spaces import Box
 
-#TODO adjust so softmax works over multiple dimensions when we move up from 1D envs.
+
+# TODO adjust so softmax works over multiple dimensions when we move up from 1D envs.
 class SoftmaxBox(Box):
     """
     The space of possible outputs from a softmax function on a set of a values.
@@ -11,9 +12,10 @@ class SoftmaxBox(Box):
     is adjusted so that its outputs are appropriate for a softmax function.
     This adjustment is only performed along the last dimension of the space.
     """
+
     def __init___(self, low, high, shape=None, dtype=np.float32):
-        assert(low == 0.0)
-        assert(high == 1.0)
+        assert (low == 0.0)
+        assert (high == 1.0)
         super(SoftmaxBox, self).__init__(low, high, shape, dtype)
 
     def sample(self):
@@ -27,7 +29,7 @@ class SoftmaxBox(Box):
         then apply a softmax function to that set of points.
         """
         sample = self.np_random.normal(size=self.shape)
-        
+
         exp_sample = np.exp(sample)
 
         # Need to recover last dimension reduced by sum to broadcast correctly.

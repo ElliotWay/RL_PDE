@@ -8,14 +8,14 @@ class StationaryAgent():
         self.order = order
 
     def predict(self, state):
-        #TODO: note that later the state may be formatted better as a batch,
-        #i.e. (nx+1) X 2 X stencil_size instead of 2 X (nx+1) X stencil_size
-        #which this assumes now.
+        # TODO: note that later the state may be formatted better as a batch,
+        # i.e. (nx+1) X 2 X stencil_size instead of 2 X (nx+1) X stencil_size
+        # which this assumes now.
 
         state_shape = list(state.shape)
         state_shape[-1] = self.order
         action_shape = tuple(state_shape)
-        
+
         return np.zeros(action_shape)
 
     # Future note: we're wasting some computations.
@@ -63,19 +63,18 @@ class StationaryAgent():
 
         # Insert extra empty dimensions so numpy broadcasting produces
         # the desired outer product along only the intended dimensions.
-        q_squared_fp = sub_stencils_fp[:,:,None,:]*sub_stencils_fp[:,:,:,None]
-        q_squared_fm = sub_stencils_fm[:,:,None,:]*sub_stencils_fm[:,:,:,None]
+        q_squared_fp = sub_stencils_fp[:, :, None, :] * sub_stencils_fp[:, :, :, None]
+        q_squared_fm = sub_stencils_fm[:, :, None, :] * sub_stencils_fm[:, :, :, None]
 
         # Note that sigma is made up of triangular matrices, so the second copy of each pair is weighted by 0.
-        beta_fp = np.sum(sigma * q_squared_fp, axis=(-2,-1))
-        beta_fm = np.sum(sigma * q_squared_fm, axis=(-2,-1))
+        beta_fp = np.sum(sigma * q_squared_fp, axis=(-2, -1))
+        beta_fm = np.sum(sigma * q_squared_fm, axis=(-2, -1))
 
-        alpha_fp = C / (epsilon + beta_fp**2)
-        alpha_fm = C / (epsilon + beta_fm**2)
+        alpha_fp = C / (epsilon + beta_fp ** 2)
+        alpha_fm = C / (epsilon + beta_fm ** 2)
 
         # We need the [:, None] so numpy broadcasts to the sub-stencil dimension, instead of the stencil dimension.
         weights_fp = alpha_fp / (np.sum(alpha_fp, axis=-1)[:, None])
         weights_fm = alpha_fm / (np.sum(alpha_fm, axis=-1)[:, None])
 
         return np.array([weights_fp, weights_fm])
-         

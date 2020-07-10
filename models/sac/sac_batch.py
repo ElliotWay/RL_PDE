@@ -4,16 +4,15 @@ import warnings
 
 import numpy as np
 import tensorflow as tf
-
-from util.softmax_box import SoftmaxBox
-
+from stable_baselines import logger
 from stable_baselines.common import tf_util, OffPolicyRLModel, SetVerbosity, TensorboardWriter
-from stable_baselines.common.vec_env import VecEnv
+from stable_baselines.common.buffers import ReplayBuffer
 from stable_baselines.common.math_util import safe_mean, unscale_action, scale_action
 from stable_baselines.common.schedules import get_schedule_fn
-from stable_baselines.common.buffers import ReplayBuffer
+from stable_baselines.common.vec_env import VecEnv
 from stable_baselines.sac.policies import SACPolicy
-from stable_baselines import logger
+
+from util.softmax_box import SoftmaxBox
 
 
 class SACBatch(OffPolicyRLModel):
@@ -70,8 +69,8 @@ class SACBatch(OffPolicyRLModel):
                  seed=None, n_cpu_tf_sess=None):
 
         super(SACBatch, self).__init__(policy=policy, env=env, replay_buffer=None, verbose=verbose,
-                                  policy_base=SACPolicy, requires_vec_env=False, policy_kwargs=policy_kwargs,
-                                  seed=seed, n_cpu_tf_sess=n_cpu_tf_sess)
+                                       policy_base=SACPolicy, requires_vec_env=False, policy_kwargs=policy_kwargs,
+                                       seed=seed, n_cpu_tf_sess=n_cpu_tf_sess)
 
         self.buffer_size = buffer_size
         self.learning_rate = learning_rate
@@ -123,8 +122,8 @@ class SACBatch(OffPolicyRLModel):
         self.processed_next_obs_ph = None
         self.log_ent_coef = None
 
-        #PDE Set up spaces for the individual agents
-        #PDE Just assume we're using SoftmaxBox for now.
+        # PDE Set up spaces for the individual agents
+        # PDE Just assume we're using SoftmaxBox for now.
         obs_shape = self.observation_space.shape
         i_obs_shape = (obs_shape[0], obs_shape[2])
         self.i_observation_space = SoftmaxBox(low=0.0, high=1.0, shape=i_obs_shape)
@@ -135,12 +134,12 @@ class SACBatch(OffPolicyRLModel):
         if _init_setup_model:
             self.setup_model()
 
-    #pretrain not supported, would need to change function in base class
+    # pretrain not supported, would need to change function in base class
     def _get_pretrain_placeholders(self):
-        #policy = self.policy_tf
+        # policy = self.policy_tf
         ## Rescale
-        #deterministic_action = unscale_action(self.action_space, self.deterministic_action)
-        #return policy.obs_ph, self.actions_ph, deterministic_action
+        # deterministic_action = unscale_action(self.action_space, self.deterministic_action)
+        # return policy.obs_ph, self.actions_ph, deterministic_action
         raise Exception("Pretrain not supported.")
 
     def setup_model(self):
@@ -154,7 +153,7 @@ class SACBatch(OffPolicyRLModel):
 
                 with tf.variable_scope("input", reuse=False):
                     # Create policy and target TF objects
-                    #PDE Use individual obs and action spaces for policies.
+                    # PDE Use individual obs and action spaces for policies.
                     self.policy_tf = self.policy(self.sess, self.i_observation_space, self.i_action_space,
                                                  **self.policy_kwargs)
                     self.target_policy = self.policy(self.sess, self.i_observation_space, self.i_action_space,
@@ -163,14 +162,14 @@ class SACBatch(OffPolicyRLModel):
                     # Initialize Placeholders
                     self.observations_ph = self.policy_tf.obs_ph
                     # Normalized observation for pixels
-                    #PDE Huh? Pixels?
+                    # PDE Huh? Pixels?
                     self.processed_obs_ph = self.policy_tf.processed_obs
                     self.next_observations_ph = self.target_policy.obs_ph
                     self.processed_next_obs_ph = self.target_policy.processed_obs
                     self.action_target = self.target_policy.action_ph
                     self.terminals_ph = tf.placeholder(tf.float32, shape=(None, 1), name='terminals')
                     self.rewards_ph = tf.placeholder(tf.float32, shape=(None, 1), name='rewards')
-                    #PDE actions placeholder is for individual actions.
+                    # PDE actions placeholder is for individual actions.
                     self.actions_ph = tf.placeholder(tf.float32, shape=(None,) + self.i_action_space.shape,
                                                      name='actions')
                     self.learning_rate_ph = tf.placeholder(tf.float32, [], name="learning_rate_ph")
@@ -194,7 +193,7 @@ class SACBatch(OffPolicyRLModel):
                     # Target entropy is used when learning the entropy coefficient
                     if self.target_entropy == 'auto':
                         # automatically set target entropy if needed
-                        #PDE entropy should be calculated using individual action.
+                        # PDE entropy should be calculated using individual action.
                         self.target_entropy = -np.prod(self.i_action_space.shape).astype(np.float32)
                     else:
                         # Force conversion
@@ -270,7 +269,8 @@ class SACBatch(OffPolicyRLModel):
                     # Policy train op
                     # (has to be separate from value train op, because min_qf_pi appears in policy_loss)
                     policy_optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate_ph)
-                    policy_train_op = policy_optimizer.minimize(policy_loss, var_list=tf_util.get_trainable_vars('model/pi'))
+                    policy_train_op = policy_optimizer.minimize(policy_loss,
+                                                                var_list=tf_util.get_trainable_vars('model/pi'))
 
                     # Value train op
                     value_optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate_ph)
@@ -332,9 +332,9 @@ class SACBatch(OffPolicyRLModel):
                 self.summary = tf.summary.merge_all()
 
     def _train_step(self, step, writer, learning_rate):
-        #PDE Note that the batches in this function are not the same batches in "SACBatch", 
-        #PDE the name of this class. Those batches are at the same time varying along the spatial dimension;
-        #PDE these vary in time and space because they are drawn randomly from the replay buffer.
+        # PDE Note that the batches in this function are not the same batches in "SACBatch",
+        # PDE the name of this class. Those batches are at the same time varying along the spatial dimension;
+        # PDE these vary in time and space because they are drawn randomly from the replay buffer.
         # Sample a batch from the replay buffer
         batch = self.replay_buffer.sample(self.batch_size, env=self._vec_normalize_env)
         batch_obs, batch_actions, batch_rewards, batch_next_obs, batch_dones = batch
@@ -398,8 +398,8 @@ class SACBatch(OffPolicyRLModel):
             if self.action_noise is not None:
                 self.action_noise.reset()
             obs = self.env.reset()
-            #PDE Convert raw obs to batch of obs.
-            obs_batch = obs.transpose((1,0,2))
+            # PDE Convert raw obs to batch of obs.
+            obs_batch = obs.transpose((1, 0, 2))
             # Retrieve unnormalized observation for saving into the buffer
             if self._vec_normalize_env is not None:
                 obs_ = self._vec_normalize_env.get_original_obs().squeeze()
@@ -416,45 +416,44 @@ class SACBatch(OffPolicyRLModel):
                 # Afterwards, use the learned policy
                 # if random_exploration is set to 0 (normal setting)
                 if self.num_timesteps < self.learning_starts or np.random.rand() < self.random_exploration:
-                    #PDE Sampling directly from the action space returns a batch.
+                    # PDE Sampling directly from the action space returns a batch.
                     unscaled_action = self.env.action_space.sample()
                     # actions sampled from action space are from range specific to the environment
                     # but algorithm operates on tanh-squashed actions therefore simple scaling is used
-                    #TODO probably need to change action scaling
+                    # TODO probably need to change action scaling
                     action = scale_action(self.action_space, unscaled_action)
-                    #PDE Need to store batch actions in buffer later.
-                    action_batch = action.transpose((1,0,2))
+                    # PDE Need to store batch actions in buffer later.
+                    action_batch = action.transpose((1, 0, 2))
                 else:
-                    #PDE Need to collect a batch of actions along the spatial dimension.
-                    #PDE However, the step function already accepts observations in batches.
+                    # PDE Need to collect a batch of actions along the spatial dimension.
+                    # PDE However, the step function already accepts observations in batches.
                     action = self.policy_tf.step(obs_batch, deterministic=False).flatten()
-                    action = action.reshape((-1,)+(self.i_action_space.shape))
+                    action = action.reshape((-1,) + (self.i_action_space.shape))
 
-                    #PDE Need to change batch of actions to expected shape.
+                    # PDE Need to change batch of actions to expected shape.
                     action_batch = action
-                    action = action_batch.transpose((1,0,2))
+                    action = action_batch.transpose((1, 0, 2))
 
                     # Add noise to the action (improve exploration,
                     # not needed in general)
                     if self.action_noise is not None:
                         action = np.clip(action + self.action_noise(), -1, 1)
                     # inferred actions need to be transformed to environment action_space before stepping
-                    #TODO probably need to change action scaling
+                    # TODO probably need to change action scaling
                     unscaled_action = unscale_action(self.action_space, action)
                     # PDE Make sure the actions sum up to 1 before taking a step
                     unscaled_action = unscaled_action / np.sum(unscaled_action, axis=-1)[:, :, np.newaxis]
                     action = scale_action(self.action_space, unscaled_action)
-                    
 
                 assert action.shape == self.env.action_space.shape
 
-                #PDE The reward may now be a vector. Convert if still a scalar.
+                # PDE The reward may now be a vector. Convert if still a scalar.
                 new_obs, reward, done, info = self.env.step(unscaled_action)
                 if not hasattr(reward, '__len__'):
                     reward = np.full(new_obs.shape[1], reward)
 
-                #PDE Convert raw obs to batch.
-                new_obs_batch = new_obs.transpose((1,0,2))
+                # PDE Convert raw obs to batch.
+                new_obs_batch = new_obs.transpose((1, 0, 2))
 
                 self.num_timesteps += 1
 
@@ -464,7 +463,7 @@ class SACBatch(OffPolicyRLModel):
                 if callback.on_step() is False:
                     break
 
-                #TODO change or disable state/reward normalization?
+                # TODO change or disable state/reward normalization?
                 # Store only the unnormalized version
                 if self._vec_normalize_env is not None:
                     new_obs_ = self._vec_normalize_env.get_original_obs().squeeze()
@@ -474,13 +473,13 @@ class SACBatch(OffPolicyRLModel):
                     obs_, new_obs_, reward_ = obs, new_obs, reward
 
                 # Store transition in the replay buffer.
-                #PDE Need to store entire batch.
+                # PDE Need to store entire batch.
                 for o, a, r, new_o in zip(obs_batch, action_batch, reward, new_obs_batch):
                     self.replay_buffer_add(o, a, r, new_o, done, info)
                 obs = new_obs
                 obs_batch = new_obs_batch
 
-                #TODO change or disable state normalization?
+                # TODO change or disable state normalization?
                 # Save the unnormalized observation
                 if self._vec_normalize_env is not None:
                     obs_ = new_obs_
@@ -506,7 +505,7 @@ class SACBatch(OffPolicyRLModel):
                         # Break if the warmup phase is not over
                         # or if there are not enough samples in the replay buffer
                         if not self.replay_buffer.can_sample(self.batch_size) \
-                           or self.num_timesteps < self.learning_starts:
+                                or self.num_timesteps < self.learning_starts:
                             break
                         n_updates += 1
                         # Compute current learning_rate
@@ -577,7 +576,7 @@ class SACBatch(OffPolicyRLModel):
 
         return None
 
-    #PDE Changed this whole function.
+    # PDE Changed this whole function.
     def predict(self, observation, state=None, mask=None, deterministic=True):
         """
         Works for both batches along space and individual stencils.
@@ -586,13 +585,13 @@ class SACBatch(OffPolicyRLModel):
 
         is_batch = (len(observation.shape) == 3)
         if not is_batch:
-            assert(len(observation.shape) == 2)
+            assert (len(observation.shape) == 2)
 
         if is_batch:
-            observation = observation.transpose((1,0,2))
+            observation = observation.transpose((1, 0, 2))
             actions = self.policy_tf.step(observation, deterministic=deterministic)
             actions = actions.reshape((-1,) + self.i_action_space.shape)
-            actions = actions.transpose((1,0,2))
+            actions = actions.transpose((1, 0, 2))
             unscaled_action = unscale_action(self.action_space, actions)
             # PDE Make sure the actions sum up to 1 before taking a step
             unscaled_action = unscaled_action / np.sum(unscaled_action, axis=-1)[..., np.newaxis]
@@ -641,7 +640,7 @@ class SACBatch(OffPolicyRLModel):
 
         self._save_to_file(save_path, data=data, params=params_to_save, cloudpickle=cloudpickle)
 
-    #PDE Don't support pretrain, need to change function in base class.
+    # PDE Don't support pretrain, need to change function in base class.
     def pretrain(self, *args, **kwargs):
         print("pretrain not currently supported for batch agent.")
         sys.exit(0)

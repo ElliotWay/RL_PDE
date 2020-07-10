@@ -1,14 +1,14 @@
-import sys
 import os
 import pwd
-import shutil
-import time
 import re
+import sys
+import time
 
 META_FILE_NAME = "meta.txt"
 
+
 def create_meta_file(log_dir, args):
-    #If adding new metadata, remember that lines must end with \n.
+    # If adding new metadata, remember that lines must end with \n.
 
     meta_filename = os.path.join(log_dir, META_FILE_NAME)
     meta_file = open(meta_filename, 'x')
@@ -30,7 +30,7 @@ def create_meta_file(log_dir, args):
     re_match = re.match("^ref: ([\w/]*)$", current_head)
     if re_match is None:
         _ignore = input("Couldn't find git head \".git/HEAD\" in usual spot."
-                + " Hit <Enter> to continue without recording commit id, or Ctrl-C to stop.")
+                        + " Hit <Enter> to continue without recording commit id, or Ctrl-C to stop.")
     else:
         ref_name = re_match.group(1)
         ref_file_name = os.path.join(".git", ref_name)
@@ -41,7 +41,7 @@ def create_meta_file(log_dir, args):
             print("Corrupted commit id in {}. Fix your git repo before continuing.".format(ref_file_name))
             sys.exit(1)
         else:
-            meta_file.write("git commit id: {}".format(commit_id)) #commit_id already has \n
+            meta_file.write("git commit id: {}".format(commit_id))  # commit_id already has \n
 
             if os.system("git diff --quiet"):
                 meta_file.write("git status: uncommited changes\n")
@@ -57,6 +57,7 @@ def create_meta_file(log_dir, args):
         meta_file.write("{}: {}\n".format(str(k), str(v)))
 
     meta_file.close()
+
 
 def log_finish_time(log_dir, status="finished"):
     meta_filename = os.path.join(log_dir, META_FILE_NAME)
@@ -91,4 +92,3 @@ def log_finish_time(log_dir, status="finished"):
     for line in all_lines:
         meta_file.write(line)
     meta_file.close()
-
