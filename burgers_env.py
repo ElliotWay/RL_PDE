@@ -442,7 +442,7 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
 
         # Give a penalty and end the episode if we're way off.
         if np.max(state) > 1e10 or np.isnan(np.max(state)):
-            reward -= 100
+            reward -= np.pi/2 * self.steps
             done = True
 
         return state, reward, done, {}
