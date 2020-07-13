@@ -8,6 +8,7 @@ from argparse import Namespace
 
 import matplotlib
 import numpy as np
+import tensorflow as tf
 
 matplotlib.use("Agg")
 
@@ -139,6 +140,7 @@ def main():
         return
 
     np.random.seed(args.seed)
+    tf.set_random_seed(args.seed)
 
     env = build_env(args)
 
