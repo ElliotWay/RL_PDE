@@ -315,14 +315,14 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         num_stencils = g.real_length() + 1
         offset = g.ng - self.weno_order
         # Adding a row vector and column vector gives us an "outer product" matrix where each row is a stencil.
-        sliding_window_indexes = offset + np.arange(stencil_size)[None, :] + np.arange(num_stencils)[:, None]
+        fp_stencil_indexes = offset + np.arange(stencil_size)[None, :] + np.arange(num_stencils)[:, None]
+        fm_stencil_indexes = fp_stencil_indexes + 1
 
-        # These are the same stencils for fp and fm, can that be right?
-        # Still getting lost in the exact formulation.
-        # Maybe the fp_stencils are shifted by -1/2 and the fm_stencils by +1/2?
-        # Seems to work anyway.
-        fp_stencils = fp[sliding_window_indexes]
-        fm_stencils = fm[sliding_window_indexes]
+        fp_stencils = fp[fp_stencil_indexes]
+        fm_stencils = fm[fm_stencil_indexes]
+
+        # Flip fm stencils. Not sure how I missed this originally?
+        fm_stencils = np.flip(fm_stencils, axis=-1)
 
         state = np.array([fp_stencils, fm_stencils])
 
