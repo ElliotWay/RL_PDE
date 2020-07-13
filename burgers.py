@@ -121,6 +121,7 @@ class Simulation(object):
     def init_cond(self, type="tophat"):
 
         if type == "tophat":
+            self.grid.u[:] = 0.0
             self.grid.u[np.logical_and(self.grid.x >= 0.333,
                                        self.grid.x <= 0.666)] = 1.0
 
