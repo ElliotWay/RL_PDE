@@ -562,7 +562,7 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
 
         color_dim = np.arange(learned_weights.shape[2])
         offsets = np.arange(self.weno_order) - int((self.weno_order - 1)/ 2)
-        for row, sign in zip((0, 1), ("-", "+")):
+        for row, sign in zip((0, 1), ("+", "-")):
             for col, offset in zip(range(self.weno_order), offsets):  # TODO: figure out offset with order!=3
                 label = "f^" + sign + "[" + str(offset) + "]"
 
