@@ -408,6 +408,7 @@ class SACBatch(OffPolicyRLModel):
             # PDE Convert raw obs to batch of obs.
             obs_batch = obs.transpose((1, 0, 2))
             obs_batch = np.apply_along_axis(self.normalize_obs, -1, obs_batch)
+            # obs_batch = (obs_batch - obs_batch.mean(axis=0)) / obs_batch.std(axis=0)
             # Retrieve unnormalized observation for saving into the buffer
             if self._vec_normalize_env is not None:
                 obs_ = self._vec_normalize_env.get_original_obs().squeeze()
@@ -463,6 +464,7 @@ class SACBatch(OffPolicyRLModel):
                 # PDE Convert raw obs to batch.
                 new_obs_batch = new_obs.transpose((1, 0, 2))
                 new_obs_batch = np.apply_along_axis(self.normalize_obs, -1, new_obs_batch)
+                # new_obs_batch = (new_obs_batch - new_obs_batch.mean(axis=0)) / new_obs_batch.std(axis=0)
 
                 self.num_timesteps += 1
 
@@ -599,6 +601,7 @@ class SACBatch(OffPolicyRLModel):
         if is_batch:
             observation = observation.transpose((1, 0, 2))
             observation = np.apply_along_axis(self.normalize_obs, -1, observation)
+            # observation = (observation - observation.mean(axis=0)) / observation.std(axis=0)
             actions = self.policy_tf.step(observation, deterministic=deterministic)
             actions = actions.reshape((-1,) + self.i_action_space.shape)
             actions = actions.transpose((1, 0, 2))
