@@ -82,6 +82,41 @@ def weno_stencils(order, q):
 
     return q_stencils
 
+# Used in step to calculate actual weights to compare learned and weno weights.
+def weno_weights_batch(order, q_batch):
+    """
+    Compute WENO weights
+
+    Parameters
+    ----------
+    order : int
+      The stencil width.
+    q : np array
+      Batch of flux stencils ((nx+1) X (2*order-1))
+
+    Returns
+    -------
+    stencil weights ((nx+1) X (order))
+
+    """
+    C = weno_coefficients.C_all[order]
+    sigma = weno_coefficients.sigma_all[order]
+
+    num_points = q_batch.shape[0]
+    beta = np.zeros((num_points, order))
+    w = np.zeros_like(beta)
+    epsilon = 1e-16
+    for i in range(num_points):
+        alpha = np.zeros(order)
+        for k in range(order):
+            for l in range(order):
+                for m in range(l + 1):
+                    beta[i, k] += sigma[k, l, m] * q_batch[i][(order - 1) + k - l] * q_batch[i][(order - 1) + k - m]
+            alpha[k] = C[k] / (epsilon + beta[i, k] ** 2)
+        w[i, :] = alpha / np.sum(alpha)
+
+    return w
+
 
 # Used in weno_new, below.
 def weno_weights(order, q):
@@ -193,8 +228,6 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
                                             shape=(2, self.grid.real_length() + 1, 2 * weno_order - 1),
                                             dtype=np.float64)
 
-        self._lines = None
-
         self.reset()
 
     def set_record_weights(self, record_weights):
@@ -244,14 +277,6 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         # compute f minus to the left
         # pass the data in reverse order
         fml[-1::-1] = weno_new(self.weno_order, fm[-1::-1])
-        if self.record_weights:
-            # Are these slices correct?
-            # fp is one on the right, fm is one on the left?
-            # (Also note that fp[:-1] is already one smaller on the left.)
-            fp_weights = weno_weights(self.weno_order, fp[:-1])[:, self.weno_order:-(self.weno_order)]
-            fm_weights = weno_weights(self.weno_order, fm[-1::-1])[:, self.weno_order:-(self.weno_order + 1)]
-            weights = np.array([fp_weights, fm_weights])
-            self._all_actual_weights.append(weights)
 
         # compute flux from fpr and fml
         flux[1:-1] = fpr[1:-1] + fml[1:-1]
@@ -351,7 +376,7 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
             self.init_cond(self.init_type)
 
         self._all_learned_weights = []
-        self._all_actual_weights = []
+        self._all_weno_weights = []
 
         return self.prep_state()
 
@@ -378,9 +403,15 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
           not passing anything now
         """
 
+        state = self.current_state
+
         # Record weights if that mode is enabled.
         if self.record_weights:
             self._all_learned_weights.append(action)
+            weno_weights_fp = weno_weights_batch(self.weno_order, state[0])
+            weno_weights_fm = weno_weights_batch(self.weno_order, state[1])
+            weno_weights = np.array([weno_weights_fp, weno_weights_fm])
+            self._all_weno_weights.append(weno_weights)
 
         done = False
         g = self.grid
@@ -391,8 +422,6 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         # passing self.C will cause this to take variable time steps
         # for now work with constant time step = 0.0005
         dt = self.timestep()
-
-        state = self.current_state
 
         q_stencils = weno_i_stencils_batch(self.weno_order, state)
 
@@ -456,24 +485,18 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
             sys.exit(0)
 
     def save_plot(self, suffix=None):
-        if self._lines is None:
-            self._step_precision = int(np.ceil(np.log(self.episode_length) / np.log(10)))
-            self._lines = []
-        else:
-            for line in self._lines:
-                line.remove()
-            self._lines = []
+        fig = plt.figure()
 
         full_x = self.grid.x
         real_x = full_x[self.grid.ilo:self.grid.ihi + 1]
 
         full_actual = self.grid.uactual
         real_actual = full_actual[self.grid.ilo:self.grid.ihi + 1]
-        self._lines += plt.plot(real_x, real_actual, ls='-', color='b', label="true")
+        plt.plot(real_x, real_actual, ls='-', color='b', label="WENO")
 
         full_learned = self.grid.u
         real_learned = full_learned[self.grid.ilo:self.grid.ihi + 1]
-        self._lines += plt.plot(real_x, real_learned, ls='-', color='k', label="predict")
+        plt.plot(real_x, real_learned, ls='-', color='k', label="learned")
 
         show_ghost = True
         # The ghost arrays slice off one real point so the line connects to the real points.
@@ -484,13 +507,13 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
             ghost_actual_left = full_actual[:self.grid.ilo + 1]
             ghost_actual_right = full_actual[self.grid.ihi:]
             ghost_blue = "#80b0ff"
-            self._lines += plt.plot(ghost_x_left, ghost_actual_left, ls='-', color=ghost_blue)
-            self._lines += plt.plot(ghost_x_right, ghost_actual_right, ls='-', color=ghost_blue)
+            plt.plot(ghost_x_left, ghost_actual_left, ls='-', color=ghost_blue)
+            plt.plot(ghost_x_right, ghost_actual_right, ls='-', color=ghost_blue)
             ghost_learned_left = full_learned[:self.grid.ilo + 1]
             ghost_learned_right = full_learned[self.grid.ihi:]
             ghost_black = "#808080"  # ie grey
-            self._lines += plt.plot(ghost_x_left, ghost_learned_left, ls='-', color=ghost_black)
-            self._lines += plt.plot(ghost_x_right, ghost_learned_right, ls='-', color=ghost_black)
+            plt.plot(ghost_x_left, ghost_learned_left, ls='-', color=ghost_black)
+            plt.plot(ghost_x_right, ghost_learned_right, ls='-', color=ghost_black)
 
         plt.legend()
 
@@ -502,43 +525,73 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
 
         log_dir = logger.get_dir()
         if suffix is None:
-            suffix = ("_t{:0" + str(self._step_precision) + "}").format(self.steps)
+            step_precision = int(np.ceil(np.log(self.episode_length) / np.log(10)))
+            suffix = ("_t{:0" + str(step_precision) + "}").format(self.steps)
         filename = 'burgers' + suffix + '.png'
         filename = os.path.join(log_dir, filename)
         plt.savefig(filename)
         print('Saved plot to ' + filename + '.')
 
-    def plot_weights(self):
+        plt.close(fig)
+
+    def plot_weights(self, timestep=None, location=None):
+        assert(len(self._all_learned_weights) == len(self._all_weno_weights))
+        if len(self._all_learned_weights) == 0:
+            print("Can't plot weights without recording them.\n"
+                    + "Use env.set_record_weights(True) (costs performance).")
+            return
+
         vertical_size = 1.0 + 4.0 * (2)
         horizontal_size = 1.0 + 4.0 * (self.weno_order)
-        fig = plt.figure("weights", figsize=(horizontal_size, vertical_size))
+        fig, axes = plt.subplots(2, self.weno_order, sharex=True, sharey=True, figsize=(horizontal_size, vertical_size))
 
+        # These arrays are time X 2 X (nx+1) X order
         learned_weights = np.array(self._all_learned_weights)
-        actual_weights = np.array(self._all_actual_weights)
+        weno_weights = np.array(self._all_weno_weights)
 
-        # Transpose to put time dimension at the end.
-        # Also fix difference between learned and actual shape.
-        learned_weights = learned_weights.transpose((1, 3, 2, 0))
-        actual_weights = actual_weights.transpose((1, 2, 3, 0))
+        if location is not None:
+            learned_weights = learned_weights[:,:,location,:].transpose((1, 2, 0))
+            weno_weights = weno_weights[:,:,location,:].transpose((1, 2, 0))
+            fig.suptitle("weights at interface " + str(location) + " - 1/2")
+        else:
+            if timestep is None:
+                timestep = len(self._all_learned_weights) - 1
+            learned_weights = learned_weights[timestep, :, :, :].transpose((0, 2, 1))
+            weno_weights = weno_weights[timestep, :, :, :].transpose((0, 2, 1))
+            fig.suptitle("weights at step " + str(timestep))
 
-        # Combine space and time dimensions.
-        learned_weights = learned_weights.reshape((2, self.weno_order, -1))
-        actual_weights = actual_weights.reshape((2, self.weno_order, -1))
-
+        color_dim = np.arange(learned_weights.shape[2])
+        offsets = np.arange(self.weno_order) - int((self.weno_order - 1)/ 2)
         for row, sign in zip((0, 1), ("-", "+")):
-            for col, offset in zip(range(self.weno_order), (-1, 0, 1)):  # TODO: figure out offset with order!=3
+            for col, offset in zip(range(self.weno_order), offsets):  # TODO: figure out offset with order!=3
                 label = "f^" + sign + "[" + str(offset) + "]"
-                ax = fig.add_subplot(2, self.weno_order, (1 + row * self.weno_order + col), label=label)
 
-                ax.set_xlabel("learned")
-                ax.set_ylabel("actual")
-                ax.plot(learned_weights[row, col, :], actual_weights[row, col, :], '.')
+                axes[row, col].set_title(label)
+                if col == 0:
+                    axes[row, col].set_ylabel("WENO")
+                if row == 1:
+                    axes[row, col].set_xlabel("learned")
+                paths = axes[row, col].scatter(x=learned_weights[row, col, :], y=weno_weights[row, col, :], c=color_dim, cmap='viridis')
+                axes[row, col].set(aspect='equal')
+        cbar = fig.colorbar(paths, ax=axes.ravel().tolist())
+        if location is not None:
+            cbar.set_label("timestep")
+        else:
+            cbar.set_label("location")
 
         log_dir = logger.get_dir()
-        filename = 'burgers_weights_comparison.png'
+        filename = 'burgers_weights_comparison_'
+        if location is not None:
+            filename += 'i_' + str(location)
+        else:
+            filename += 'step_' + str(timestep)
+        filename += '.png'
+
         filename = os.path.join(log_dir, filename)
         plt.savefig(filename)
         print('Saved plot to ' + filename + '.')
+
+        plt.close(fig)
 
     def close(self):
         # Delete references for easier garbage collection.

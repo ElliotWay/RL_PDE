@@ -47,10 +47,11 @@ def do_test(env, agent, args):
         total_reward += reward
 
         if t >= args.ep_length * (next_update / 10):
-            print("t = " + str(t))
+            print("step = " + str(t))
             next_update += 1
-            if not args.plot_weights:
-                env.render()
+            env.render()
+            if args.plot_weights:
+                env.plot_weights()
 
             # TODO: log other information, probably
 
@@ -61,9 +62,7 @@ def do_test(env, agent, args):
     print("Test finished in " + str(end_time - start_time) + " seconds.")
     print("Total reward was " + str(total_reward) + ".")
 
-    if not args.plot_weights:
-        env.render()
-
+    env.render()
     if args.plot_weights:
         env.plot_weights()
 
