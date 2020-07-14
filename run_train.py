@@ -53,7 +53,7 @@ def main():
                         help="Directory to place log file and other results. Default is log/env/algo/timestamp.")
     parser.add_argument('--ep-length', type=int, default=300,
                         help="Number of timesteps in an episode.")
-    parser.add_argument('--total_timesteps', type=int, default=int(1e6),
+    parser.add_argument('--total_timesteps', type=int, default=int(1e5),
                         help="Total number of timesteps to train.")
     parser.add_argument('--log_freq', type=int, default=10,
                         help="Number of timesteps to wait between logging information.")
@@ -106,9 +106,9 @@ def main():
     env = build_env(args)
 
     if args.algo == "sac":
-        policy_kwargs = dict(layers=[128, 128])
-        model = SACBatch(LnScaledMlpPolicy, env, policy_kwargs=policy_kwargs,
-                         verbose=1)  # tensorboard_log="./sac_tensorboard/"
+        policy_kwargs = dict(layers=[32, 32])
+        model = SACBatch(LnScaledMlpPolicy, env, policy_kwargs=policy_kwargs, learning_rate=3e-4, buffer_size=50000,
+                 learning_starts=100, batch_size=64, verbose=1, tensorboard_log="./log/weno_burgers/tensorboard")
     else:
         print("Algorithm type \"" + str(args.algo) + "\" not implemented.")
 
