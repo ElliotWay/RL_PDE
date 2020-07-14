@@ -1,3 +1,4 @@
+import os
 import sys
 import time
 import warnings
@@ -575,6 +576,15 @@ class SACBatch(OffPolicyRLModel):
                     logger.dumpkvs()
                     # Reset infos:
                     infos_values = []
+
+                    # PDE Save current model.
+                    # TODO Also save model when an interrupt occurs. Needs signal catching around network updates. See https://stackoverflow.com/a/21919644/2860127
+                    log_dir = logger.get_dir()
+                    model_file_name = os.path.join(log_dir, "model" + str(len(episode_rewards)))
+                    self.save(model_file_name)
+                    print("Saved model to " + model_file_name + ".")
+
+                    
             callback.on_training_end()
             return self
 

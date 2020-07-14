@@ -151,7 +151,7 @@ def main():
     print("Finished!")
     metadata.log_finish_time(args.log_dir, status="finished cleanly")
 
-    model_file_name = os.path.join(args.log_dir, "model")
+    model_file_name = os.path.join(args.log_dir, "model_final")
     model.save(model_file_name)
 
 
