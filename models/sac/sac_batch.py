@@ -134,6 +134,13 @@ class SACBatch(OffPolicyRLModel):
         if _init_setup_model:
             self.setup_model()
 
+        self.obs_std_epsilon = 1e-10
+        self.clip_obs = 5  # 5 std is pretty big
+
+    def normalize_obs(self, obs):
+        obs = np.clip((obs - obs.mean()) / np.sqrt(obs.std() + self.obs_std_epsilon), -self.clip_obs, self.clip_obs)
+        return obs
+
     # pretrain not supported, would need to change function in base class
     def _get_pretrain_placeholders(self):
         # policy = self.policy_tf
@@ -400,6 +407,7 @@ class SACBatch(OffPolicyRLModel):
             obs = self.env.reset()
             # PDE Convert raw obs to batch of obs.
             obs_batch = obs.transpose((1, 0, 2))
+            obs_batch = np.apply_along_axis(self.normalize_obs, -1, obs_batch)
             # Retrieve unnormalized observation for saving into the buffer
             if self._vec_normalize_env is not None:
                 obs_ = self._vec_normalize_env.get_original_obs().squeeze()
@@ -454,6 +462,7 @@ class SACBatch(OffPolicyRLModel):
 
                 # PDE Convert raw obs to batch.
                 new_obs_batch = new_obs.transpose((1, 0, 2))
+                new_obs_batch = np.apply_along_axis(self.normalize_obs, -1, new_obs_batch)
 
                 self.num_timesteps += 1
 
@@ -589,6 +598,7 @@ class SACBatch(OffPolicyRLModel):
 
         if is_batch:
             observation = observation.transpose((1, 0, 2))
+            observation = np.apply_along_axis(self.normalize_obs, -1, observation)
             actions = self.policy_tf.step(observation, deterministic=deterministic)
             actions = actions.reshape((-1,) + self.i_action_space.shape)
             actions = actions.transpose((1, 0, 2))
