@@ -523,6 +523,8 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         ax.relim()
         ax.autoscale_view()
 
+        ax.set_title("step=" + str(self.steps))
+
         log_dir = logger.get_dir()
         if suffix is None:
             step_precision = int(np.ceil(np.log(self.episode_length) / np.log(10)))
