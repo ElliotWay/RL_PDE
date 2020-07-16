@@ -470,10 +470,10 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         #error = np.sqrt(np.sum(error_stencils**2, axis=-1))
 
         # Squash error.
-        #reward = -np.arctan(error)
-        #max_error = np.pi / 2
-        reward = -error
-        max_error = 1e7
+        reward = -np.arctan(error)
+        max_penalty = np.pi / 2
+        #reward = -error
+        #max_penalty = 1e7
 
 
         # Conservation-based reward.
@@ -481,7 +481,7 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
 
         # Give a penalty and end the episode if we're way off.
         if np.max(state) > 1e7 or np.isnan(np.max(state)):
-            reward -= max_error / 2 * self.steps
+            reward -= max_penalty / 2 * self.steps
             done = True
 
         return state, reward, done, {}
