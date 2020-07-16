@@ -57,8 +57,8 @@ def main():
                         help="Number of timesteps in an episode.")
     parser.add_argument('--total_timesteps', type=int, default=int(1e5),
                         help="Total number of timesteps to train.")
-    parser.add_argument('--log_freq', type=int, default=10,
-                        help="Number of timesteps to wait between logging information.")
+    parser.add_argument('--log-freq', '--log_freq', type=int, default=10,
+                        help="Number of episodes to wait between logging information.")
     parser.add_argument('--seed', type=int, default=1,
                         help="Set random seed for reproducibility.")
     parser.add_argument('--render', type=str, default="file",
@@ -124,6 +124,7 @@ def main():
     tf.set_random_seed(args.seed)
 
     env = build_env(args)
+    eval_env = build_env(args) # Some algos like an extra env for evaluation.
 
     if args.algo == "sac":
         policy_kwargs = dict(layers=[32, 32])
@@ -152,8 +153,10 @@ def main():
                 raise RuntimeError('unknown noise type "{}"'.format(current_noise_type))
 
         policy_kwargs = dict(layers=[32, 32])
-        model = DDPGBatch(DDPGPolicy, env, policy_kwargs=policy_kwargs, actor_lr=args.actor_lr, critic_lr=args.critic_lr, buffer_size=args.buffer_size,
-                batch_size=args.batch_size, verbose=1, action_noise=action_noise, param_noise=param_noise)
+        model = DDPGBatch(DDPGPolicy, env, eval_env=eval_env,
+                policy_kwargs=policy_kwargs, actor_lr=args.actor_lr, critic_lr=args.critic_lr, buffer_size=args.buffer_size,
+                batch_size=args.batch_size, action_noise=action_noise, param_noise=param_noise,
+                verbose=1)
     else:
         print("Algorithm type \"" + str(args.algo) + "\" not implemented.")
 

@@ -857,9 +857,6 @@ class DDPGBatch(OffPolicyRLModel):
                 # Retrieve unnormalized observation for saving into the buffer
                 if self._vec_normalize_env is not None:
                     obs_ = self._vec_normalize_env.get_original_obs().squeeze()
-                eval_obs = None
-                if self.eval_env is not None:
-                    eval_obs = self.eval_env.reset()
                 episode_reward = np.zeros(self.action_space.shape[1]-2) #TODO fix reward shape in env
                 episode_step = 0
                 episodes = 0
@@ -1005,30 +1002,33 @@ class DDPGBatch(OffPolicyRLModel):
                             epoch_actor_losses.append(actor_loss)
                             self._update_target_net()
 
-                        # Evaluate.
+                    # PDE Evaluate loop moved outside of rollout loop.
+                    # Also ignore nb_eval_steps and just run one episode.
+                    # Some things like eval_episode_rewards list don't really make sense any more.
+                    # Evaluate.
+                    if self.eval_env is not None:
                         eval_episode_rewards = []
                         eval_qs = []
-                        if self.eval_env is not None:
-                            eval_episode_reward = np.zeros(self.action_space.shape[1])
-                            for _ in range(self.nb_eval_steps):
-                                if total_steps >= total_timesteps:
-                                    return self
+                        eval_done = False
+                        eval_obs = self.eval_env.reset()
+                        eval_obs_batch = eval_obs.transpose((1, 0, 2))
+                        eval_episode_reward = np.zeros(self.action_space.shape[1]-2)
+                        while not eval_done:
 
-                                eval_action, eval_q = self._policy(eval_obs, apply_noise=False, compute_q=True)
-                                # PDE Transpose batch of actions into expected shape.
-                                action = action.transpose((1, 0, 2))
-                                unscaled_action = unscale_action(self.action_space, eval_action)
-                                unscaled_action = softmaxize(unscaled_action)
-                                eval_obs, eval_r, eval_done, _ = self.eval_env.step(unscaled_action)
-                                eval_episode_reward += eval_r
+                            eval_action_batch, eval_q = self._policy(eval_obs_batch, apply_noise=False, compute_q=True)
+                            # PDE Transpose batch of actions into expected shape.
+                            eval_action = eval_action_batch.transpose((1, 0, 2))
+                            unscaled_action = unscale_action(self.action_space, eval_action)
+                            unscaled_action = softmaxize(unscaled_action)
+                            eval_obs, eval_r, eval_done, _ = self.eval_env.step(unscaled_action)
+                            eval_obs_batch = eval_obs.transpose((1, 0, 2))
+                            eval_episode_reward += eval_r
 
-                                eval_qs.append(eval_q)
-                                if eval_done:
-                                    if not isinstance(self.env, VecEnv):
-                                        eval_obs = self.eval_env.reset()
-                                    eval_episode_rewards.append(eval_episode_reward)
-                                    eval_episode_rewards_history.append(eval_episode_reward)
-                                    eval_episode_reward = np.zeros(self.action_space.shape[1])
+                            eval_qs.append(eval_q)
+                        if render is not None:
+                            self.eval_env.render(mode='file', suffix="_steps" + str(total_steps))
+                        eval_episode_rewards.append(eval_episode_reward)
+                        eval_episode_rewards_history.append(eval_episode_reward)
 
                     mpi_size = MPI.COMM_WORLD.Get_size()
 
@@ -1093,8 +1093,6 @@ class DDPGBatch(OffPolicyRLModel):
                     logger.info('')
                     logdir = logger.get_dir()
 
-                    if render is not None:
-                        self.env.render(mode='file', suffix="_steps" + str(total_steps))
 
                     # PDE Save current model.
                     # TODO Also save model when an interrupt occurs. Needs signal catching around network updates. See https://stackoverflow.com/a/21919644/2860127
