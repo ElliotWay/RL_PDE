@@ -21,7 +21,8 @@ from burgers import Grid1d
 from burgers_env import WENOBurgersEnv
 
 from models.sac import SACBatch
-from models.sac import LnScaledMlpPolicy
+from models.sac import LnScaledMlpPolicy as SACPolicy
+from stable_baselines.ddpg.policies import LnMlpPolicy as DDPGPolicy
 from util import metadata
 
 
@@ -87,10 +88,28 @@ def main():
     sub_parser.add_argument('--init_type', type=str, default="sine",
                             help="Shape of the initial state.")
     sub_parser.add_argument('--boundary', '--bc', type=str, default="periodic")
-
     sub_args, rest = sub_parser.parse_known_args(rest)
 
-    args = Namespace(**vars(main_args), **vars(sub_args))
+    algo_arg_parser = argparse.ArgumentParser(
+            add_help=False,
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    algo_arg_parser.add_argument('--layers', typ=int, nargs='+', default=[32, 32],
+            help="Size of network layers.")
+    algo_arg_parser.add_argument('--learning_rate', '--lr', type=float, default=3e-4,
+            help="Learning rate for SAC, which uses same rate for all networks.")
+    algo_arg_parser.add_argument('--actor-lr', type=float, default=1e-4,
+            help="Learning rate for actor network (pi).")
+    algo_arg_parser.add_argument('--critic-lr', type=float, default=1e-3,
+            help="Learning rate for critic network (Q).")
+    algo_arg_parser.add_argument('--buffer-size', type=int, default=50000,
+            help="Size of the replay buffer.")
+    algo_arg_parser.add_argument('--batch-size', type=int, default=64,
+            help="Size of batch samples from replay buffer.")
+    algo_arg_parser.add_argument('--noise-type', type=str, default='adaptive-param_0.2',
+            help="Noise used in DDPG.")
+    algo_args, rest = algo_arg_parser.parse_known_args(rest)
+
+    args = Namespace(**vars(main_args), **vars(sub_args), **vars(algo_args))
 
     if len(rest) > 0:
         print("Ignoring unrecognized arguments: " + " ".join(rest))
@@ -107,8 +126,33 @@ def main():
 
     if args.algo == "sac":
         policy_kwargs = dict(layers=[32, 32])
-        model = SACBatch(LnScaledMlpPolicy, env, policy_kwargs=policy_kwargs, learning_rate=3e-4, buffer_size=50000,
-                 learning_starts=100, batch_size=64, verbose=1, tensorboard_log="./log/weno_burgers/tensorboard")
+        model = SACBatch(SACPolicy, env, policy_kwargs=policy_kwargs, learning_rate=args.learning_rate, buffer_size=args.buffer_size,
+                 learning_starts=100, batch_size=args.batch_size, verbose=1, tensorboard_log="./log/weno_burgers/tensorboard")
+    elif args.algo == "ddpg":
+        # Parse noise_type
+        action_noise = None
+        param_noise = None
+        nb_actions = env.action_space.shape[-1]
+        for current_noise_type in noise_type.split(','):
+            current_noise_type = current_noise_type.strip()
+            if current_noise_type == 'none':
+                pass
+            elif 'adaptive-param' in current_noise_type:
+                _, stddev = current_noise_type.split('_')
+                param_noise = AdaptiveParamNoiseSpec(initial_stddev=float(stddev), desired_action_stddev=float(stddev))
+            elif 'normal' in current_noise_type:
+                _, stddev = current_noise_type.split('_')
+                action_noise = NormalActionNoise(mean=np.zeros(nb_actions), sigma=float(stddev) * np.ones(nb_actions))
+            elif 'ou' in current_noise_type:
+                _, stddev = current_noise_type.split('_')
+                action_noise = OrnsteinUhlenbeckActionNoise(mean=np.zeros(nb_actions),
+                                                            sigma=float(stddev) * np.ones(nb_actions))
+            else:
+                raise RuntimeError('unknown noise type "{}"'.format(current_noise_type))
+
+        policy_kwargs = dict(layers=[32, 32])
+        model = DDPGBatch(DDPGPolicy, env, policy_kwargs=policy_kwargs, actor_lr=args.actor_lr, critic_lr=args.critic_lr, buffer_size=args.buffer_size,
+                batch_size=args.batch_size, verbose=1, action_noise=action_noise, param_noise=param_noise
     else:
         print("Algorithm type \"" + str(args.algo) + "\" not implemented.")
 
