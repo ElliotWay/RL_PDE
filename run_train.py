@@ -16,13 +16,14 @@ import matplotlib
 matplotlib.use("Agg")
 
 from stable_baselines import logger
+from stable_baselines.ddpg.noise import AdaptiveParamNoiseSpec, OrnsteinUhlenbeckActionNoise, NormalActionNoise
 
 from burgers import Grid1d
 from burgers_env import WENOBurgersEnv
-
 from models.sac import SACBatch
+from models.ddpg import DDPGBatch
 from models.sac import LnScaledMlpPolicy as SACPolicy
-from stable_baselines.ddpg.policies import LnMlpPolicy as DDPGPolicy
+from models.ddpg import LnMlpPolicy as DDPGPolicy
 from util import metadata
 
 
@@ -93,7 +94,7 @@ def main():
     algo_arg_parser = argparse.ArgumentParser(
             add_help=False,
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    algo_arg_parser.add_argument('--layers', typ=int, nargs='+', default=[32, 32],
+    algo_arg_parser.add_argument('--layers', type=int, nargs='+', default=[32, 32],
             help="Size of network layers.")
     algo_arg_parser.add_argument('--learning_rate', '--lr', type=float, default=3e-4,
             help="Learning rate for SAC, which uses same rate for all networks.")
@@ -133,7 +134,7 @@ def main():
         action_noise = None
         param_noise = None
         nb_actions = env.action_space.shape[-1]
-        for current_noise_type in noise_type.split(','):
+        for current_noise_type in args.noise_type.split(','):
             current_noise_type = current_noise_type.strip()
             if current_noise_type == 'none':
                 pass
@@ -152,7 +153,7 @@ def main():
 
         policy_kwargs = dict(layers=[32, 32])
         model = DDPGBatch(DDPGPolicy, env, policy_kwargs=policy_kwargs, actor_lr=args.actor_lr, critic_lr=args.critic_lr, buffer_size=args.buffer_size,
-                batch_size=args.batch_size, verbose=1, action_noise=action_noise, param_noise=param_noise
+                batch_size=args.batch_size, verbose=1, action_noise=action_noise, param_noise=param_noise)
     else:
         print("Algorithm type \"" + str(args.algo) + "\" not implemented.")
 

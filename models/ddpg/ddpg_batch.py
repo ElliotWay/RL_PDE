@@ -20,7 +20,8 @@ from stable_baselines.common.mpi_adam import MpiAdam
 from stable_baselines.common.buffers import ReplayBuffer
 from stable_baselines.common.math_util import unscale_action, scale_action
 from stable_baselines.common.mpi_running_mean_std import RunningMeanStd
-from stable_baselines.ddpg.policies import DDPGPolicy
+
+from models.ddpg.policies import DDPGPolicy
 
 def softmaxize(tensor):
     """
@@ -213,7 +214,7 @@ class DDPGBatch(OffPolicyRLModel):
                  verbose=0, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None,
                  full_tensorboard_log=False, seed=None, n_cpu_tf_sess=1):
 
-        super(DDPG, self).__init__(policy=policy, env=env, replay_buffer=None,
+        super(DDPGBatch, self).__init__(policy=policy, env=env, replay_buffer=None,
                                    verbose=verbose, policy_base=DDPGPolicy,
                                    requires_vec_env=False, policy_kwargs=policy_kwargs,
                                    seed=seed, n_cpu_tf_sess=n_cpu_tf_sess)
@@ -620,7 +621,7 @@ class DDPGBatch(OffPolicyRLModel):
         :return: ([float], float) the action and critic value
         """
         # PDE Handle both individual actions and batch actions.
-        if obs.shape == self._i_observation_space.shape:
+        if obs.shape == self.i_observation_space.shape:
             obs = np.array(obs).reshape((-1,) + self.i_observation_space.shape)
         feed_dict = {self.obs_train: obs}
         if self.param_noise is not None and apply_noise:
@@ -852,13 +853,14 @@ class DDPGBatch(OffPolicyRLModel):
                 # Prepare everything.
                 self._reset()
                 obs = self.env.reset()
+                obs_batch = obs.transpose((1, 0, 2))
                 # Retrieve unnormalized observation for saving into the buffer
                 if self._vec_normalize_env is not None:
                     obs_ = self._vec_normalize_env.get_original_obs().squeeze()
                 eval_obs = None
                 if self.eval_env is not None:
                     eval_obs = self.eval_env.reset()
-                episode_reward = np.zeros(self.action_space.shape[1])
+                episode_reward = np.zeros(self.action_space.shape[1]-2) #TODO fix reward shape in env
                 episode_step = 0
                 episodes = 0
                 step = 0
@@ -891,9 +893,9 @@ class DDPGBatch(OffPolicyRLModel):
                                 return self
 
                             # Predict next action.
-                            action, q_value = self._policy(obs, apply_noise=True, compute_q=True)
+                            action_batch, q_value = self._policy(obs_batch, apply_noise=True, compute_q=True)
                             # PDE Transpose batch of actions into expected shape.
-                            action = action.transpose((1, 0, 2))
+                            action = action_batch.transpose((1, 0, 2))
                             assert action.shape == self.env.action_space.shape
 
                             # Randomly sample actions from a uniform distribution
@@ -910,6 +912,7 @@ class DDPGBatch(OffPolicyRLModel):
                             unscaled_action = softmaxize(unscaled_action)
 
                             new_obs, reward, done, info = self.env.step(unscaled_action)
+                            new_obs_batch = new_obs.transpose((1, 0, 2))
 
                             self.num_timesteps += 1
                             callback.update_locals(locals())
@@ -929,29 +932,27 @@ class DDPGBatch(OffPolicyRLModel):
                             epoch_qs.append(q_value)
 
                             # Store only the unnormalized version
-                            if self._vec_normalize_env is not None:
-                                new_obs_ = self._vec_normalize_env.get_original_obs().squeeze()
-                                reward_ = self._vec_normalize_env.get_original_reward().squeeze()
-                            else:
+                            #if self._vec_normalize_env is not None:
+                                #new_obs_ = self._vec_normalize_env.get_original_obs().squeeze()
+                                #reward_ = self._vec_normalize_env.get_original_reward().squeeze()
+                            #else:
                                 # Avoid changing the original ones
-                                obs_, new_obs_, reward_ = obs, new_obs, reward
+                                #obs_, new_obs_, reward_ = obs, new_obs, reward
 
-                            # PDE Store batch as individuals. 
-                            obs_batch = obs_.transpose((1, 0, 2))
-                            action_batch = action_.transpose((1, 0, 2))
-                            new_obs_batch = new_obs_.transpose((1, 0, 2))
                             # PDE If reward is a scalar, expand it.
-                            if not hasattr(reward_, '__len__'):
-                                reward_ = np.full(new_obs.shape[1], reward_)
-                            for (o, a, r, n_o) in zip(obs_batch, action_batch, reward_, new_obs_batch):
+                            if not hasattr(reward, '__len__'):
+                                reward = np.full(new_obs.shape[1], reward)
+                            for (o, a, r, n_o) in zip(obs_batch, action_batch, reward, new_obs_batch):
                                 self._store_transition(o, a, r, n_o, done, info)
 
                             obs = new_obs
-                            # Save the unnormalized observation
-                            if self._vec_normalize_env is not None:
-                                obs_ = new_obs_
+                            obs_batch = new_obs_batch
 
-                            episode_reward += reward_
+                            # Save the unnormalized observation
+                            #if self._vec_normalize_env is not None:
+                                #obs_ = new_obs_
+
+                            episode_reward += reward
                             episode_step += 1
 
                             if writer is not None:
@@ -965,7 +966,7 @@ class DDPGBatch(OffPolicyRLModel):
                                 epoch_episode_rewards.append(episode_reward)
                                 episode_rewards_history.append(episode_reward)
                                 epoch_episode_steps.append(episode_step)
-                                episode_reward = np.zeros(self.action_space.shape[1])
+                                episode_reward = np.zeros(self.action_space.shape[1]-2) #TODO fix reward shape in env
                                 episode_step = 0
                                 epoch_episodes += 1
                                 episodes += 1
@@ -1093,12 +1094,12 @@ class DDPGBatch(OffPolicyRLModel):
                     logdir = logger.get_dir()
 
                     if render is not None:
-                        self.env.render(mode='file', suffix="_ep" + str(len(episode_rewards)))
+                        self.env.render(mode='file', suffix="_steps" + str(total_steps))
 
                     # PDE Save current model.
                     # TODO Also save model when an interrupt occurs. Needs signal catching around network updates. See https://stackoverflow.com/a/21919644/2860127
                     log_dir = logger.get_dir()
-                    model_file_name = os.path.join(log_dir, "model" + str(len(episode_rewards)))
+                    model_file_name = os.path.join(log_dir, "model_steps" + str(total_steps))
                     self.save(model_file_name)
                     print("Saved model to " + model_file_name + ".")
 
