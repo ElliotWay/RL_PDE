@@ -10,6 +10,7 @@ from stable_baselines import logger
 import burgers
 import weno_coefficients
 from util.softmax_box import SoftmaxBox
+from util.misc import create_stencil_indexes
 
 
 # TODO: write in a way that does not require ng=order
@@ -458,21 +459,29 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         # error = (error[:-1] + error[1:]) / 2
 
         # square error on right (misses reward for rightmost interface)
-        error = (g.u[g.ilo:g.ihi] - g.uactual[g.ilo:g.ihi]) ** 2
+        #error = (g.u[g.ilo:g.ihi] - g.uactual[g.ilo:g.ihi]) ** 2
 
-        # reward = -np.log(error)
-        reward = -np.arctan(error)
+        # Reward as function of the errors in the stencil.
+        # max error across stencil
+        error = (g.uactual - g.u)
+        stencil_indexes = create_stencil_indexes(stencil_size=(self.weno_order*2-1), num_stencils=(g.ihi - g.ilo + 2), offset=(g.ng - self.weno_order))
+        error_stencils = error[stencil_indexes]
+        error = np.amax(error_stencils, axis=-1)
+        #error = np.sqrt(np.sum(error_stencils**2, axis=-1))
 
-        # should this reward be clipped?
-        # if reward < 10:
-        # reward = 0
+        # Squash error.
+        #reward = -np.arctan(error)
+        #max_error = np.pi / 2
+        reward = -error
+        max_error = 1e7
+
 
         # Conservation-based reward.
         # reward = -np.log(np.sum(rhs[g.ilo:g.ihi+1]))
 
         # Give a penalty and end the episode if we're way off.
-        if np.max(state) > 1e10 or np.isnan(np.max(state)):
-            reward -= np.pi / 2 * self.steps
+        if np.max(state) > 1e7 or np.isnan(np.max(state)):
+            reward -= max_error / 2 * self.steps
             done = True
 
         return state, reward, done, {}
