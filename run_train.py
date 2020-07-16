@@ -173,8 +173,8 @@ def main():
     try:
         os.makedirs(args.log_dir)
     except FileExistsError:
-        _ignore = input("(\"{}\" already exists! Hit <Enter> to overwrite and"
-                        + " continue, Ctrl-C to stop.)".format(args.log_dir))
+        _ignore = input(("(\"{}\" already exists! Hit <Enter> to overwrite and"
+                        + " continue, Ctrl-C to stop.)").format(args.log_dir))
         shutil.rmtree(args.log_dir)
         os.makedirs(args.log_dir)
 
