@@ -459,14 +459,14 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         # error = (error[:-1] + error[1:]) / 2
 
         # square error on right (misses reward for rightmost interface)
-        #error = (g.u[g.ilo:g.ihi] - g.uactual[g.ilo:g.ihi]) ** 2
+        error = (g.u[g.ilo:g.ihi] - g.uactual[g.ilo:g.ihi]) ** 2
 
         # Reward as function of the errors in the stencil.
         # max error across stencil
-        error = (g.uactual - g.u)
-        stencil_indexes = create_stencil_indexes(stencil_size=(self.weno_order*2-1), num_stencils=(g.ihi - g.ilo + 2), offset=(g.ng - self.weno_order))
-        error_stencils = error[stencil_indexes]
-        error = np.amax(error_stencils, axis=-1)
+        #error = (g.uactual - g.u)
+        #stencil_indexes = create_stencil_indexes(stencil_size=(self.weno_order*2-1), num_stencils=(g.ihi - g.ilo + 2), offset=(g.ng - self.weno_order))
+        #error_stencils = error[stencil_indexes]
+        #error = np.amax(np.abs(error_stencils), axis=-1)
         #error = np.sqrt(np.sum(error_stencils**2, axis=-1))
 
         # Squash error.
