@@ -543,6 +543,9 @@ class SACBatch(OffPolicyRLModel):
                         self.action_noise.reset()
                     if not isinstance(self.env, VecEnv):
                         obs = self.env.reset()
+                        # PDE Convert raw obs to batch of obs.
+                        obs_batch = obs.transpose((1, 0, 2))
+                        obs_batch = np.apply_along_axis(self.normalize_obs, -1, obs_batch)
                     episode_rewards.append(0.0)
 
                     maybe_is_success = info.get('is_success')
