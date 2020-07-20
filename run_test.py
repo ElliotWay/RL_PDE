@@ -10,6 +10,8 @@ import matplotlib
 import numpy as np
 import tensorflow as tf
 
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+
 matplotlib.use("Agg")
 
 from stable_baselines import logger
@@ -18,6 +20,7 @@ from burgers import Grid1d
 from burgers_env import WENOBurgersEnv
 from weno_agent import StandardWENOAgent
 from stationary_agent import StationaryAgent
+from models.sac import SACBatch
 from util import metadata
 
 
@@ -40,7 +43,7 @@ def do_test(env, agent, args):
 
         # The agent's policy function takes a batch of states and returns a batch of actions.
         # However, we take that batch of actions and pass it to the environment like a single action.
-        actions = agent.predict(state)
+        actions, _ = agent.predict(state)
         state, reward, done, info = env.step(actions)
 
         rewards.append(reward)
@@ -89,6 +92,8 @@ def main():
                         help="Do not test and show the hidden parameters not listed here.")
     parser.add_argument('--agent', '-a', type=str, default="default",
                         help="Agent to test. Either a file (unimplemented) or a string for a standard agent. \"default\" uses standard weno coefficients.")
+    parser.add_argument('--algo', type=str, default="sac",
+                        help="Algorithm used to create the agent. Unfortunately necessary to open a model file.")
     parser.add_argument('--env', type=str, default="weno_burgers",
                         help="Name of the environment in which to deploy the agent.")
     parser.add_argument('--log-dir', type=str, default=None,
@@ -164,11 +169,16 @@ def main():
     logger.configure(folder=args.log_dir, format_strs=['stdout'])  # ,tensorboard'
     logger.set_level(logger.DEBUG)  # logger.INFO
 
-    # TODO build agent from file
     if args.agent == "default":
         agent = StandardWENOAgent(order=args.order)
     elif args.agent == "stationary":
         agent = StationaryAgent(order=args.order)
+    else:
+        if args.algo == "sac":
+            agent = SACBatch.load(args.agent, env=env)
+        else:
+            print("Algorithm {} not recognized.".format(args.algo))
+        
 
     # Run test.
     signal.signal(signal.SIGINT, signal.default_int_handler)

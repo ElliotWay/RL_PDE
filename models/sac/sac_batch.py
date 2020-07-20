@@ -123,20 +123,30 @@ class SACBatch(OffPolicyRLModel):
         self.processed_next_obs_ph = None
         self.log_ent_coef = None
 
-        # PDE Set up spaces for the individual agents
-        # PDE Just assume we're using SoftmaxBox for now.
+        if env is not None:
+            # PDE Set up spaces for the individual agents
+            # PDE Just assume we're using SoftmaxBox for now.
+            obs_shape = self.observation_space.shape
+            i_obs_shape = (obs_shape[0], obs_shape[2])
+            self.i_observation_space = SoftmaxBox(low=0.0, high=1.0, shape=i_obs_shape)
+            a_shape = self.action_space.shape
+            i_a_shape = (a_shape[0], a_shape[2])
+            self.i_action_space = SoftmaxBox(low=0.0, high=1.0, shape=i_a_shape)
+
+            if _init_setup_model:
+                self.setup_model()
+
+        self.obs_std_epsilon = 1e-10
+        self.clip_obs = 5  # 5 std is pretty big
+
+    def set_env(self, env):
+        super(SACBatch, self).set_env(env)
         obs_shape = self.observation_space.shape
         i_obs_shape = (obs_shape[0], obs_shape[2])
         self.i_observation_space = SoftmaxBox(low=0.0, high=1.0, shape=i_obs_shape)
         a_shape = self.action_space.shape
         i_a_shape = (a_shape[0], a_shape[2])
         self.i_action_space = SoftmaxBox(low=0.0, high=1.0, shape=i_a_shape)
-
-        if _init_setup_model:
-            self.setup_model()
-
-        self.obs_std_epsilon = 1e-10
-        self.clip_obs = 5  # 5 std is pretty big
 
     def normalize_obs(self, obs):
         obs = np.clip((obs - obs.mean()) / np.sqrt(obs.std() + self.obs_std_epsilon), -self.clip_obs, self.clip_obs)

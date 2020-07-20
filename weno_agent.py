@@ -14,7 +14,7 @@ class StandardWENOAgent():
 
         actions = self._weno_i_weights_batch(state)
 
-        return actions
+        return actions, None
 
     # Future note: we're wasting some computations.
     # The q^2 matrix for the kth sub-stencil has a lot of overlap with the q^2 matrix with the k+1st sub-stencil.
