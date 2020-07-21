@@ -77,6 +77,12 @@ class Grid1d(object):
         """ Return the number of indexes of all points, including ghost points """
         return self.nx + 2 * self.ng
 
+    def set_bc_type(self, new_bc):
+        if not new_bc in ["periodic", "outflow"]:
+            raise Exception("Invalid BC type.")
+        else:
+            self.bc = new_bc
+
     def fill_BCs(self):
         """ fill all ghostcells as periodic """
 
@@ -121,11 +127,13 @@ class Simulation(object):
     def init_cond(self, type="tophat"):
 
         if type == "tophat":
+            self.grid.set_bc_type("outflow")
             self.grid.u[:] = 0.0
             self.grid.u[np.logical_and(self.grid.x >= 0.333,
                                        self.grid.x <= 0.666)] = 1.0
 
         elif type == "sine":
+            self.grid.set_bc_type("periodic")
             self.grid.u[:] = 1.0
 
             index = np.logical_and(self.grid.x >= 0.333,
@@ -134,8 +142,12 @@ class Simulation(object):
                 0.5 * np.sin(2.0 * np.pi * (self.grid.x[index] - 0.333) / 0.333)
 
         elif type == "rarefaction":
+            self.grid.set_bc_type("outflow")
             self.grid.u[:] = 1.0
             self.grid.u[self.grid.x > 0.5] = 2.0
+        
+        else:
+            raise Exception("Initial condition type not recognized.")
 
     def timestep(self, C=None):
         if C is None:  # return a constant time step

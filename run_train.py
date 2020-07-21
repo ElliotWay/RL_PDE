@@ -51,11 +51,11 @@ def main():
                         help="Algorithm to train with. Currently only \"sac\" accepted.")
     parser.add_argument('--env', type=str, default="weno_burgers",
                         help="Name of the environment in which to deploy the agent.")
-    parser.add_argument('--log-dir', type=str, default=None,
+    parser.add_argument('--log-dir', '--log_dir', type=str, default=None,
                         help="Directory to place log file and other results. Default is log/env/algo/timestamp.")
-    parser.add_argument('--ep-length', type=int, default=300,
+    parser.add_argument('--ep-length', '--ep_length', type=int, default=300,
                         help="Number of timesteps in an episode.")
-    parser.add_argument('--total_timesteps', type=int, default=int(1e5),
+    parser.add_argument('--total-timesteps', '--total_timesteps', type=int, default=int(1e5),
                         help="Total number of timesteps to train.")
     parser.add_argument('--log-freq', '--log_freq', type=int, default=10,
                         help="Number of episodes to wait between logging information.")
@@ -76,9 +76,9 @@ def main():
     sub_parser.add_argument('--order', type=int, default=3,
                             help="Order of WENO approximation (assuming using WENO environment or agent).")
 
-    sub_parser.add_argument('--fixed-timesteps', dest='fixed_timesteps', action='store_true',
+    sub_parser.add_argument('--fixed-timesteps', '--fixed_timesteps', dest='fixed_timesteps', action='store_true',
                             help="TODO: not implemented!")
-    sub_parser.add_argument('--variable-timesteps', dest='fixed_timesteps', action='store_false')
+    sub_parser.add_argument('--variable-timesteps', '--variable_timesteps', dest='fixed_timesteps', action='store_false')
     sub_parser.set_defaults(fixed_timesteps=True)
 
     sub_parser.add_argument('--timestep', type=float, default=0.0005,
@@ -86,7 +86,7 @@ def main():
     sub_parser.add_argument('--C', type=float, default=0.1,
                             help="Constant used in choosing variable timestep.")
 
-    sub_parser.add_argument('--init_type', type=str, default="sine",
+    sub_parser.add_argument('--init-type', '--init_type', type=str, default="sine",
                             help="Shape of the initial state.")
     sub_parser.add_argument('--boundary', '--bc', type=str, default="periodic")
     sub_args, rest = sub_parser.parse_known_args(rest)
@@ -96,17 +96,17 @@ def main():
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     algo_arg_parser.add_argument('--layers', type=int, nargs='+', default=[32, 32],
             help="Size of network layers.")
-    algo_arg_parser.add_argument('--learning_rate', '--lr', type=float, default=3e-4,
+    algo_arg_parser.add_argument('--learning-rate', '--learning_rate', '--lr', type=float, default=3e-4,
             help="Learning rate for SAC, which uses same rate for all networks.")
-    algo_arg_parser.add_argument('--actor-lr', type=float, default=1e-4,
+    algo_arg_parser.add_argument('--actor-lr', '--actor_lr', type=float, default=1e-4,
             help="Learning rate for actor network (pi).")
-    algo_arg_parser.add_argument('--critic-lr', type=float, default=1e-3,
+    algo_arg_parser.add_argument('--critic-lr', '--critic_lr', type=float, default=1e-3,
             help="Learning rate for critic network (Q).")
-    algo_arg_parser.add_argument('--buffer-size', type=int, default=50000,
+    algo_arg_parser.add_argument('--buffer-size', '--buffer_size', type=int, default=50000,
             help="Size of the replay buffer.")
-    algo_arg_parser.add_argument('--batch-size', type=int, default=64,
+    algo_arg_parser.add_argument('--batch-size', '--batch_size', type=int, default=64,
             help="Size of batch samples from replay buffer.")
-    algo_arg_parser.add_argument('--noise-type', type=str, default='adaptive-param_0.2',
+    algo_arg_parser.add_argument('--noise-type', '--noise_type', type=str, default='adaptive-param_0.2',
             help="Noise used in DDPG.")
     algo_args, rest = algo_arg_parser.parse_known_args(rest)
 

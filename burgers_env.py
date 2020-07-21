@@ -236,11 +236,23 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
 
     def init_cond(self, type="tophat"):
         if type == "smooth_sine":
+            self.grid.set_bc_type("periodic")
             self.grid.u = np.sin(2 * np.pi * self.grid.x)
         elif type == "gaussian":
+            self.grid.set_bc_type("periodic")
             self.grid.u = 1.0 + np.exp(-60.0 * (self.grid.x - 0.5) ** 2)
         elif type == "random":
+            self.grid.set_bc_type("periodic")
             self.grid.u = RandomInitialCondition(self.grid)
+        elif type == "smooth_rare":
+            self.grid.set_bc_type("outflow")
+            k = np.random.uniform(20, 100)
+            self.grid.u = np.tanh(k * (self.grid.x - 0.5))
+        elif type == "accelshock":
+            self.grid.set_bc_type("outflow")
+            index = self.grid.x > 0.25
+            self.grid.u[:] = 3
+            self.grid.u[index] = 3 * (self.grid.x[index] - 1)
         else:
             super().init_cond(type)
         self.grid.uactual[:] = self.grid.u[:]
