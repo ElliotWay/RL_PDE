@@ -229,6 +229,8 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
                                             shape=(2, self.grid.real_length() + 1, 2 * weno_order - 1),
                                             dtype=np.float64)
 
+        self._solution_axes = None
+
         self.reset()
 
     def set_record_weights(self, record_weights):
@@ -505,8 +507,10 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
             print("Render mode: \"" + str(mode) + "\" not currently implemented.")
             sys.exit(0)
 
-    def save_plot(self, suffix=None):
+    def save_plot(self, suffix=None, fixed_axes=False):
         fig = plt.figure()
+
+        ax = plt.gca()
 
         full_x = self.grid.x
         real_x = full_x[self.grid.ilo:self.grid.ihi + 1]
@@ -541,10 +545,18 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         ax = plt.gca()
 
         # Recalculate automatic axis scaling.
-        ax.relim()
-        ax.autoscale_view()
+        #ax.relim()
+        #ax.autoscale_view()
 
         ax.set_title("step=" + str(self.steps))
+
+        if fixed_axes:
+            if self._solution_axes is None:
+                self._solution_axes = (ax.get_xlim(), ax.get_ylim())
+            else:
+                xlim, ylim = self._solution_axes
+                ax.set_xlim(xlim)
+                ax.set_ylim(ylim)
 
         log_dir = logger.get_dir()
         if suffix is None:

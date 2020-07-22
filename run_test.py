@@ -49,10 +49,14 @@ def do_test(env, agent, args):
         rewards.append(reward)
         total_reward += reward
 
+        if args.animate:
+            env.render(fixed_axes=True)
+
         if t >= args.ep_length * (next_update / 10):
             print("step = " + str(t))
             next_update += 1
-            env.render()
+            if not args.animate:
+                env.render(fixed_axes=False)
             if args.plot_weights:
                 env.plot_weights()
 
@@ -65,7 +69,11 @@ def do_test(env, agent, args):
     print("Test finished in " + str(end_time - start_time) + " seconds.")
     print("Total reward was " + str(total_reward) + ".")
 
-    env.render()
+    if args.animate:
+        env.render(fixed_axes=True)
+    else:
+        env.render(fixed_axes=False)
+
     if args.plot_weights:
         env.plot_weights()
 
@@ -104,6 +112,8 @@ def main():
                         help="Set random seed for reproducibility.")
     parser.add_argument('--plot-weights', default=False, action='store_true',
                         help="Plot a comparison of weights across the episode instead of plotting the state.")
+    parser.add_argument('--animate', default=False, action='store_true',
+                        help="Enable animation mode. Plot the state at every timestep, and keep the axes fixed across every plot.")
     parser.add_argument('-y', default=False, action='store_true',
                         help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
     parser.add_argument('-n', default=False, action='store_true',
