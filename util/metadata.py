@@ -29,8 +29,11 @@ def create_meta_file(log_dir, args):
     git_head_file.close()
     re_match = re.match("^ref: ([\w/]*)$", current_head)
     if re_match is None:
-        _ignore = input("Couldn't find git head \".git/HEAD\" in usual spot."
-                        + " Hit <Enter> to continue without recording commit id, or Ctrl-C to stop.")
+        if args.n:
+            raise Exception("Couldn't find git head \".git/HEAD\" to record commit id!".format(args.log_dir))
+        elif not args.y:
+            _ignore = input("Couldn't find git head \".git/HEAD\" in usual spot."
+                            + " Hit <Enter> to continue without recording commit id, or Ctrl-C to stop.")
     else:
         ref_name = re_match.group(1)
         ref_file_name = os.path.join(".git", ref_name)

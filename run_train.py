@@ -63,6 +63,10 @@ def main():
                         help="Set random seed for reproducibility.")
     parser.add_argument('--render', type=str, default="file",
                         help="How to render output. Options are file, human, and none.")
+    parser.add_argument('-y', default=False, action='store_true',
+                        help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
+    parser.add_argument('-n', default=False, action='store_true',
+                        help="Choose no for any questions, namely overwriting existing files. Useful for scripts. Overrides the -y option.")
 
     main_args, rest = parser.parse_known_args()
 
@@ -173,8 +177,11 @@ def main():
     try:
         os.makedirs(args.log_dir)
     except FileExistsError:
-        _ignore = input(("(\"{}\" already exists! Hit <Enter> to overwrite and"
-                        + " continue, Ctrl-C to stop.)").format(args.log_dir))
+        if args.n:
+            raise Exception("Logging directory \"{}\" already exists!.".format(args.log_dir))
+        elif not args.y:
+            _ignore = input(("(\"{}\" already exists! Hit <Enter> to overwrite and"
+                            + " continue, Ctrl-C to stop.)").format(args.log_dir))
         shutil.rmtree(args.log_dir)
         os.makedirs(args.log_dir)
 
