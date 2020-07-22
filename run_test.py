@@ -163,6 +163,12 @@ def main():
         shutil.rmtree(args.log_dir)
         os.makedirs(args.log_dir)
 
+    # Create symlink for convenience.
+    log_link_name = "last"
+    if os.path.islink(log_link_name):
+        os.unlink(log_link_name)
+    os.symlink(args.log_dir, log_link_name, target_is_directory=True)
+
     metadata.create_meta_file(args.log_dir, args)
 
     # Put stable-baselines logs in same directory.
