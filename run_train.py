@@ -53,7 +53,7 @@ def main():
                         help="Name of the environment in which to deploy the agent.")
     parser.add_argument('--log-dir', '--log_dir', type=str, default=None,
                         help="Directory to place log file and other results. Default is log/env/algo/timestamp.")
-    parser.add_argument('--ep-length', '--ep_length', type=int, default=300,
+    parser.add_argument('--ep-length', '--ep_length', type=int, default=500,
                         help="Number of timesteps in an episode.")
     parser.add_argument('--total-timesteps', '--total_timesteps', type=int, default=int(1e5),
                         help="Total number of timesteps to train.")
@@ -77,7 +77,7 @@ def main():
     sub_parser.add_argument('--xmax', type=float, default=1.0)
     sub_parser.add_argument('--nx', type=int, default=128,
                             help="Number of cells into which to discretize x dimension.")
-    sub_parser.add_argument('--order', type=int, default=3,
+    sub_parser.add_argument('--order', type=int, default=2,
                             help="Order of WENO approximation (assuming using WENO environment or agent).")
 
     sub_parser.add_argument('--fixed-timesteps', '--fixed_timesteps', dest='fixed_timesteps', action='store_true',
