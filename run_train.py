@@ -19,6 +19,7 @@ from stable_baselines import logger
 from stable_baselines.ddpg.noise import AdaptiveParamNoiseSpec, OrnsteinUhlenbeckActionNoise, NormalActionNoise
 
 from envs import build_env
+from envs import get_env_arg_parser
 from models.sac import SACBatch
 from models.ddpg import DDPGBatch
 from models.sac import LnScaledMlpPolicy as SACPolicy
@@ -30,10 +31,12 @@ def main():
     parser = argparse.ArgumentParser(
         description="Train an RL agent in an environment. Note that this script also takes various arguments not listed here.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--show-hidden', default=False, action='store_true',
-                        help="Do not train and show the hidden parameters not listed here.")
+    parser.add_argument('--help-env', default=False, action='store_true',
+                        help="Do not train and show the environment parameters not listed here.")
+    parser.add_argument('--help-algo', default=False, action='store_true',
+                        help="Do not train and show the algorithm parameters not listed here.")
     parser.add_argument('--algo', '-a', type=str, default="sac",
-                        help="Algorithm to train with. Currently only \"sac\" accepted.")
+                        help="Algorithm to train with. sac or ddpg, though ddpg hasn't been updated in a while.")
     parser.add_argument('--env', type=str, default="weno_burgers",
                         help="Name of the environment in which to deploy the agent.")
     parser.add_argument('--log-dir', '--log_dir', type=str, default=None,
@@ -55,30 +58,8 @@ def main():
 
     main_args, rest = parser.parse_known_args()
 
-    sub_parser = argparse.ArgumentParser(
-        add_help=False,
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    sub_parser.add_argument('--xmin', type=float, default=0.0)
-    sub_parser.add_argument('--xmax', type=float, default=1.0)
-    sub_parser.add_argument('--nx', type=int, default=128,
-                            help="Number of cells into which to discretize x dimension.")
-    sub_parser.add_argument('--order', type=int, default=2,
-                            help="Order of WENO approximation (assuming using WENO environment or agent).")
-
-    sub_parser.add_argument('--fixed-timesteps', '--fixed_timesteps', dest='fixed_timesteps', action='store_true',
-                            help="TODO: not implemented!")
-    sub_parser.add_argument('--variable-timesteps', '--variable_timesteps', dest='fixed_timesteps', action='store_false')
-    sub_parser.set_defaults(fixed_timesteps=True)
-
-    sub_parser.add_argument('--timestep', type=float, default=0.0005,
-                            help="Set fixed timestep length. TODO: not implemented!")
-    sub_parser.add_argument('--C', type=float, default=0.1,
-                            help="Constant used in choosing variable timestep.")
-
-    sub_parser.add_argument('--init-type', '--init_type', type=str, default="sine",
-                            help="Shape of the initial state.")
-    sub_parser.add_argument('--boundary', '--bc', type=str, default="periodic")
-    sub_args, rest = sub_parser.parse_known_args(rest)
+    env_arg_parser = get_env_arg_parser()
+    env_args, rest = env_arg_parser.parse_known_args(rest)
 
     algo_arg_parser = argparse.ArgumentParser(
             add_help=False,
@@ -99,15 +80,18 @@ def main():
             help="Noise used in DDPG.")
     algo_args, rest = algo_arg_parser.parse_known_args(rest)
 
-    args = Namespace(**vars(main_args), **vars(sub_args), **vars(algo_args))
+    args = Namespace(**vars(main_args), **vars(env_args), **vars(algo_args))
 
     if len(rest) > 0:
-        print("Ignoring unrecognized arguments: " + " ".join(rest))
-        print()
+        print("Unrecognized arguments: " + " ".join(rest))
+        sys.exit(0)
 
-    if args.show_hidden:
-        sub_parser.print_help()
-        return
+    if args.help_env or args.help_algo:
+        if args.help_env:
+            env_arg_parser.print_help()
+        if args.help_algo:
+            algo_arg_parser.print_help()
+        sys.exit(0)
 
     np.random.seed(args.seed)
     tf.set_random_seed(args.seed)

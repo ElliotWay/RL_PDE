@@ -17,6 +17,7 @@ matplotlib.use("Agg")
 from stable_baselines import logger
 
 from envs import build_env
+from envs import get_env_arg_parser
 from weno_agent import StandardWENOAgent
 from stationary_agent import StationaryAgent
 from models.sac import SACBatch
@@ -81,8 +82,8 @@ def main():
     parser = argparse.ArgumentParser(
         description="Deploy an existing RL agent in an environment. Note that this script also takes various arguments not listed here.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--show-hidden', default=False, action='store_true',
-                        help="Do not test and show the hidden parameters not listed here.")
+    parser.add_argument('--help-env', default=False, action='store_true',
+                        help="Do not test and show the environment parameters not listed here.")
     parser.add_argument('--agent', '-a', type=str, default="default",
                         help="Agent to test. Either a file (unimplemented) or a string for a standard agent. \"default\" uses standard weno coefficients.")
     parser.add_argument('--algo', type=str, default="sac",
@@ -107,41 +108,18 @@ def main():
 
     main_args, rest = parser.parse_known_args()
 
-    sub_parser = argparse.ArgumentParser(
-        add_help=False,
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    sub_parser.add_argument('--xmin', type=float, default=0.0)
-    sub_parser.add_argument('--xmax', type=float, default=1.0)
-    sub_parser.add_argument('--nx', type=int, default=128,
-                            help="Number of cells into which to discretize x dimension.")
-    sub_parser.add_argument('--order', type=int, default=3,
-                            help="Order of WENO approximation (assuming using WENO environment or agent).")
+    env_arg_parser = get_env_arg_parser()
+    env_args, rest = env_arg_parser.parse_known_args(rest)
 
-    sub_parser.add_argument('--fixed-timesteps', dest='fixed_timesteps', action='store_true',
-                            help="TODO: not implemented!")
-    sub_parser.add_argument('--variable-timesteps', dest='fixed_timesteps', action='store_false')
-    sub_parser.set_defaults(fixed_timesteps=True)
-
-    sub_parser.add_argument('--timestep', type=float, default=0.0005,
-                            help="Set fixed timestep length. TODO: not implemented!")
-    sub_parser.add_argument('--C', type=float, default=0.1,
-                            help="Constant used in choosing variable timestep.")
-
-    sub_parser.add_argument('--init_type', '--init-type', type=str, default="sine",
-                            help="Shape of the initial state.")
-    sub_parser.add_argument('--boundary', '--bc', type=str, default="periodic")
-
-    sub_args, rest = sub_parser.parse_known_args(rest)
-
-    args = Namespace(**vars(main_args), **vars(sub_args))
+    args = Namespace(**vars(main_args), **vars(env_args))
 
     if len(rest) > 0:
-        print("Ignoring unrecognized arguments: " + " ".join(rest))
-        print()
+        print("Unrecognized arguments: " + " ".join(rest))
+        sys.exit(0)
 
-    if args.show_hidden:
-        sub_parser.print_help()
-        return
+    if args.help_env:
+        env_arg_parser.print_help()
+        sys.exit(0)
 
     np.random.seed(args.seed)
     tf.set_random_seed(args.seed)
