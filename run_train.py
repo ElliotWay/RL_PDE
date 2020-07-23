@@ -18,27 +18,12 @@ matplotlib.use("Agg")
 from stable_baselines import logger
 from stable_baselines.ddpg.noise import AdaptiveParamNoiseSpec, OrnsteinUhlenbeckActionNoise, NormalActionNoise
 
-from burgers import Grid1d
-from burgers_env import WENOBurgersEnv
+from envs import build_env
 from models.sac import SACBatch
 from models.ddpg import DDPGBatch
 from models.sac import LnScaledMlpPolicy as SACPolicy
 from models.ddpg import LnMlpPolicy as DDPGPolicy
 from util import metadata
-
-
-# TODO put this in separate environment file
-def build_env(args):
-    if args.env == "weno_burgers":
-        num_ghosts = args.order + 1
-        grid = Grid1d(nx=args.nx, ng=num_ghosts, xmin=args.xmin, xmax=args.xmax, bc=args.boundary)
-        env = WENOBurgersEnv(grid=grid, C=args.C, weno_order=args.order, episode_length=args.ep_length,
-                             init_type=args.init_type)
-    else:
-        print("Unrecognized environment type: \"" + str(args.env) + "\".")
-        sys.exit(0)
-
-    return env
 
 
 def main():
@@ -127,8 +112,8 @@ def main():
     np.random.seed(args.seed)
     tf.set_random_seed(args.seed)
 
-    env = build_env(args)
-    eval_env = build_env(args) # Some algos like an extra env for evaluation.
+    env = build_env(args.env, args)
+    eval_env = build_env(args.env, args) # Some algos like an extra env for evaluation.
 
     if args.algo == "sac":
         policy_kwargs = dict(layers=[32, 32])

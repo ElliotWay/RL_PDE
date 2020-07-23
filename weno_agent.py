@@ -1,6 +1,6 @@
 import numpy as np
 
-import weno_coefficients
+import envs.weno_coefficients as weno_coefficients
 
 
 class StandardWENOAgent():

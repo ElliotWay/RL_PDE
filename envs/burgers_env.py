@@ -7,8 +7,8 @@ import numpy as np
 from gym import spaces
 from stable_baselines import logger
 
-import burgers
-import weno_coefficients
+import envs.burgers as burgers
+import envs.weno_coefficients as weno_coefficients
 from util.softmax_box import SoftmaxBox
 from util.misc import create_stencil_indexes
 
@@ -247,8 +247,6 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
             self._init_schedule_index = (self._init_schedule_index + 1) % len(self._init_schedule)
         elif type == "sample":
             type = np.random.choice(self._init_sample_types, p=self._init_sample_probs)
-
-        print("Using initial condition " + type)
 
         if type == "smooth_sine":
             self.grid.set_bc_type("periodic")

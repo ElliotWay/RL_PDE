@@ -16,8 +16,7 @@ matplotlib.use("Agg")
 
 from stable_baselines import logger
 
-from burgers import Grid1d
-from burgers_env import WENOBurgersEnv
+from envs import build_env
 from weno_agent import StandardWENOAgent
 from stationary_agent import StationaryAgent
 from models.sac import SACBatch
@@ -76,20 +75,6 @@ def do_test(env, agent, args):
 
     if args.plot_weights:
         env.plot_weights()
-
-
-# TODO put this in separate environment file
-def build_env(args):
-    if args.env == "weno_burgers":
-        num_ghosts = args.order + 1
-        grid = Grid1d(nx=args.nx, ng=num_ghosts, xmin=args.xmin, xmax=args.xmax, bc=args.boundary)
-        env = WENOBurgersEnv(grid=grid, C=args.C, weno_order=args.order, episode_length=args.ep_length,
-                             init_type=args.init_type)
-    else:
-        print("Unrecognized environment type: \"" + str(args.env) + "\".")
-        sys.exit(0)
-
-    return env
 
 
 def main():
@@ -161,7 +146,7 @@ def main():
     np.random.seed(args.seed)
     tf.set_random_seed(args.seed)
 
-    env = build_env(args)
+    env = build_env(args.env, args)
 
     # Set up logging.
     start_time = time.localtime()
