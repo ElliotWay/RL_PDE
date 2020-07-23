@@ -108,6 +108,7 @@ def main():
 
     main_args, rest = parser.parse_known_args()
 
+
     env_arg_parser = get_env_arg_parser()
     env_args, rest = env_arg_parser.parse_known_args(rest)
 
@@ -138,7 +139,9 @@ def main():
     except FileExistsError:
         if args.n:
             raise Exception("Logging directory \"{}\" already exists!.".format(args.log_dir))
-        elif not args.y:
+        elif args.y:
+            print("\"{}\" already exists, overwriting...".format(args.log_dir))
+        else:
             _ignore = input(("\"{}\" already exists! Hit <Enter> to overwrite and"
                              + " continue, Ctrl-C to stop.").format(args.log_dir))
         shutil.rmtree(args.log_dir)

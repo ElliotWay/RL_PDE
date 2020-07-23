@@ -455,6 +455,9 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
           not passing anything now
         """
 
+        if np.isnan(action).any():
+            raise Exception("NaN detected in action.")
+
         state = self.current_state
 
         # Record weights if that mode is enabled.
@@ -543,6 +546,11 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         if np.max(state) > 1e7 or np.isnan(np.max(state)):
             reward -= max_penalty / 2 * self.steps
             done = True
+
+        if np.isnan(state).any():
+            raise Exception("NaN detected in state.")
+        if np.isnan(reward).any():
+            raise Exception("NaN detected in reward.")
 
         return state, reward, done, {}
 
