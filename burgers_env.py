@@ -231,12 +231,25 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
 
         self._solution_axes = None
 
-        self.reset()
+        self._init_schedule_index = 0
+        self._init_schedule = ["smooth_rare", "smooth_sine", "random", "rarefaction", "accelshock"]
+        self._init_sample_types = self._init_schedule
+        self._init_sample_probs = [0.2, 0.2, 0.2, 0.2, 0.2]
+
+        #self.reset()
 
     def set_record_weights(self, record_weights):
         self.record_weights = record_weights
 
     def init_cond(self, type="tophat"):
+        if type == "schedule":
+            type = self._init_schedule[self._init_schedule_index]
+            self._init_schedule_index = (self._init_schedule_index + 1) % len(self._init_schedule)
+        elif type == "sample":
+            type = np.random.choice(self._init_sample_types, p=self._init_sample_probs)
+
+        print("Using initial condition " + type)
+
         if type == "smooth_sine":
             self.grid.set_bc_type("periodic")
             self.grid.u = np.sin(2 * np.pi * self.grid.x)
@@ -475,6 +488,11 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         # square error on right (misses reward for rightmost interface)
         error = (g.u[g.ilo:g.ihi] - g.uactual[g.ilo:g.ihi]) ** 2
 
+        # Clip tiny errors.
+        #error[error < 0.001] = 0
+        # Enhance extreme errors.
+        #error[error > 0.1] *= 10
+
         # Reward as function of the errors in the stencil.
         # max error across stencil
         #error = (g.uactual - g.u)
@@ -521,7 +539,7 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
 
         full_learned = self.grid.u
         real_learned = full_learned[self.grid.ilo:self.grid.ihi + 1]
-        plt.plot(real_x, real_learned, ls='-', color='k', label="learned")
+        plt.plot(real_x, real_learned, ls='-', color='k', label="RL")
 
         show_ghost = True
         # The ghost arrays slice off one real point so the line connects to the real points.
@@ -605,7 +623,7 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
                 if col == 0:
                     axes[row, col].set_ylabel("WENO")
                 if row == 1:
-                    axes[row, col].set_xlabel("learned")
+                    axes[row, col].set_xlabel("RL")
                 paths = axes[row, col].scatter(x=learned_weights[row, col, :], y=weno_weights[row, col, :], c=color_dim, cmap='viridis')
                 axes[row, col].set(aspect='equal')
         cbar = fig.colorbar(paths, ax=axes.ravel().tolist())

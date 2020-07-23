@@ -53,7 +53,7 @@ def main():
                         help="Name of the environment in which to deploy the agent.")
     parser.add_argument('--log-dir', '--log_dir', type=str, default=None,
                         help="Directory to place log file and other results. Default is log/env/algo/timestamp.")
-    parser.add_argument('--ep-length', '--ep_length', type=int, default=500,
+    parser.add_argument('--ep-length', '--ep_length', type=int, default=300,
                         help="Number of timesteps in an episode.")
     parser.add_argument('--total-timesteps', '--total_timesteps', type=int, default=int(1e5),
                         help="Total number of timesteps to train.")
