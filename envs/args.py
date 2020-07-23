@@ -15,15 +15,15 @@ def get_env_arg_parser():
                         help="Order of WENO approximation (assuming using WENO environment or agent).")
 
     parser.add_argument('--fixed-timesteps', dest='fixed_timesteps', action='store_true',
-                        help="TODO: not implemented!")
+                        help="Use fixed timesteps. (This is enabled by default.)")
     parser.add_argument('--variable-timesteps', dest='fixed_timesteps', action='store_false',
-                        help="TODO: not implemented!")
+                        help="Use variable length timesteps.")
     parser.set_defaults(fixed_timesteps=True)
 
     parser.add_argument('--timestep', type=positive_float, default=0.0005,
-                        help="Set fixed timestep length. TODO: not implemented!")
+                        help="Set fixed timestep length. This value is ignored if --variable-timesteps is enabled.")
     parser.add_argument('--C', type=positive_float, default=0.1,
-                        help="Constant used in choosing variable timestep. TODO: not implemented!")
+                        help="Constant used in choosing variable timestep. This value is not used unless --variable-timesteps is enabled.")
 
     parser.add_argument('--init_type', '--init-type', type=str, default="sine",
                         help="Shape of the initial state.")

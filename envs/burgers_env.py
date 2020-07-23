@@ -206,11 +206,12 @@ def RandomInitialCondition(grid: burgers.Grid1d,
 
 
 class WENOBurgersEnv(burgers.Simulation, gym.Env):
-    metadata = {'render.modes': ['human', 'file']}
+    metadata = {'render.modes': ['file']}
 
-    def __init__(self, grid, C=0.5, weno_order=3, eps=0.0, episode_length=300, init_type="sine", record_weights=False):
+    def __init__(self, grid, fixed_step=0.0005, C=0.5, weno_order=3, eps=0.0, episode_length=300, init_type="sine", record_weights=False):
         self.grid = grid
         self.t = 0.0  # simulation time
+        self.fixed_step = fixed_step
         self.C = C  # CFL number
         self.weno_order = weno_order
         self.eps = eps

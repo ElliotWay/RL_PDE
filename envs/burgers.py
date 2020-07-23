@@ -119,10 +119,12 @@ class Grid1d(object):
 
 class Simulation(object):
 
-    def __init__(self, grid, slope_type="godunov"):
+    def __init__(self, grid, slope_type="godunov", fixed_step=0.0005, C=None):
         self.grid = grid
         self.t = 0.0
         self.slope_type = slope_type
+        self.fixed_step = fixed_step
+        self.C = C
 
     def init_cond(self, type="tophat"):
 
@@ -149,11 +151,11 @@ class Simulation(object):
         else:
             raise Exception("Initial condition type not recognized.")
 
-    def timestep(self, C=None):
-        if C is None:  # return a constant time step
-            return 0.0005
+    def timestep(self):
+        if self.C is None:  # return a constant time step
+            return self.fixed_step
         else:
-            return C * self.grid.dx / max(abs(self.grid.u[self.grid.ilo:
+            return self.C * self.grid.dx / max(abs(self.grid.u[self.grid.ilo:
                                                           self.grid.ihi + 1]))
 
     # new states
