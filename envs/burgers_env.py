@@ -594,7 +594,7 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         #ax.relim()
         #ax.autoscale_view()
 
-        ax.set_title("step=" + str(self.steps))
+        ax.set_title("t = {:.3f}s".format(self.t))
 
         if fixed_axes:
             if self._solution_axes is None:
