@@ -250,8 +250,9 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
             type = np.random.choice(self._init_sample_types, p=self._init_sample_probs)
 
         if type == "smooth_sine":
+            A = 1.0 / (2.0 * np.pi * 0.1)
             self.grid.set_bc_type("periodic")
-            self.grid.u = np.sin(2 * np.pi * self.grid.x)
+            self.grid.u = A*np.sin(2 * np.pi * self.grid.x)
         elif type == "gaussian":
             self.grid.set_bc_type("periodic")
             self.grid.u = 1.0 + np.exp(-60.0 * (self.grid.x - 0.5) ** 2)
