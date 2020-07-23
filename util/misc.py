@@ -1,5 +1,5 @@
 import numpy as np
-
+import argparse
 
 
 # I've started using indexes instead of indices because it bothers me when people use "indice" as the singular.
@@ -30,3 +30,27 @@ def create_stencil_indexes(stencil_size, num_stencils, offset=0):
     """
 
     return offset + np.arange(stencil_size)[None, ...] + np.arange(num_stencils)[..., None]
+
+def positive_float(value):
+    fvalue = float(value)
+    if fvalue <= 0.0:
+        raise argparse.ArgumentTypeError("{} is not positive".format(fvalue))
+    return fvalue
+
+def nonnegative_float(value):
+    fvalue = float(value)
+    if fvalue < 0.0:
+        raise argparse.ArgumentTypeError("{} is not non-negative".format(fvalue))
+    return fvalue
+
+def positive_int(value):
+    ivalue = int(value)
+    if ivalue <= 0:
+        raise argparse.ArgumentTypeError("{} is not positive".format(ivalue))
+    return ivalue
+
+def nonnegative_int(value):
+    ivalue = int(value)
+    if ivalue < 0:
+        raise argparse.ArgumentTypeError("{} is not non-negative".format(ivalue))
+    return ivalue

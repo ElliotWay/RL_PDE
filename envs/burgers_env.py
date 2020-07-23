@@ -208,11 +208,12 @@ def RandomInitialCondition(grid: burgers.Grid1d,
 class WENOBurgersEnv(burgers.Simulation, gym.Env):
     metadata = {'render.modes': ['human', 'file']}
 
-    def __init__(self, grid, C=0.5, weno_order=3, episode_length=300, init_type="sine", record_weights=False):
+    def __init__(self, grid, C=0.5, weno_order=3, eps=0.0, episode_length=300, init_type="sine", record_weights=False):
         self.grid = grid
         self.t = 0.0  # simulation time
         self.C = C  # CFL number
         self.weno_order = weno_order
+        self.eps = eps
         self.init_type = init_type
 
         self.episode_length = episode_length
@@ -308,7 +309,11 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         flux[1:-1] = fpr[1:-1] + fml[1:-1]
         rhs = g.scratch_array()
 
-        rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:])
+        if self.eps > 0.0:
+            R = self.eps * self.lap()
+            rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:]) + R[1:-1]
+        else:
+            rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:])
         return rhs
 
     def Euler_actual(self, dt):
@@ -333,6 +338,27 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         u_start = g.uactual.copy()
         k1 = dt * self.rk_substep_actual()
         g.uactual[g.ilo:g.ihi + 1] = u_start[g.ilo:g.ihi + 1] + k1[g.ilo:g.ihi + 1]
+
+
+    def lap(self):
+        """
+        Returns the Laplacian of g.u.
+
+        This calculation relies on ghost cells, so make sure they have been filled before calling this.
+        """
+
+        gr = self.grid
+        u = gr.u
+
+        lapu = gr.scratch_array()
+
+        ib = gr.ilo - 1
+        ie = gr.ihi + 1
+
+        lapu[ib:ie + 1] = (u[ib - 1:ie] - 2.0 * u[ib:ie + 1] + u[ib + 1:ie + 2]) / gr.dx ** 2
+
+        return lapu
+
 
     def prep_state(self):
         """
@@ -455,7 +481,11 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
 
         flux = fml + fpr
 
-        rhs = (flux[:-1] - flux[1:]) / g.dx
+        if self.eps > 0.0:
+            R = self.eps * self.lap()
+            rhs = (flux[:-1] - flux[1:]) / g.dx + R[g.ilo:g.ihi+1]
+        else:
+            rhs = (flux[:-1] - flux[1:]) / g.dx
 
         u_copy[self.grid.ng:-self.grid.ng] += dt * rhs
         g.u = u_copy

@@ -92,7 +92,7 @@ def main():
                         help="Name of the environment in which to deploy the agent.")
     parser.add_argument('--log-dir', type=str, default=None,
                         help="Directory to place log file and other results. Default is test/env/agent/timestamp.")
-    parser.add_argument('--ep-length', type=int, default=300,
+    parser.add_argument('--ep-length', type=int, default=500,
                         help="Number of timesteps in an episode.")
     parser.add_argument('--seed', type=int, default=1,
                         help="Set random seed for reproducibility.")
