@@ -119,7 +119,7 @@ class Grid1d(object):
 
 class Simulation(object):
 
-    def __init__(self, grid, slope_type="godunov", fixed_step=0.0005, C=None):
+    def __init__(self, grid, slope_type="godunov", fixed_step=0.0005, C=None, boundary=None):
         self.grid = grid
         self.t = 0.0
         self.slope_type = slope_type
@@ -129,13 +129,15 @@ class Simulation(object):
     def init_cond(self, type="tophat"):
 
         if type == "tophat":
-            self.grid.set_bc_type("outflow")
+            if self.boundary is None:
+                self.grid.set_bc_type("outflow")
             self.grid.u[:] = 0.0
             self.grid.u[np.logical_and(self.grid.x >= 0.333,
                                        self.grid.x <= 0.666)] = 1.0
 
         elif type == "sine":
-            self.grid.set_bc_type("periodic")
+            if self.boundary is None:
+                self.grid.set_bc_type("periodic")
             self.grid.u[:] = 1.0
 
             index = np.logical_and(self.grid.x >= 0.333,
@@ -144,7 +146,8 @@ class Simulation(object):
                 0.5 * np.sin(2.0 * np.pi * (self.grid.x[index] - 0.333) / 0.333)
 
         elif type == "rarefaction":
-            self.grid.set_bc_type("outflow")
+            if self.boundary is None:
+                self.grid.set_bc_type("outflow")
             self.grid.u[:] = 1.0
             self.grid.u[self.grid.x > 0.5] = 2.0
         

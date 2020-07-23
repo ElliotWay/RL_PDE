@@ -30,8 +30,9 @@ function accumulate_params()
 	then
 		###########################################################
 		# Adjust the base python command as necessary.
+		# Any parameters that should be the same for every run should go here.
 		###########################################################
-		cmd="python run_test.py"
+		cmd="python run_test.py -n"
 
 		###########################################################
 		# Some arguments, namely log-dir, may require more careful manipulation.

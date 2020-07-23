@@ -14,7 +14,9 @@ def build_env(env_name, args):
                              weno_order=args.order,
                              eps=args.eps,
                              episode_length=args.ep_length,
-                             init_type=args.init_type)
+                             init_type=args.init_type,
+                             boundary=args.boundary
+                             )
     else:
         print("Unrecognized environment type: \"" + str(env_name) + "\".")
         sys.exit(0)

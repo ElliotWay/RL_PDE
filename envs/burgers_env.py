@@ -208,7 +208,7 @@ def RandomInitialCondition(grid: burgers.Grid1d,
 class WENOBurgersEnv(burgers.Simulation, gym.Env):
     metadata = {'render.modes': ['file']}
 
-    def __init__(self, grid, fixed_step=0.0005, C=0.5, weno_order=3, eps=0.0, episode_length=300, init_type="sine", record_weights=False):
+    def __init__(self, grid, fixed_step=0.0005, C=0.5, weno_order=3, eps=0.0, episode_length=300, init_type="sine", boundary=None, record_weights=False):
         self.grid = grid
         self.t = 0.0  # simulation time
         self.fixed_step = fixed_step
@@ -216,6 +216,7 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         self.weno_order = weno_order
         self.eps = eps
         self.init_type = init_type
+        self.boundary = boundary
 
         self.episode_length = episode_length
         self.steps = 0
@@ -252,20 +253,25 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
 
         if type == "smooth_sine":
             A = 1.0 / (2.0 * np.pi * 0.1)
-            self.grid.set_bc_type("periodic")
+            if self.boundary is None:
+                self.grid.set_bc_type("periodic")
             self.grid.u = A*np.sin(2 * np.pi * self.grid.x)
         elif type == "gaussian":
-            self.grid.set_bc_type("periodic")
+            if self.boundary is None:
+                self.grid.set_bc_type("periodic")
             self.grid.u = 1.0 + np.exp(-60.0 * (self.grid.x - 0.5) ** 2)
         elif type == "random":
-            self.grid.set_bc_type("periodic")
+            if self.boundary is None:
+                self.grid.set_bc_type("periodic")
             self.grid.u = RandomInitialCondition(self.grid)
         elif type == "smooth_rare":
-            self.grid.set_bc_type("outflow")
+            if self.boundary is None:
+                self.grid.set_bc_type("outflow")
             k = np.random.uniform(20, 100)
             self.grid.u = np.tanh(k * (self.grid.x - 0.5))
         elif type == "accelshock":
-            self.grid.set_bc_type("outflow")
+            if self.boundary is None:
+                self.grid.set_bc_type("outflow")
             index = self.grid.x > 0.25
             self.grid.u[:] = 3
             self.grid.u[index] = 3 * (self.grid.x[index] - 1)

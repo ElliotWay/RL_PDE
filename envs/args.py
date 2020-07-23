@@ -27,7 +27,8 @@ def get_env_arg_parser():
 
     parser.add_argument('--init_type', '--init-type', type=str, default="sine",
                         help="Shape of the initial state.")
-    parser.add_argument('--boundary', '--bc', type=str, default="periodic")
+    parser.add_argument('--boundary', '--bc', type=str, default=None,
+                        help="The default boundary conditions depend on the init_type. Use --boundary if you want them to be something in particular.")
     parser.add_argument('--eps', type=nonnegative_float, default=0.0,
                         help="Viscosity parameter. Higher eps means more viscous.")
 
