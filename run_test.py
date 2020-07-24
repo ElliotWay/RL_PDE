@@ -178,7 +178,7 @@ def main():
         agent = RandomAgent(order=args.order)
     else:
         if args.algo == "sac":
-            agent = SACBatch.load(args.agent, env=env)
+            agent = SACBatch.load(args.agent)
         else:
             print("Algorithm {} not recognized.".format(args.algo))
         

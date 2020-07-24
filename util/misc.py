@@ -54,3 +54,13 @@ def nonnegative_int(value):
     if ivalue < 0:
         raise argparse.ArgumentTypeError("{} is not non-negative".format(ivalue))
     return ivalue
+
+def rescale(values, source, target):
+    source_low, source_high = source
+    target_low, target_high = target
+
+    descaled = (values - source_low) / (source_high - source_low)
+
+    rescaled = (descaled * (target_high - target_low)) + target_low
+
+    return rescaled

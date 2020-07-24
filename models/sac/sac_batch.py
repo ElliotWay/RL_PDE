@@ -8,12 +8,13 @@ import tensorflow as tf
 from stable_baselines import logger
 from stable_baselines.common import tf_util, OffPolicyRLModel, SetVerbosity, TensorboardWriter
 from stable_baselines.common.buffers import ReplayBuffer
-from stable_baselines.common.math_util import safe_mean, unscale_action, scale_action
+from stable_baselines.common.math_util import safe_mean
 from stable_baselines.common.schedules import get_schedule_fn
 from stable_baselines.common.vec_env import VecEnv
 from stable_baselines.sac.policies import SACPolicy
 
 from util.softmax_box import SoftmaxBox
+from util.misc import rescale
 
 
 class SACBatch(OffPolicyRLModel):
@@ -448,7 +449,7 @@ class SACBatch(OffPolicyRLModel):
                     # actions sampled from action space are from range specific to the environment
                     # but algorithm operates on tanh-squashed actions therefore simple scaling is used
                     # TODO probably need to change action scaling
-                    action = scale_action(self.action_space, unscaled_action)
+                    action = rescale(unscaled_action, [0,1], [-1,1])
                     # PDE Need to store batch actions in buffer later.
                     action_batch = action.transpose((1, 0, 2))
                 else:
@@ -467,10 +468,10 @@ class SACBatch(OffPolicyRLModel):
                         action = np.clip(action + self.action_noise(), -1, 1)
                     # inferred actions need to be transformed to environment action_space before stepping
                     # TODO probably need to change action scaling
-                    unscaled_action = unscale_action(self.action_space, action)
+                    unscaled_action = rescale(action, [-1,1], [0,1])
                     # PDE Make sure the actions sum up to 1 before taking a step
                     unscaled_action = unscaled_action / np.sum(unscaled_action, axis=-1)[:, :, np.newaxis]
-                    action = scale_action(self.action_space, unscaled_action)
+                    #action = scale_action(self.action_space, unscaled_action) # action isn't used after this, I don't think this is needed anyway?
 
                 assert action.shape == self.env.action_space.shape
 
@@ -642,14 +643,14 @@ class SACBatch(OffPolicyRLModel):
             actions = self.policy_tf.step(observation, deterministic=deterministic)
             actions = actions.reshape((-1,) + self.i_action_space.shape)
             actions = actions.transpose((1, 0, 2))
-            unscaled_action = unscale_action(self.action_space, actions)
+            unscaled_action = rescale(actions, [-1,1], [0,1])
             # PDE Make sure the actions sum up to 1 before taking a step
             unscaled_action = unscaled_action / np.sum(unscaled_action, axis=-1)[..., np.newaxis]
             return unscaled_action, None
         else:
             action = self.policy_tf.step(observation, deterministic=deterministic)
             actions = action.reshape(self.i_action_space.shape)
-            unscaled_action = unscale_action(self.action_space, actions)
+            unscaled_action = rescale(actions, [-1,1], [0,1])
             # PDE Make sure the actions sum up to 1 before taking a step
             unscaled_action = unscaled_action / np.sum(unscaled_action, axis=-1)[..., np.newaxis]
             return unscaled_action, None
