@@ -392,7 +392,7 @@ class SACBatch(OffPolicyRLModel):
 
     def learn(self, total_timesteps, callback=None,
               log_interval=4, tb_log_name="SAC", reset_num_timesteps=True, replay_wrapper=None,
-              render=None, render_every_step=False):
+              render=None, render_every=None):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
         callback = self._init_callback(callback)
@@ -433,10 +433,10 @@ class SACBatch(OffPolicyRLModel):
             ep_steps = 0
 
             for step in range(total_timesteps):
-                if render_every_step:
+                if render_every is not None and ep_steps % render_every == 0:
                     self.env.render(mode=render, fixed_axes=True,
                                     suffix="_ep_{:03d}_step_{:03d}".format(len(episode_rewards), ep_steps),
-                                    title="Episode {:03d}, t = {:05.4f}".format(len(episode_rewards), env.t))
+                                    title="Episode {:03d}, t = {:05.4f}".format(len(episode_rewards), self.env.t))
 
                 # Before training starts, randomly sample actions
                 # from a uniform distribution for better exploration.
@@ -556,10 +556,11 @@ class SACBatch(OffPolicyRLModel):
                 episode_rewards[-1] += reward_
                 if done:
                     if render is not None:
-                        if (log_interval is not None and len(episode_rewards) % log_interval == 0) or render_every_step:
+                        if ((log_interval is not None and len(episode_rewards) % log_interval == 0) 
+                            or (render_every is not None)):
                             self.env.render(mode=render, fixed_axes=True,
                                             suffix="_ep_{:03d}_step_{:03d}".format(len(episode_rewards), ep_steps),
-                                            title="Episode {:03d}, t = {:05.4f}".format(len(episode_rewards), env.t))
+                                            title="Episode {:03d}, t = {:05.4f}".format(len(episode_rewards), self.env.t))
                     if self.action_noise is not None:
                         self.action_noise.reset()
                     if not isinstance(self.env, VecEnv):
