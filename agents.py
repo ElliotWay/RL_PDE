@@ -76,3 +76,98 @@ class StandardWENOAgent():
         weights_fm = alpha_fm / (np.sum(alpha_fm, axis=-1)[:, None])
 
         return np.array([weights_fp, weights_fm])
+
+
+
+class StationaryAgent():
+    """ Agent that always returns vectors of 0s, causing the environment to stay still. """
+
+    def __init__(self, order=3):
+        
+        self.order = order
+
+    def predict(self, state):
+
+        state_shape = list(state.shape)
+        state_shape[-1] = self.order
+        action_shape = tuple(state_shape)
+
+        return np.zeros(action_shape), None
+
+
+class EqualAgent():
+    """ Agent that always returns vectors of equal weight for each stencil. """
+
+    def __init__(self, order=3):
+        
+        self.order = order
+
+    def predict(self, state):
+
+        action_shape = list(state.shape)
+        action_shape[-1] = self.order
+        action_shape = tuple(action_shape)
+
+        return np.full(action_shape, 1.0 / self.order), None
+
+
+class MiddleAgent():
+    """ Agent that gives the middle stencil a weight of 1, and the rest 0. """
+
+    def __init__(self, order=3):
+        
+        self.order = order
+
+    def predict(self, state):
+
+        action_shape = list(state.shape)
+        action_shape[-1] = self.order
+        action_shape = tuple(action_shape)
+
+        middle = int(self.order / 2)
+
+        weights = np.zeros(action_shape)
+        weights[..., middle] = 1.0
+
+        return weights, None
+
+
+class LeftAgent():
+    """ Agent that gives the leftmost stencil a weight of 1, and the rest 0. """
+
+    def __init__(self, order=3):
+        
+        self.order = order
+
+    def predict(self, state):
+
+        action_shape = list(state.shape)
+        action_shape[-1] = self.order
+        action_shape = tuple(action_shape)
+
+        middle = int(self.order / 2)
+
+        weights = np.zeros(action_shape)
+        weights[..., 0] = 1.0
+
+        return weights, None
+
+
+class RightAgent():
+    """ Agent that gives the rightmost stencil a weight of 1, and the rest 0. """
+
+    def __init__(self, order=3):
+        
+        self.order = order
+
+    def predict(self, state):
+
+        action_shape = list(state.shape)
+        action_shape[-1] = self.order
+        action_shape = tuple(action_shape)
+
+        weights = np.zeros(action_shape)
+        weights[..., -1] = 1.0
+
+        return weights, None
+

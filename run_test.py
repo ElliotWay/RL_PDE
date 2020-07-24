@@ -18,8 +18,7 @@ from stable_baselines import logger
 
 from envs import build_env
 from envs import get_env_arg_parser
-from weno_agent import StandardWENOAgent
-from stationary_agent import StationaryAgent
+from agents import StandardWENOAgent, StationaryAgent, EqualAgent, MiddleAgent, LeftAgent, RightAgent
 from models.sac import SACBatch
 from util import metadata
 
@@ -167,6 +166,14 @@ def main():
         agent = StandardWENOAgent(order=args.order)
     elif args.agent == "stationary":
         agent = StationaryAgent(order=args.order)
+    elif args.agent == "equal":
+        agent = EqualAgent(order=args.order)
+    elif args.agent == "middle":
+        agent = MiddleAgent(order=args.order)
+    elif args.agent == "left":
+        agent = LeftAgent(order=args.order)
+    elif args.agent == "right":
+        agent = RightAgent(order=args.order)
     else:
         if args.algo == "sac":
             agent = SACBatch.load(args.agent, env=env)
