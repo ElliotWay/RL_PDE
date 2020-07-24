@@ -157,10 +157,13 @@ def main():
         os.makedirs(args.log_dir)
 
     # Create symlink for convenience.
-    log_link_name = "last"
-    if os.path.islink(log_link_name):
-        os.unlink(log_link_name)
-    os.symlink(args.log_dir, log_link_name, target_is_directory=True)
+    try:
+        log_link_name = "last"
+        if os.path.islink(log_link_name):
+            os.unlink(log_link_name)
+        os.symlink(args.log_dir, log_link_name, target_is_directory=True)
+    except OSError:
+        print("Failed to create \"last\" symlink. Maybe you're a non-admin on a Windows machine?")
 
     metadata.create_meta_file(args.log_dir, args)
 
