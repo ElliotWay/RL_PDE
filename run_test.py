@@ -18,7 +18,7 @@ from stable_baselines import logger
 
 from envs import build_env
 from envs import get_env_arg_parser
-from agents import StandardWENOAgent, StationaryAgent, EqualAgent, MiddleAgent, LeftAgent, RightAgent
+from agents import StandardWENOAgent, StationaryAgent, EqualAgent, MiddleAgent, LeftAgent, RightAgent, RandomAgent
 from models.sac import SACBatch
 from util import metadata
 
@@ -174,6 +174,8 @@ def main():
         agent = LeftAgent(order=args.order)
     elif args.agent == "right":
         agent = RightAgent(order=args.order)
+    elif args.agent == "random":
+        agent = RandomAgent(order=args.order)
     else:
         if args.algo == "sac":
             agent = SACBatch.load(args.agent, env=env)

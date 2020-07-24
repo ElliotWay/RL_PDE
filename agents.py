@@ -171,3 +171,21 @@ class RightAgent():
 
         return weights, None
 
+class RandomAgent():
+    """ Agent that gives random weights (that still add up to 1). """
+
+    def __init__(self, order=3):
+
+        self.order = order
+
+    def predict(self, state):
+
+        action_shape = list(state.shape)
+        action_shape[-1] = self.order
+        action_shape = tuple(action_shape)
+
+        # Do Gaussian sample, then apply softmax.
+        random_logits = np.random.normal(size=action_shape)
+        exp_logits = np.exp(random_logits)
+
+        return exp_logits / (np.sum(exp_logits, axis=-1)[..., None])

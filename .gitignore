@@ -7,3 +7,5 @@ test/
 !test_good.png
 !good_*.png
 last
+*sh
+!param_sweep_template.sh
