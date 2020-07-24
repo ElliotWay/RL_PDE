@@ -105,8 +105,9 @@ def main():
     parser.add_argument('-n', default=False, action='store_true',
                         help="Choose no for any questions, namely overwriting existing files. Useful for scripts. Overrides the -y option.")
 
-
     main_args, rest = parser.parse_known_args()
+
+    # TODO: add system to automatically read parameters from model's meta file.
 
 
     env_arg_parser = get_env_arg_parser()

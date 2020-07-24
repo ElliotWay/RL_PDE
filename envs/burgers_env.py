@@ -569,10 +569,8 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
             print("Render mode: \"" + str(mode) + "\" not currently implemented.")
             sys.exit(0)
 
-    def save_plot(self, suffix=None, fixed_axes=False):
+    def save_plot(self, suffix=None, title=None, fixed_axes=False, no_x_borders=False, show_ghost=True):
         fig = plt.figure()
-
-        ax = plt.gca()
 
         full_x = self.grid.x
         real_x = full_x[self.grid.ilo:self.grid.ihi + 1]
@@ -585,7 +583,6 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         real_learned = full_learned[self.grid.ilo:self.grid.ihi + 1]
         plt.plot(real_x, real_learned, ls='-', color='k', label="RL")
 
-        show_ghost = True
         # The ghost arrays slice off one real point so the line connects to the real points.
         # Leave off labels for these lines so they don't show up in the legend.
         if show_ghost:
@@ -610,7 +607,13 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         #ax.relim()
         #ax.autoscale_view()
 
-        ax.set_title("t = {:.3f}s".format(self.t))
+        if title is None:
+            title = "t = {:.3f}s".format(self.t)
+
+        ax.set_title(title)
+
+        if no_x_borders:
+            ax.set_xmargin(0.0)
 
         if fixed_axes:
             if self._solution_axes is None:

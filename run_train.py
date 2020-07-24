@@ -41,7 +41,7 @@ def main():
                         help="Name of the environment in which to deploy the agent.")
     parser.add_argument('--log-dir', '--log_dir', type=str, default=None,
                         help="Directory to place log file and other results. Default is log/env/algo/timestamp.")
-    parser.add_argument('--ep-length', '--ep_length', type=int, default=300,
+    parser.add_argument('--ep-length', '--ep_length', type=int, default=250,
                         help="Number of timesteps in an episode.")
     parser.add_argument('--total-timesteps', '--total_timesteps', type=int, default=int(1e5),
                         help="Total number of timesteps to train.")
@@ -51,6 +51,8 @@ def main():
                         help="Set random seed for reproducibility.")
     parser.add_argument('--render', type=str, default="file",
                         help="How to render output. Options are file, human, and none.")
+    parser.add_argument('--animate', default=False, action='store_true',
+                        help="Enable animation mode. Plot the state at every timestep, and keep the axes fixed across every plot.")
     parser.add_argument('-y', default=False, action='store_true',
                         help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
     parser.add_argument('-n', default=False, action='store_true',
@@ -169,7 +171,10 @@ def main():
     # Call model.learn().
     signal.signal(signal.SIGINT, signal.default_int_handler)
     try:
-        model.learn(total_timesteps=args.total_timesteps, log_interval=args.log_freq, render=args.render)
+        if args.animate:
+            model.learn(total_timesteps=args.total_timesteps, log_interval=args.log_freq, render=args.render, render_every_step=True)
+        else:
+            model.learn(total_timesteps=args.total_timesteps, log_interval=args.log_freq, render=args.render)
     except KeyboardInterrupt:
         print("Training stopped by interrupt.")
         metadata.log_finish_time(args.log_dir, status="stopped by interrupt")

@@ -392,7 +392,7 @@ class SACBatch(OffPolicyRLModel):
 
     def learn(self, total_timesteps, callback=None,
               log_interval=4, tb_log_name="SAC", reset_num_timesteps=True, replay_wrapper=None,
-              render=None):
+              render=None, render_every_step=False):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
         callback = self._init_callback(callback)
@@ -430,7 +430,14 @@ class SACBatch(OffPolicyRLModel):
             callback.on_training_start(locals(), globals())
             callback.on_rollout_start()
 
+            ep_steps = 0
+
             for step in range(total_timesteps):
+                if render_every_step:
+                    self.env.render(mode=render, fixed_axes=True,
+                                    suffix="_ep_{:03d}_step_{:03d}".format(len(episode_rewards), ep_steps),
+                                    title="Episode {:03d}, t = {:05.4f}".format(len(episode_rewards), env.t))
+
                 # Before training starts, randomly sample actions
                 # from a uniform distribution for better exploration.
                 # Afterwards, use the learned policy
@@ -478,6 +485,7 @@ class SACBatch(OffPolicyRLModel):
                 # new_obs_batch = (new_obs_batch - new_obs_batch.mean(axis=0)) / new_obs_batch.std(axis=0)
 
                 self.num_timesteps += 1
+                ep_steps += 1
 
                 # Only stop training if return value is False, not when it is None. This is for backwards
                 # compatibility with callbacks that have no return statement.
@@ -547,8 +555,11 @@ class SACBatch(OffPolicyRLModel):
 
                 episode_rewards[-1] += reward_
                 if done:
-                    if render is not None and log_interval is not None and len(episode_rewards) % log_interval == 0:
-                        self.env.render(mode=render, suffix="_ep" + str(len(episode_rewards)))
+                    if render is not None:
+                        if (log_interval is not None and len(episode_rewards) % log_interval == 0) or render_every_step:
+                            self.env.render(mode=render, fixed_axes=True,
+                                            suffix="_ep_{:03d}_step_{:03d}".format(len(episode_rewards), ep_steps),
+                                            title="Episode {:03d}, t = {:05.4f}".format(len(episode_rewards), env.t))
                     if self.action_noise is not None:
                         self.action_noise.reset()
                     if not isinstance(self.env, VecEnv):
@@ -557,6 +568,8 @@ class SACBatch(OffPolicyRLModel):
                         obs_batch = obs.transpose((1, 0, 2))
                         obs_batch = np.apply_along_axis(self.normalize_obs, -1, obs_batch)
                     episode_rewards.append(0.0)
+
+                    ep_steps = 0
 
                     maybe_is_success = info.get('is_success')
                     if maybe_is_success is not None:
