@@ -49,7 +49,7 @@ def do_test(env, agent, args):
         total_reward += reward
 
         if args.animate:
-            env.render(fixed_axes=True)
+            env.render(fixed_axes=True, no_x_borders=True, show_ghost=False)
 
         if t >= args.ep_length * (next_update / 10):
             print("step = " + str(t))
@@ -59,7 +59,7 @@ def do_test(env, agent, args):
             if args.plot_weights:
                 env.plot_weights()
 
-            # TODO: log other information, probably
+            # TODO: log other information?
 
         t += 1
 
@@ -69,7 +69,7 @@ def do_test(env, agent, args):
     print("Total reward was " + str(total_reward) + ".")
 
     if args.animate:
-        env.render(fixed_axes=True)
+        env.render(fixed_axes=True, no_x_borders=True, show_ghost=False)
     else:
         env.render(fixed_axes=False)
 

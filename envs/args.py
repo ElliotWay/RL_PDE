@@ -20,7 +20,7 @@ def get_env_arg_parser():
                         help="Use variable length timesteps.")
     parser.set_defaults(fixed_timesteps=True)
 
-    parser.add_argument('--timestep', type=positive_float, default=0.0004,
+    parser.add_argument('--timestep', '--dt', type=positive_float, default=0.0004,
                         help="Set fixed timestep length. This value is ignored if --variable-timesteps is enabled.")
     parser.add_argument('--C', type=positive_float, default=0.1,
                         help="Constant used in choosing variable timestep. This value is not used unless --variable-timesteps is enabled.")
