@@ -224,7 +224,7 @@ class PreciseWENOSolution(SolutionBase):
 
 class ImplicitSolution(SolutionBase):
 
-    def __init__(self, xmin, xmax, nx, ng, epsilon=1e-15):
+    def __init__(self, xmin, xmax, nx, ng, epsilon=1e-10):
         self.epsilon = epsilon
         super().__init__(xmin, xmax, nx, ng)
 
