@@ -44,6 +44,7 @@ class PreciseWENOSolution(SolutionBase):
             self.extra_ghosts = 0
         self.precise_grid = Grid1d(xmin=xmin, xmax=xmax, nx=self.precise_nx, ng=self.precise_ng,
                                    boundary=boundary, init_type=init_type)
+
         self.flux_function = flux_function
         self.eps = eps
         self.order = precise_order

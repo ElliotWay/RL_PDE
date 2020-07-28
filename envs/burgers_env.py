@@ -193,7 +193,7 @@ class WENOBurgersEnv(gym.Env):
             xmin=0.0, xmax=1.0, nx=128, boundary=None, init_type="smooth_sine",
             fixed_step=0.0005, C=0.5,
             weno_order=3, eps=0.0, episode_length=300,
-            precise_weno_order=None, precise_scale=3,
+            precise_weno_order=None, precise_scale=1,
             record_weights=False):
 
         self.ng = weno_order+1
@@ -207,7 +207,6 @@ class WENOBurgersEnv(gym.Env):
         else:
             if precise_weno_order is None:
                 precise_weno_order = weno_order
-            precise_weno_order = 3
             self.solution = PreciseWENOSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng,
                                                 precise_scale=precise_scale, precise_order=precise_weno_order,
                                                 boundary=boundary, init_type=init_type, flux_function=flux)
