@@ -7,13 +7,11 @@ import numpy as np
 from gym import spaces
 from stable_baselines import logger
 
-import envs.burgers as burgers
+from envs.grid import Grid1d
+from envs.solutions import PreciseWENOSolution, SmoothSineSolution, SmoothRareSolution
 import envs.weno_coefficients as weno_coefficients
 from util.softmax_box import SoftmaxBox
 from util.misc import create_stencil_indexes
-
-
-# TODO: write in a way that does not require ng=order
 
 # Used in step function to extract all the stencils.
 def weno_i_stencils_batch(order, q_batch):
@@ -184,39 +182,41 @@ def weno_new(order, q):
     return qL
 
 
-def RandomInitialCondition(grid: burgers.Grid1d,
-                           # seed: int = 44,
-                           # offset: float = 0.0,
-                           amplitude: float = 1.0,
-                           k_min: int = 2,
-                           k_max: int = 10):
-    """ Generate random initial conditions """
-    # rs = np.random.RandomState(seed)
-    if k_min % 2 == 1:
-        k_min += 1
-    if k_max % 2 == 2:
-        k_max += 1
-    step = (k_max - k_min) / 2
-    k_values = np.arange(k_min, k_max, 2)
-    # print(k_values)
-    k = np.random.choice(k_values, 1)
-    b = np.random.uniform(-amplitude, amplitude, 1)
-    a = 3.5 - np.abs(b)
-    return a + b * np.sin(k * np.pi * grid.x / (grid.xmax - grid.xmin))
+def flux(q):
+    return 0.5 * q ** 2
 
 
-class WENOBurgersEnv(burgers.Simulation, gym.Env):
+class WENOBurgersEnv(gym.Env):
     metadata = {'render.modes': ['file']}
 
-    def __init__(self, grid, fixed_step=0.0005, C=0.5, weno_order=3, eps=0.0, episode_length=300, init_type="sine", boundary=None, record_weights=False):
-        self.grid = grid
+    def __init__(self,
+            xmin=0.0, xmax=1.0, nx=128, boundary=None, init_type="smooth_sine",
+            fixed_step=0.0005, C=0.5,
+            weno_order=3, eps=0.0, episode_length=300,
+            precise_weno_order=None, precise_scale=3,
+            record_weights=False):
+
+        self.ng = weno_order+1
+        self.nx = nx
+        self.grid = Grid1d(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng, boundary=boundary, init_type=init_type)
+
+        if init_type == "smooth_sine":
+            self.solution = SmoothSineSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng)
+        elif init_type == "smooth_rare":
+            self.solution = SmoothRareSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng)
+        else:
+            if precise_weno_order is None:
+                precise_weno_order = weno_order
+            precise_weno_order = 3
+            self.solution = PreciseWENOSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng,
+                                                precise_scale=precise_scale, precise_order=precise_weno_order,
+                                                boundary=boundary, init_type=init_type, flux_function=flux)
+
         self.t = 0.0  # simulation time
         self.fixed_step = fixed_step
         self.C = C  # CFL number
         self.weno_order = weno_order
         self.eps = eps
-        self.init_type = init_type
-        self.boundary = boundary
 
         self.episode_length = episode_length
         self.steps = 0
@@ -234,55 +234,14 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
 
         self._solution_axes = None
 
-        self._init_schedule_index = 0
-        self._init_schedule = ["smooth_rare", "smooth_sine", "random", "rarefaction", "accelshock"]
-        self._init_sample_types = self._init_schedule
-        self._init_sample_probs = [0.2, 0.2, 0.2, 0.2, 0.2]
-
-        #self.reset()
 
     def set_record_weights(self, record_weights):
         self.record_weights = record_weights
 
-    def init_cond(self, type="tophat"):
-        if type == "schedule":
-            type = self._init_schedule[self._init_schedule_index]
-            self._init_schedule_index = (self._init_schedule_index + 1) % len(self._init_schedule)
-        elif type == "sample":
-            type = np.random.choice(self._init_sample_types, p=self._init_sample_probs)
-
-        if type == "smooth_sine":
-            A = 1.0 / (2.0 * np.pi * 0.1)
-            if self.boundary is None:
-                self.grid.set_bc_type("periodic")
-            self.grid.u = A*np.sin(2 * np.pi * self.grid.x)
-        elif type == "gaussian":
-            if self.boundary is None:
-                self.grid.set_bc_type("periodic")
-            self.grid.u = 1.0 + np.exp(-60.0 * (self.grid.x - 0.5) ** 2)
-        elif type == "random":
-            if self.boundary is None:
-                self.grid.set_bc_type("periodic")
-            self.grid.u = RandomInitialCondition(self.grid)
-        elif type == "smooth_rare":
-            if self.boundary is None:
-                self.grid.set_bc_type("outflow")
-            k = np.random.uniform(20, 100)
-            self.grid.u = np.tanh(k * (self.grid.x - 0.5))
-        elif type == "accelshock":
-            if self.boundary is None:
-                self.grid.set_bc_type("outflow")
-            index = self.grid.x > 0.25
-            self.grid.u[:] = 3
-            self.grid.u[index] = 3 * (self.grid.x[index] - 1)
-        else:
-            super().init_cond(type)
-        self.grid.uactual[:] = self.grid.u[:]
-
-        # This is the only thing unique to Burgers, could we make this a general class with this as a parameter?
-
     def burgers_flux(self, q):
+        # This is the only thing unique to Burgers, could we make this a general class with this as a parameter?
         return 0.5 * q ** 2
+
 
     def rk_substep_actual(self):
 
@@ -368,6 +327,14 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         return lapu
 
 
+    def timestep(self):
+        if self.C is None:  # return a constant time step
+            return self.fixed_step
+        else:
+            return self.C * self.grid.dx / max(abs(self.grid.u[self.grid.ilo:
+                                                          self.grid.ihi + 1]))
+
+
     def prep_state(self):
         """
         Return state at current time step. Returns fpr and fml vector slices.
@@ -382,9 +349,6 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         """
         # get the solution data
         g = self.grid
-
-        # apply boundary conditions
-        g.fill_BCs()
 
         # compute flux at each point
         f = self.burgers_flux(g.u)
@@ -427,13 +391,11 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         Initial state.
 
         """
+        self.grid.reset()
+        self.solution.reset(**self.grid.init_params)
 
         self.t = 0.0
         self.steps = 0
-        if self.init_type is None:
-            self.init_cond("random")
-        else:
-            self.init_cond(self.init_type)
 
         self._all_learned_weights = []
         self._all_weno_weights = []
@@ -479,11 +441,10 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         done = False
         g = self.grid
 
-        # Store the data at the start of the time step      
-        u_copy = g.u.copy()
+        # Store the data at the start of the time step
+        u_copy = g.get_real()
 
-        # passing self.C will cause this to take variable time steps
-        # for now work with constant time step = 0.0005
+        # Should probably find a way to pass this to agent if dt varies.
         dt = self.timestep()
 
         q_stencils = weno_i_stencils_batch(self.weno_order, state)
@@ -498,13 +459,13 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         else:
             rhs = (flux[:-1] - flux[1:]) / g.dx
 
-        u_copy[self.grid.ng:-self.grid.ng] += dt * rhs
-        g.u = u_copy
+        u_copy += dt * rhs
+        self.grid.update(u_copy)
 
         # update the solution time
         self.t += dt
 
-        # Calculate new state.
+        # Calculate new RL state.
         state = self.prep_state()
 
         self.steps += 1
@@ -514,34 +475,31 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         # compute reward
         # Error-based reward.
         reward = 0.0
-        self.Euler_actual(dt)
-
-        # max error
-        # error = np.max(np.abs(g.u[g.ilo:g.ihi+1]-g.uactual[g.ilo:g.ihi+1]))
-
-        # avg square error between cells
-        # TODO calculate error for each interface in a way that doesn't go into the ghost cells
-        # error = (g.u[g.ilo:g.ihi]-g.uactual[g.ilo:g.ihi])**2
-        # error = (error[:-1] + error[1:]) / 2
-
-        # square error on right (misses reward for rightmost interface)
-        error = (g.u[g.ilo:g.ihi] - g.uactual[g.ilo:g.ihi]) ** 2
+        self.solution.update(dt, self.t)
+        error = self.solution.get_full() - g.get_full()
 
         # Clip tiny errors.
         #error[error < 0.001] = 0
         # Enhance extreme errors.
         #error[error > 0.1] *= 10
 
+        # error = error[self.ng:-self.ng]
+        # These give reward based on error in cell right of interface, so missing reward for rightmost interface.
+        #reward = np.max(np.abs(error))
+        #reward = (error) ** 2
+
         # Reward as function of the errors in the stencil.
         # max error across stencil
-        #error = (g.uactual - g.u)
-        #stencil_indexes = create_stencil_indexes(stencil_size=(self.weno_order*2-1), num_stencils=(g.ihi - g.ilo + 2), offset=(g.ng - self.weno_order))
-        #error_stencils = error[stencil_indexes]
-        #error = np.amax(np.abs(error_stencils), axis=-1)
-        #error = np.sqrt(np.sum(error_stencils**2, axis=-1))
+        stencil_indexes = create_stencil_indexes(
+                stencil_size=(self.weno_order * 2 - 1),
+                num_stencils=(self.nx + 1),
+                offset=(self.ng - self.weno_order))
+        error_stencils = error[stencil_indexes]
+        reward = np.amax(np.abs(error_stencils), axis=-1)
+        #reward = np.sqrt(np.sum(error_stencils**2, axis=-1))
 
         # Squash error.
-        reward = -np.arctan(error)
+        reward = -np.arctan(reward)
         max_penalty = np.pi / 2
         #reward = -error
         #max_penalty = 1e7
@@ -575,7 +533,7 @@ class WENOBurgersEnv(burgers.Simulation, gym.Env):
         full_x = self.grid.x
         real_x = full_x[self.grid.ilo:self.grid.ihi + 1]
 
-        full_actual = self.grid.uactual
+        full_actual = self.solution.get_full()
         real_actual = full_actual[self.grid.ilo:self.grid.ihi + 1]
         plt.plot(real_x, real_actual, ls='-', color='b', label="WENO")
 

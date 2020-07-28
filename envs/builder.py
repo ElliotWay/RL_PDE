@@ -6,16 +6,10 @@ def build_env(env_name, args):
         args.C = None
 
     if env_name == "weno_burgers":
-        num_ghosts = args.order + 1
-        grid = Grid1d(nx=args.nx, ng=num_ghosts, xmin=args.xmin, xmax=args.xmax, bc=args.boundary)
-        env = WENOBurgersEnv(grid=grid,
-                             C=args.C,
-                             fixed_step=args.timestep,
-                             weno_order=args.order,
-                             eps=args.eps,
-                             episode_length=args.ep_length,
-                             init_type=args.init_type,
-                             boundary=args.boundary
+        env = WENOBurgersEnv(xmin=args.xmin, xmax=args.xmax, nx=args.nx,
+                             init_type=args.init_type, boundary=args.boundary,
+                             C=args.C, fixed_step=args.timestep,
+                             weno_order=args.order, eps=args.eps, episode_length=args.ep_length,
                              )
     else:
         print("Unrecognized environment type: \"" + str(env_name) + "\".")
