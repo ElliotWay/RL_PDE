@@ -1,5 +1,4 @@
 from envs import WENOBurgersEnv
-from envs.burgers import Grid1d
 
 def build_env(env_name, args):
     if args.fixed_timesteps:
@@ -10,6 +9,7 @@ def build_env(env_name, args):
                              init_type=args.init_type, boundary=args.boundary,
                              C=args.C, fixed_step=args.timestep,
                              weno_order=args.order, eps=args.eps, episode_length=args.ep_length,
+                             analytical=args.analytical, precise_weno_order=args.precise_order, precise_scale=args.precise_scale
                              )
     else:
         print("Unrecognized environment type: \"" + str(env_name) + "\".")

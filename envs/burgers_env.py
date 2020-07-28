@@ -193,17 +193,20 @@ class WENOBurgersEnv(gym.Env):
             xmin=0.0, xmax=1.0, nx=128, boundary=None, init_type="smooth_sine",
             fixed_step=0.0005, C=0.5,
             weno_order=3, eps=0.0, episode_length=300,
-            precise_weno_order=None, precise_scale=1,
+            analytical=False, precise_weno_order=None, precise_scale=1,
             record_weights=False):
 
         self.ng = weno_order+1
         self.nx = nx
         self.grid = Grid1d(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng, boundary=boundary, init_type=init_type)
 
-        if init_type == "smooth_sine":
-            self.solution = SmoothSineSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng)
-        elif init_type == "smooth_rare":
-            self.solution = SmoothRareSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng)
+        if analytical:
+            if init_type == "smooth_sine":
+                self.solution = SmoothSineSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng)
+            elif init_type == "smooth_rare":
+                self.solution = SmoothRareSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng)
+            else:
+                raise Exception("No analytical solution available for \"{}\" type initial conditions.".format(init_type))
         else:
             if precise_weno_order is None:
                 precise_weno_order = weno_order

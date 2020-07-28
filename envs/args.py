@@ -31,5 +31,12 @@ def get_env_arg_parser():
                         help="The default boundary conditions depend on the init_type. Use --boundary if you want them to be something in particular.")
     parser.add_argument('--eps', type=nonnegative_float, default=0.0,
                         help="Viscosity parameter. Higher eps means more viscous.")
+    parser.add_argument('--analytical', dest='analytical', action='store_true',
+                        help="Use an analytical solution, if available.")
+    parser.add_argument('--precise_order', type=positive_int, default=None,
+                        help="By default the true solution is computed using the same order as used by the agent. Use this parameter to change it.")
+    parser.add_argument('--precise_scale', type=positive_int, default=1,
+                        help="By default the true solution is computed with the same precision as the agent sees. Use this parameter to scale up the"
+                        + " precision. Only odd numbered scales are accepted to make downsampling easier.")
 
     return parser

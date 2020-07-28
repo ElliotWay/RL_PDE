@@ -231,11 +231,27 @@ class ImplicitSolution(SolutionBase):
     def update(self, dt, time):
 
         old_u = self.u
-        new_u = self._iterate(old_u, time)
+        new_u = self.iterate(old_u, time)
+        max_diff = np.max(np.abs(old_u - new_u))
+        prev_diff = 1024
 
-        while (np.max(np.abs(old_u - new_u)) > self.epsilon):
+        count = 0
+        # Stop when we get close, or we start diverging or oscillating.
+        while (max_diff > self.epsilon and max_diff > prev_diff):
+            count += 1
+            if count % 5 == 0:
+                print(count)
+                print(np.max(np.abs(old_u - new_u)))
             old_u = new_u
             new_u = self.iterate(old_u, time)
+
+            prev_diff = max_diff
+            max_diff = np.max(np.abs(old_u - new_u))
+
+        if max_diff == prev_diff:
+            new_u = (old_u + new_u) / 2
+        elif max_diff > prev_diff:
+            new_u = old_u
 
         self.u = new_u
 
