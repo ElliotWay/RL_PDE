@@ -26,11 +26,11 @@ def weno_i_stencils_batch(order, q_batch):
     order : int
       WENO sub-stencil width.
     q_batch : numpy array
-      stencils for each location, shape is [2, grid_width+1, stencil_width].
+      stencils for each location, shape is [grid_width+1, stencil_width].
   
     Returns
     -------
-    Return a batch of stencils
+    Return a batch of stencils of shape [grid_width+1, number of sub-stencils (order)].
   
     """
 
@@ -42,16 +42,11 @@ def weno_i_stencils_batch(order, q_batch):
     # it back around makes the expression simpler.
     a_mat = np.flip(a_mat, axis=-1)
 
-    sub_stencil_size = order
-    num_sub_stencils = order
-    # Adding a row vector and column vector gives us an "outer product" matrix where each row is a sub-stencil.
-    sliding_window_indexes = np.arange(sub_stencil_size)[None, :] + np.arange(num_sub_stencils)[:, None]
+    stencil_indexes = create_stencil_indexes(stencil_size=order, num_stencils=order)
 
-    # [0,:,indexes] causes output to be transposed for some reason
-    q_fp_stencil = np.sum(a_mat * q_batch[0][:, sliding_window_indexes], axis=-1)
-    q_fm_stencil = np.sum(a_mat * q_batch[1][:, sliding_window_indexes], axis=-1)
+    stencils = np.sum(a_mat * q_batch[:, stencil_indexes], axis=-1)
 
-    return np.array([q_fp_stencil, q_fm_stencil])
+    return stencils
 
 
 # Used in weno_new, below.
@@ -224,14 +219,13 @@ class WENOBurgersEnv(gym.Env):
         self.steps = 0
         self.record_weights = record_weights
 
-        # TODO: transpose so grid length is first dimension
-        self.action_space = SoftmaxBox(low=0.0, high=1.0, shape=(2, self.grid.real_length() + 1, weno_order),
+        self.action_space = SoftmaxBox(low=0.0, high=1.0, shape=(self.grid.real_length() + 1, 2, weno_order),
                                        dtype=np.float64)
         # self.action_space = spaces.Box(low=0.0, high=1.0, shape=(2 * (self.grid.real_length() + 1) * weno_order,),
         #                               dtype=np.float64)
         # self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(2, self.grid.real_length() + 1, 2*weno_order - 1), dtype=np.float64)
         self.observation_space = spaces.Box(low=-1e10, high=1e10,
-                                            shape=(2, self.grid.real_length() + 1, 2 * weno_order - 1),
+                                            shape=(self.grid.real_length() + 1, 2, 2 * weno_order - 1),
                                             dtype=np.float64)
 
         self._solution_axes = None
@@ -345,7 +339,7 @@ class WENOBurgersEnv(gym.Env):
         -------
         state: np array.
             State vector to be sent to the policy. 
-            Size: 2 (one for fp and one for fm) BY grid_size BY stencil_size
+            Size: (grid_size + 1) BY 2 (one for fp and one for fm) BY stencil_size
             Example: order =3, grid = 128
   
         """
@@ -375,11 +369,10 @@ class WENOBurgersEnv(gym.Env):
         # Flip fm stencils. Not sure how I missed this originally?
         fm_stencils = np.flip(fm_stencils, axis=-1)
 
-        state = np.array([fp_stencils, fm_stencils])
+        # Stack fp and fm on axis 1 so grid position is still axis 0.
+        state = np.stack([fp_stencils, fm_stencils], axis=1)
 
-        # TODO: transpose state so nx is first dimension. This makes it the batch dimension.
-
-        # save this state so that we can use it to compute next state
+        # save this state for convenience
         self.current_state = state
 
         return state
@@ -412,8 +405,7 @@ class WENOBurgersEnv(gym.Env):
         ----------
         action : np array
           Weights for reconstructing WENO weights. This will be multiplied with the output from weno_stencils
-          size: grid-points X order X 2
-          Note: at each i+1/2 location we have an fpl and fmr.
+          size: (grid-size + 1) X 2 (fp, fm) X order
 
         Returns
         -------
@@ -432,11 +424,14 @@ class WENOBurgersEnv(gym.Env):
 
         state = self.current_state
 
+        fp_state = state[:, 0, :]
+        fm_state = state[:, 1, :]
+
         # Record weights if that mode is enabled.
         if self.record_weights:
             self._all_learned_weights.append(action)
-            weno_weights_fp = weno_weights_batch(self.weno_order, state[0])
-            weno_weights_fm = weno_weights_batch(self.weno_order, state[1])
+            weno_weights_fp = weno_weights_batch(self.weno_order, fp_state)
+            weno_weights_fm = weno_weights_batch(self.weno_order, fm_state)
             weno_weights = np.array([weno_weights_fp, weno_weights_fm])
             self._all_weno_weights.append(weno_weights)
 
@@ -449,9 +444,14 @@ class WENOBurgersEnv(gym.Env):
         # Should probably find a way to pass this to agent if dt varies.
         dt = self.timestep()
 
-        q_stencils = weno_i_stencils_batch(self.weno_order, state)
+        fp_stencils = weno_i_stencils_batch(self.weno_order, fp_state)
+        fm_stencils = weno_i_stencils_batch(self.weno_order, fm_state)
 
-        fpr, fml = np.sum(action * q_stencils, axis=-1)
+        fp_action = action[:, 0, :]
+        fm_action = action[:, 1, :]
+
+        fpr = np.sum(fp_action * fp_stencils, axis=-1)
+        fml = np.sum(fm_action * fm_stencils, axis=-1)
 
         flux = fml + fpr
 
@@ -605,19 +605,19 @@ class WENOBurgersEnv(gym.Env):
         horizontal_size = 1.0 + 4.0 * (self.weno_order)
         fig, axes = plt.subplots(2, self.weno_order, sharex=True, sharey=True, figsize=(horizontal_size, vertical_size))
 
-        # These arrays are time X 2 X (nx+1) X order
+        # These arrays are time X (nx+1) X 2 X order
         learned_weights = np.array(self._all_learned_weights)
         weno_weights = np.array(self._all_weno_weights)
 
         if location is not None:
-            learned_weights = learned_weights[:,:,location,:].transpose((1, 2, 0))
-            weno_weights = weno_weights[:,:,location,:].transpose((1, 2, 0))
+            learned_weights = learned_weights[:,location,:,:].transpose((1, 2, 0))
+            weno_weights = weno_weights[:,location,:,:].transpose((1, 2, 0))
             fig.suptitle("weights at interface " + str(location) + " - 1/2")
         else:
             if timestep is None:
                 timestep = len(self._all_learned_weights) - 1
-            learned_weights = learned_weights[timestep, :, :, :].transpose((0, 2, 1))
-            weno_weights = weno_weights[timestep, :, :, :].transpose((0, 2, 1))
+            learned_weights = learned_weights[timestep, :, :, :].transpose((1, 2, 0))
+            weno_weights = weno_weights[timestep, :, :, :].transpose((1, 2, 0))
             fig.suptitle("weights at step " + str(timestep))
 
         color_dim = np.arange(learned_weights.shape[2])

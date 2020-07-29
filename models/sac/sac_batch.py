@@ -417,10 +417,9 @@ class SACBatch(OffPolicyRLModel):
             if self.action_noise is not None:
                 self.action_noise.reset()
             obs = self.env.reset()
-            # PDE Convert raw obs to batch of obs.
-            obs_batch = obs.transpose((1, 0, 2))
-            obs_batch = np.apply_along_axis(self.normalize_obs, -1, obs_batch)
-            # obs_batch = (obs_batch - obs_batch.mean(axis=0)) / obs_batch.std(axis=0)
+            # PDE Normalize state.
+            obs = np.apply_along_axis(self.normalize_obs, -1, obs)
+            # obs = (obs - obs.mean(axis=0)) / obs.std(axis=0)
             # Retrieve unnormalized observation for saving into the buffer
             if self._vec_normalize_env is not None:
                 obs_ = self._vec_normalize_env.get_original_obs().squeeze()
@@ -448,28 +447,20 @@ class SACBatch(OffPolicyRLModel):
                     unscaled_action = self.env.action_space.sample()
                     # actions sampled from action space are from range specific to the environment
                     # but algorithm operates on tanh-squashed actions therefore simple scaling is used
-                    # TODO probably need to change action scaling
                     action = rescale(unscaled_action, [0,1], [-1,1])
-                    # PDE Need to store batch actions in buffer later.
-                    action_batch = action.transpose((1, 0, 2))
                 else:
                     # PDE Need to collect a batch of actions along the spatial dimension.
                     # PDE However, the step function already accepts observations in batches.
                     action = self.policy_tf.step(obs_batch, deterministic=False).flatten()
                     action = action.reshape((-1,) + (self.i_action_space.shape))
 
-                    # PDE Need to change batch of actions to expected shape.
-                    action_batch = action
-                    action = action_batch.transpose((1, 0, 2))
-
                     # Add noise to the action (improve exploration,
                     # not needed in general)
                     if self.action_noise is not None:
                         action = np.clip(action + self.action_noise(), -1, 1)
                     # inferred actions need to be transformed to environment action_space before stepping
-                    # TODO probably need to change action scaling
                     unscaled_action = rescale(action, [-1,1], [0,1])
-                    # PDE Make sure the actions sum up to 1 before taking a step
+                    # PDE Adjust actions so they sum up to 1.
                     unscaled_action = unscaled_action / np.sum(unscaled_action, axis=-1)[:, :, np.newaxis]
                     #action = scale_action(self.action_space, unscaled_action) # action isn't used after this, I don't think this is needed anyway?
 
@@ -480,10 +471,9 @@ class SACBatch(OffPolicyRLModel):
                 if not hasattr(reward, '__len__'):
                     reward = np.full(new_obs.shape[1], reward)
 
-                # PDE Convert raw obs to batch.
-                new_obs_batch = new_obs.transpose((1, 0, 2))
-                new_obs_batch = np.apply_along_axis(self.normalize_obs, -1, new_obs_batch)
-                # new_obs_batch = (new_obs_batch - new_obs_batch.mean(axis=0)) / new_obs_batch.std(axis=0)
+                # Normalize obs.
+                new_obs = np.apply_along_axis(self.normalize_obs, -1, new_obs)
+                # new_obs = (new_obs - new_obs.mean(axis=0)) / new_obs.std(axis=0)
 
                 self.num_timesteps += 1
                 ep_steps += 1
@@ -494,26 +484,18 @@ class SACBatch(OffPolicyRLModel):
                 if callback.on_step() is False:
                     break
 
-                # TODO change or disable state/reward normalization?
-                # Store only the unnormalized version
-                if self._vec_normalize_env is not None:
-                    new_obs_ = self._vec_normalize_env.get_original_obs().squeeze()
-                    reward_ = self._vec_normalize_env.get_original_reward().squeeze()
-                else:
-                    # Avoid changing the original ones
-                    obs_, new_obs_, reward_ = obs, new_obs, reward
+                # PDE VecEnv stuff used to be here. I deleted it to reduce clutter since we're not using it.
 
                 # Store transition in the replay buffer.
                 # PDE Need to store entire batch.
-                for o, a, r, new_o in zip(obs_batch, action_batch, reward, new_obs_batch):
+                assert(len(obs) == len(action))
+                assert(len(obs) == len(reward))
+                assert(len(obs) == len(new_obs))
+                for o, a, r, new_o in zip(obs, action, reward, new_obs):
                     self.replay_buffer_add(o, a, r, new_o, done, info)
                 obs = new_obs
-                obs_batch = new_obs_batch
 
-                # TODO change or disable state normalization?
-                # Save the unnormalized observation
-                if self._vec_normalize_env is not None:
-                    obs_ = new_obs_
+                # PDE More VecEnv stuff was here.
 
                 # Retrieve reward and episode length if using Monitor wrapper
                 maybe_ep_info = info.get('episode')
@@ -566,9 +548,8 @@ class SACBatch(OffPolicyRLModel):
                         self.action_noise.reset()
                     if not isinstance(self.env, VecEnv):
                         obs = self.env.reset()
-                        # PDE Convert raw obs to batch of obs.
-                        obs_batch = obs.transpose((1, 0, 2))
-                        obs_batch = np.apply_along_axis(self.normalize_obs, -1, obs_batch)
+                        # Normalize initial state.
+                        obs = np.apply_along_axis(self.normalize_obs, -1, obs)
                     episode_rewards.append(0.0)
 
                     ep_steps = 0
@@ -637,12 +618,10 @@ class SACBatch(OffPolicyRLModel):
             assert (len(observation.shape) == 2)
 
         if is_batch:
-            observation = observation.transpose((1, 0, 2))
             observation = np.apply_along_axis(self.normalize_obs, -1, observation)
             # observation = (observation - observation.mean(axis=0)) / observation.std(axis=0)
             actions = self.policy_tf.step(observation, deterministic=deterministic)
             actions = actions.reshape((-1,) + self.i_action_space.shape)
-            actions = actions.transpose((1, 0, 2))
             unscaled_action = rescale(actions, [-1,1], [0,1])
             # PDE Make sure the actions sum up to 1 before taking a step
             unscaled_action = unscaled_action / np.sum(unscaled_action, axis=-1)[..., np.newaxis]
