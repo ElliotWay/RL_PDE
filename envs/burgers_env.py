@@ -86,22 +86,33 @@ def weno_weights_batch(order, q_batch):
 def flux(q):
     return 0.5 * q ** 2
 
+class AbstractBurgersEnv(gym.Env):
+    """
+    An arbitrary environment for the 1D Burgers' equation.
 
-
-class WENOBurgersEnv(gym.Env):
+    This abstract class handles preparation of the state for an agent,
+    the simulation of the baseline state using established methods,
+    and plotting of the current state compared to the baseline state.
+    How the agent sees the state, how the agent's actions are applied to the
+    state, and how the agent's reward is calculated are left to subclasses.
+    Namely, subclasses still need to implement step and reset.
+    Subclasses should make use of self.grid, the Grid1d object that contains
+    the state, and self.solution, the SolutionBase object that contains the
+    baseline state.
+    """
     metadata = {'render.modes': ['file']}
 
     def __init__(self,
             xmin=0.0, xmax=1.0, nx=128, boundary=None, init_type="smooth_sine",
             fixed_step=0.0005, C=0.5,
             weno_order=3, eps=0.0, episode_length=300,
-            analytical=False, precise_weno_order=None, precise_scale=1,
-            record_weights=False):
+            analytical=False, precise_weno_order=None, precise_scale=1):
 
         self.ng = weno_order+1
         self.nx = nx
         self.grid = Grid1d(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng, boundary=boundary, init_type=init_type)
 
+        self.analytical = analytical
         if analytical:
             if init_type == "smooth_sine":
                 self.solution = SmoothSineSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng)
@@ -124,22 +135,15 @@ class WENOBurgersEnv(gym.Env):
 
         self.episode_length = episode_length
         self.steps = 0
-        self.record_weights = record_weights
 
         self.action_space = SoftmaxBox(low=0.0, high=1.0, shape=(self.grid.real_length() + 1, 2, weno_order),
                                        dtype=np.float64)
-        # self.action_space = spaces.Box(low=0.0, high=1.0, shape=(2 * (self.grid.real_length() + 1) * weno_order,),
-        #                               dtype=np.float64)
-        # self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(2, self.grid.real_length() + 1, 2*weno_order - 1), dtype=np.float64)
-        self.observation_space = spaces.Box(low=-1e10, high=1e10,
+        self.observation_space = spaces.Box(low=-1e7, high=1e7,
                                             shape=(self.grid.real_length() + 1, 2, 2 * weno_order - 1),
                                             dtype=np.float64)
 
         self._solution_axes = None
 
-
-    def set_record_weights(self, record_weights):
-        self.record_weights = record_weights
 
     def burgers_flux(self, q):
         # This is the only thing unique to Burgers, could we make this a general class with this as a parameter?
@@ -152,6 +156,7 @@ class WENOBurgersEnv(gym.Env):
 
         This calculation relies on ghost cells, so make sure they have been filled before calling this.
         """
+        # TODO - Where does this function belong? Maybe in Grid1d. Figure it out and move it there.
 
         gr = self.grid
         u = gr.u
@@ -172,6 +177,111 @@ class WENOBurgersEnv(gym.Env):
         else:
             return self.C * self.grid.dx / max(abs(self.grid.u[self.grid.ilo:
                                                           self.grid.ihi + 1]))
+
+
+    def render(self, mode='file', **kwargs):
+        if mode == "file":
+            self.save_plot(**kwargs)
+        else:
+            raise Exception("Render mode: \"" + str(mode) + "\" not currently implemented.")
+
+
+    def save_plot(self, suffix=None, title=None, fixed_axes=False, no_x_borders=False, show_ghost=True):
+        fig = plt.figure()
+
+        full_x = self.grid.x
+        real_x = full_x[self.ng:-self.ng]
+
+        full_actual = self.solution.get_full()
+        real_actual = full_actual[self.ng:-self.ng]
+
+        full_learned = self.grid.u
+        real_learned = full_learned[self.ng:-self.ng]
+
+        # The ghost arrays slice off one real point so the line connects to the real points.
+        # Leave off labels for these lines so they don't show up in the legend.
+        num_ghost_points = self.ng + 1
+        if show_ghost:
+            ghost_x_left = full_x[:num_ghost_points]
+            ghost_x_right = full_x[-num_ghost_points:]
+            ghost_actual_left = full_actual[:num_ghost_points]
+            ghost_actual_right = full_actual[-num_ghost_points:]
+            ghost_blue = "#80b0ff"
+            plt.plot(ghost_x_left, ghost_actual_left, ls='-', color=ghost_blue)
+            plt.plot(ghost_x_right, ghost_actual_right, ls='-', color=ghost_blue)
+            ghost_learned_left = full_learned[:num_ghost_points]
+            ghost_learned_right = full_learned[-num_ghost_points:]
+            ghost_black = "#808080"  # ie grey
+            plt.plot(ghost_x_left, ghost_learned_left, ls='-', color=ghost_black)
+            plt.plot(ghost_x_right, ghost_learned_right, ls='-', color=ghost_black)
+
+        actual_label = "WENO"
+        if self.analytical:
+            actual_label = "Analytical"
+        plt.plot(real_x, real_actual, ls='-', color='b', label=actual_label)
+
+        plt.plot(real_x, real_learned, ls='-', color='k', label="RL")
+        plt.legend()
+
+        ax = plt.gca()
+
+        # Recalculate automatic axis scaling.
+        #ax.relim()
+        #ax.autoscale_view()
+
+        if title is None:
+            title = "t = {:.3f}s".format(self.t)
+
+        ax.set_title(title)
+
+        if no_x_borders:
+            ax.set_xmargin(0.0)
+
+        if fixed_axes:
+            if self._solution_axes is None:
+                self._solution_axes = (ax.get_xlim(), ax.get_ylim())
+            else:
+                xlim, ylim = self._solution_axes
+                ax.set_xlim(xlim)
+                ax.set_ylim(ylim)
+
+        log_dir = logger.get_dir()
+        if suffix is None:
+            step_precision = int(np.ceil(np.log(self.episode_length) / np.log(10)))
+            suffix = ("_t{:0" + str(step_precision) + "}").format(self.steps)
+        filename = 'burgers' + suffix + '.png'
+        filename = os.path.join(log_dir, filename)
+        plt.savefig(filename)
+        print('Saved plot to ' + filename + '.')
+
+        plt.close(fig)
+
+
+    def step(self):
+        raise NotImplementedError()
+
+    def reset(self):
+        raise NotImplementedError()
+
+    def close(self):
+        # Delete references for easier garbage collection.
+        self.grid = None
+        self.solution = None
+
+    def seed(self):
+        # The official Env class has this as part of its interface, but I don't think we need it. Better to set the seed at the experiment level then the environment level
+        pass
+
+
+class WENOBurgersEnv(AbstractBurgersEnv):
+
+    def __init__(self, *args, record_weights=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.record_weights = record_weights
+
+
+    def set_record_weights(self, record_weights):
+        self.record_weights = record_weights
 
 
     def prep_state(self):
@@ -220,6 +330,7 @@ class WENOBurgersEnv(gym.Env):
 
         return state
 
+
     def reset(self):
         """
         Reset the environment.
@@ -239,6 +350,7 @@ class WENOBurgersEnv(gym.Env):
         self._all_weno_weights = []
 
         return self.prep_state()
+
 
     def step(self, action):
         """
@@ -365,77 +477,6 @@ class WENOBurgersEnv(gym.Env):
 
         return state, reward, done, {}
 
-    def render(self, mode='file', **kwargs):
-        if mode == "file":
-            self.save_plot(**kwargs)
-        else:
-            print("Render mode: \"" + str(mode) + "\" not currently implemented.")
-            sys.exit(0)
-
-    def save_plot(self, suffix=None, title=None, fixed_axes=False, no_x_borders=False, show_ghost=True):
-        fig = plt.figure()
-
-        full_x = self.grid.x
-        real_x = full_x[self.grid.ilo:self.grid.ihi + 1]
-
-        full_actual = self.solution.get_full()
-        real_actual = full_actual[self.grid.ilo:self.grid.ihi + 1]
-        plt.plot(real_x, real_actual, ls='-', color='b', label="WENO")
-
-        full_learned = self.grid.u
-        real_learned = full_learned[self.grid.ilo:self.grid.ihi + 1]
-        plt.plot(real_x, real_learned, ls='-', color='k', label="RL")
-
-        # The ghost arrays slice off one real point so the line connects to the real points.
-        # Leave off labels for these lines so they don't show up in the legend.
-        if show_ghost:
-            ghost_x_left = full_x[:self.grid.ilo + 1]
-            ghost_x_right = full_x[self.grid.ihi:]
-            ghost_actual_left = full_actual[:self.grid.ilo + 1]
-            ghost_actual_right = full_actual[self.grid.ihi:]
-            ghost_blue = "#80b0ff"
-            plt.plot(ghost_x_left, ghost_actual_left, ls='-', color=ghost_blue)
-            plt.plot(ghost_x_right, ghost_actual_right, ls='-', color=ghost_blue)
-            ghost_learned_left = full_learned[:self.grid.ilo + 1]
-            ghost_learned_right = full_learned[self.grid.ihi:]
-            ghost_black = "#808080"  # ie grey
-            plt.plot(ghost_x_left, ghost_learned_left, ls='-', color=ghost_black)
-            plt.plot(ghost_x_right, ghost_learned_right, ls='-', color=ghost_black)
-
-        plt.legend()
-
-        ax = plt.gca()
-
-        # Recalculate automatic axis scaling.
-        #ax.relim()
-        #ax.autoscale_view()
-
-        if title is None:
-            title = "t = {:.3f}s".format(self.t)
-
-        ax.set_title(title)
-
-        if no_x_borders:
-            ax.set_xmargin(0.0)
-
-        if fixed_axes:
-            if self._solution_axes is None:
-                self._solution_axes = (ax.get_xlim(), ax.get_ylim())
-            else:
-                xlim, ylim = self._solution_axes
-                ax.set_xlim(xlim)
-                ax.set_ylim(ylim)
-
-        log_dir = logger.get_dir()
-        if suffix is None:
-            step_precision = int(np.ceil(np.log(self.episode_length) / np.log(10)))
-            suffix = ("_t{:0" + str(step_precision) + "}").format(self.steps)
-        filename = 'burgers' + suffix + '.png'
-        filename = os.path.join(log_dir, filename)
-        plt.savefig(filename)
-        print('Saved plot to ' + filename + '.')
-
-        plt.close(fig)
 
     def plot_weights(self, timestep=None, location=None):
         assert(len(self._all_learned_weights) == len(self._all_weno_weights))
@@ -496,10 +537,3 @@ class WENOBurgersEnv(gym.Env):
 
         plt.close(fig)
 
-    def close(self):
-        # Delete references for easier garbage collection.
-        self.grid = None
-
-    def seed(self):
-        # The official Env class has this as part of its interface, but I don't think we need it. Better to set the seed at the experiment level then the environment level
-        pass
