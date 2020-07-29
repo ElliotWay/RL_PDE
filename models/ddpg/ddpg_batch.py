@@ -315,10 +315,10 @@ class DDPGBatch(OffPolicyRLModel):
         # PDE Set up spaces for the individual agents
         # PDE Just assume we're using Box for now.
         obs_shape = self.observation_space.shape
-        i_obs_shape = (obs_shape[0], obs_shape[2])
+        i_obs_shape = tuple(list(obs_shape)[1:])
         self.i_observation_space = Box(low=0.0, high=1.0, shape=i_obs_shape)
         a_shape = self.action_space.shape
-        i_a_shape = (a_shape[0], a_shape[2])
+        i_a_shape = tuple(list(a_shape)[1:])
         self.i_action_space = Box(low=0.0, high=1.0, shape=i_a_shape)
 
         if _init_setup_model:
@@ -824,7 +824,12 @@ class DDPGBatch(OffPolicyRLModel):
             })
 
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="DDPG",
-              reset_num_timesteps=True, replay_wrapper=None, render=None):
+              reset_num_timesteps=True, replay_wrapper=None, render=None, **kwargs):
+        if len(kwargs) > 0 and not hasattr(self, 'weird_learn_input'):
+            print("Unrecognized args passed to DDPGBatch.learn:")
+            print(kwargs)
+            print("They're probably something that made sense to pass to a different algo. Ignoring them for now.")
+            self.weird_learn_input = True
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
         callback = self._init_callback(callback)
@@ -853,11 +858,7 @@ class DDPGBatch(OffPolicyRLModel):
                 # Prepare everything.
                 self._reset()
                 obs = self.env.reset()
-                obs_batch = obs.transpose((1, 0, 2))
-                # Retrieve unnormalized observation for saving into the buffer
-                if self._vec_normalize_env is not None:
-                    obs_ = self._vec_normalize_env.get_original_obs().squeeze()
-                episode_reward = np.zeros(self.action_space.shape[1]-2) #TODO fix reward shape in env
+                episode_reward = np.zeros(self.action_space.shape[0])
                 episode_step = 0
                 episodes = 0
                 step = 0
@@ -890,9 +891,7 @@ class DDPGBatch(OffPolicyRLModel):
                                 return self
 
                             # Predict next action.
-                            action_batch, q_value = self._policy(obs_batch, apply_noise=True, compute_q=True)
-                            # PDE Transpose batch of actions into expected shape.
-                            action = action_batch.transpose((1, 0, 2))
+                            action, q_value = self._policy(obs, apply_noise=True, compute_q=True)
                             assert action.shape == self.env.action_space.shape
 
                             # Randomly sample actions from a uniform distribution
@@ -909,7 +908,6 @@ class DDPGBatch(OffPolicyRLModel):
                             unscaled_action = softmaxize(unscaled_action)
 
                             new_obs, reward, done, info = self.env.step(unscaled_action)
-                            new_obs_batch = new_obs.transpose((1, 0, 2))
 
                             self.num_timesteps += 1
                             callback.update_locals(locals())
@@ -928,26 +926,16 @@ class DDPGBatch(OffPolicyRLModel):
                             epoch_actions.append(action)
                             epoch_qs.append(q_value)
 
-                            # Store only the unnormalized version
-                            #if self._vec_normalize_env is not None:
-                                #new_obs_ = self._vec_normalize_env.get_original_obs().squeeze()
-                                #reward_ = self._vec_normalize_env.get_original_reward().squeeze()
-                            #else:
-                                # Avoid changing the original ones
-                                #obs_, new_obs_, reward_ = obs, new_obs, reward
-
                             # PDE If reward is a scalar, expand it.
                             if not hasattr(reward, '__len__'):
                                 reward = np.full(new_obs.shape[1], reward)
-                            for (o, a, r, n_o) in zip(obs_batch, action_batch, reward, new_obs_batch):
+                            assert(len(obs) == len(action))
+                            assert(len(obs) == len(reward))
+                            assert(len(obs) == len(new_obs))
+                            for (o, a, r, n_o) in zip(obs, action, reward, new_obs):
                                 self._store_transition(o, a, r, n_o, done, info)
 
                             obs = new_obs
-                            obs_batch = new_obs_batch
-
-                            # Save the unnormalized observation
-                            #if self._vec_normalize_env is not None:
-                                #obs_ = new_obs_
 
                             episode_reward += reward
                             episode_step += 1
@@ -963,7 +951,7 @@ class DDPGBatch(OffPolicyRLModel):
                                 epoch_episode_rewards.append(episode_reward)
                                 episode_rewards_history.append(episode_reward)
                                 epoch_episode_steps.append(episode_step)
-                                episode_reward = np.zeros(self.action_space.shape[1]-2) #TODO fix reward shape in env
+                                episode_reward = np.zeros(self.action_space.shape[0])
                                 episode_step = 0
                                 epoch_episodes += 1
                                 episodes += 1
@@ -1011,17 +999,13 @@ class DDPGBatch(OffPolicyRLModel):
                         eval_qs = []
                         eval_done = False
                         eval_obs = self.eval_env.reset()
-                        eval_obs_batch = eval_obs.transpose((1, 0, 2))
-                        eval_episode_reward = np.zeros(self.action_space.shape[1]-2)
+                        eval_episode_reward = np.zeros(self.action_space.shape[0])
                         while not eval_done:
 
-                            eval_action_batch, eval_q = self._policy(eval_obs_batch, apply_noise=False, compute_q=True)
-                            # PDE Transpose batch of actions into expected shape.
-                            eval_action = eval_action_batch.transpose((1, 0, 2))
+                            eval_action, eval_q = self._policy(eval_obs, apply_noise=False, compute_q=True)
                             unscaled_action = unscale_action(self.action_space, eval_action)
                             unscaled_action = softmaxize(unscaled_action)
                             eval_obs, eval_r, eval_done, _ = self.eval_env.step(unscaled_action)
-                            eval_obs_batch = eval_obs.transpose((1, 0, 2))
                             eval_episode_reward += eval_r
 
                             eval_qs.append(eval_q)
