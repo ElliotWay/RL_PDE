@@ -8,10 +8,6 @@ class StandardWENOAgent():
         self.order = order
 
     def predict(self, state):
-        # TODO: note that later the state will be formatted better as a batch,
-        # i.e. (nx+1) X 2 X stencil_size instead of 2 X (nx+1) X stencil_size
-        # which this assumes now.
-
         actions = self._weno_i_weights_batch(state)
 
         return actions, None
@@ -27,7 +23,7 @@ class StandardWENOAgent():
         Parameters
         ----------
         q_batch : numpy array
-          Batch of flux stencils of size 2 (fp, fm) X grid length + 1 X stencil size
+          Batch of flux stencils of size  grid length + 1 X 2 (fp, fm) X stencil size
   
         Returns
         -------
@@ -41,8 +37,8 @@ class StandardWENOAgent():
         sigma = weno_coefficients.sigma_all[order]
         epsilon = 1e-16
 
-        fp_stencils = q_batch[0]
-        fm_stencils = q_batch[1]
+        fp_stencils = q_batch[:, 0, :]
+        fm_stencils = q_batch[:, 1, :]
 
         sliding_window_indexes = np.arange(order)[None, :] + np.arange(order)[:, None]
 
@@ -75,7 +71,7 @@ class StandardWENOAgent():
         weights_fp = alpha_fp / (np.sum(alpha_fp, axis=-1)[:, None])
         weights_fm = alpha_fm / (np.sum(alpha_fm, axis=-1)[:, None])
 
-        return np.array([weights_fp, weights_fm])
+        return np.stack([weights_fp, weights_fm], axis=1)
 
 
 
