@@ -48,34 +48,6 @@ def weno_i_stencils_batch(order, q_batch):
 
     return stencils
 
-
-# Used in weno_new, below.
-def weno_stencils(order, q):
-    """
-    Compute WENO stencils
-
-    Parameters
-    ----------
-    order : int
-      The stencil width.
-    q : np array
-      Scalar data to reconstruct.
-
-    Returns
-    -------
-    stencils
-
-    """
-    a = weno_coefficients.a_all[order]
-    num_points = len(q) - 2 * order
-    q_stencils = np.zeros((order, len(q)))
-    for i in range(order, num_points + order):
-        for k in range(order):
-            for l in range(order):
-                q_stencils[k, i] += a[k, l] * q[i + k - l]
-
-    return q_stencils
-
 # Used in step to calculate actual weights to compare learned and weno weights.
 def weno_weights_batch(order, q_batch):
     """
@@ -111,74 +83,9 @@ def weno_weights_batch(order, q_batch):
 
     return w
 
-
-# Used in weno_new, below.
-def weno_weights(order, q):
-    """
-    Compute WENO weights
-
-    Parameters
-    ----------
-    order : int
-      The stencil width.
-    q : np array
-      Scalar data to reconstruct.
-
-    Returns
-    -------
-    stencil weights
-
-    """
-    C = weno_coefficients.C_all[order]
-    sigma = weno_coefficients.sigma_all[order]
-
-    beta = np.zeros((order, len(q)))
-    w = np.zeros_like(beta)
-    num_points = len(q) - 2 * order
-    epsilon = 1e-16
-    for i in range(order, num_points + order):
-        alpha = np.zeros(order)
-        for k in range(order):
-            for l in range(order):
-                for m in range(l + 1):
-                    beta[k, i] += sigma[k, l, m] * q[i + k - l] * q[i + k - m]
-            alpha[k] = C[k] / (epsilon + beta[k, i] ** 2)
-        w[:, i] = alpha / np.sum(alpha)
-
-    return w
-
-
-# Used in computation of "actual" output
-def weno_new(order, q):
-    """
-    Compute WENO reconstruction
-
-    Parameters
-    ----------
-    order : int
-      Stencil Width.
-    q : numpy array
-      Scalar data to reconstruct.
-
-    Returns
-    -------
-    qL: numpy array
-      Reconstructed data.
-
-    """
-
-    weights = weno_weights(order, q)
-    q_stencils = weno_stencils(order, q)
-    qL = np.zeros_like(q)
-    num_points = len(q) - 2 * order
-    for i in range(order, num_points + order):
-        qL[i] = np.dot(weights[:, i], q_stencils[:, i])
-
-    return qL
-
-
 def flux(q):
     return 0.5 * q ** 2
+
 
 
 class WENOBurgersEnv(gym.Env):
@@ -237,70 +144,6 @@ class WENOBurgersEnv(gym.Env):
     def burgers_flux(self, q):
         # This is the only thing unique to Burgers, could we make this a general class with this as a parameter?
         return 0.5 * q ** 2
-
-
-    def rk_substep_actual(self):
-
-        # get the solution data
-        g = self.grid
-
-        # apply boundary conditions
-        g.fill_BCs()
-
-        # comput flux at each point
-        f = self.burgers_flux(g.uactual)
-
-        # get maximum velocity
-        alpha = np.max(abs(g.uactual))
-
-        # Lax Friedrichs Flux Splitting
-        fp = (f + alpha * g.uactual) / 2
-        fm = (f - alpha * g.uactual) / 2
-
-        fpr = g.scratch_array()
-        fml = g.scratch_array()
-        flux = g.scratch_array()
-
-        # compute fluxes at the cell edges
-        # compute f plus to the right
-        fpr[1:] = weno_new(self.weno_order, fp[:-1])
-        # compute f minus to the left
-        # pass the data in reverse order
-        fml[-1::-1] = weno_new(self.weno_order, fm[-1::-1])
-
-        # compute flux from fpr and fml
-        flux[1:-1] = fpr[1:-1] + fml[1:-1]
-        rhs = g.scratch_array()
-
-        if self.eps > 0.0:
-            R = self.eps * self.lap()
-            rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:]) + R[1:-1]
-        else:
-            rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:])
-        return rhs
-
-    def Euler_actual(self, dt):
-        """
-        Compute one time step using explicit Euler time stepping. Performs state transition for a discrete time step using standard WENO.
-        Euler time stepping is first order accurate in time. Should be run with a small time step.
-        
-        Parameters
-        ----------
-        dt : float
-          timestep.
-  
-        """
-
-        g = self.grid
-
-        # fill the boundary conditions
-        g.fill_BCs()
-
-        # RK4
-        # Store the data at the start of the step
-        u_start = g.uactual.copy()
-        k1 = dt * self.rk_substep_actual()
-        g.uactual[g.ilo:g.ihi + 1] = u_start[g.ilo:g.ihi + 1] + k1[g.ilo:g.ihi + 1]
 
 
     def lap(self):
