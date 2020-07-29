@@ -95,7 +95,8 @@ class AbstractBurgersEnv(gym.Env):
     and plotting of the current state compared to the baseline state.
     How the agent sees the state, how the agent's actions are applied to the
     state, and how the agent's reward is calculated are left to subclasses.
-    Namely, subclasses still need to implement step and reset.
+    Namely, subclasses still need to implement step and reset, and override
+    __init__ to declare the action and observation spaces.
     Subclasses should make use of self.grid, the Grid1d object that contains
     the state, and self.solution, the SolutionBase object that contains the
     baseline state.
@@ -135,12 +136,6 @@ class AbstractBurgersEnv(gym.Env):
 
         self.episode_length = episode_length
         self.steps = 0
-
-        self.action_space = SoftmaxBox(low=0.0, high=1.0, shape=(self.grid.real_length() + 1, 2, weno_order),
-                                       dtype=np.float64)
-        self.observation_space = spaces.Box(low=-1e7, high=1e7,
-                                            shape=(self.grid.real_length() + 1, 2, 2 * weno_order - 1),
-                                            dtype=np.float64)
 
         self._solution_axes = None
 
@@ -269,7 +264,7 @@ class AbstractBurgersEnv(gym.Env):
         self.solution = None
 
     def seed(self):
-        # The official Env class has this as part of its interface, but I don't think we need it. Better to set the seed at the experiment level then the environment level
+        # The official Env class has this as part of its interface, but I don't think we need it. Better to set the numpy seed at the experiment level.
         pass
 
 
@@ -278,6 +273,14 @@ class WENOBurgersEnv(AbstractBurgersEnv):
     def __init__(self, *args, record_weights=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.record_weights = record_weights
+
+        self.action_space = SoftmaxBox(low=0.0, high=1.0,
+                                       shape=(self.grid.real_length() + 1, 2, self.weno_order),
+                                       dtype=np.float64)
+        self.observation_space = spaces.Box(low=-1e7, high=1e7,
+                                            shape=(self.grid.real_length() + 1, 2, 2 * self.weno_order - 1),
+                                            dtype=np.float64)
+
 
 
     def set_record_weights(self, record_weights):
@@ -536,4 +539,185 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         print('Saved plot to ' + filename + '.')
 
         plt.close(fig)
+
+
+class SplitFluxBurgersEnv(AbstractBurgersEnv):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.action_space = SoftmaxBox(low=0.0, high=1.0,
+                                       shape=(self.grid.real_length() + 1, 2, 2 * self.weno_order - 1),
+                                       dtype=np.float64)
+        self.observation_space = spaces.Box(low=-1e7, high=1e7,
+                                            shape=(self.grid.real_length() + 1, 2, 2 * self.weno_order - 1),
+                                            dtype=np.float64)
+
+
+    def prep_state(self):
+        """
+        Return state at current time step. Returns fpr and fml vector slices.
+  
+        Returns
+        -------
+        state: np array.
+            State vector to be sent to the policy. 
+            Size: (grid_size + 1) BY 2 (one for fp and one for fm) BY stencil_size
+            Example: order =3, grid = 128
+  
+        """
+        # get the solution data
+        g = self.grid
+
+        # compute flux at each point
+        f = self.burgers_flux(g.u)
+
+        # get maximum velocity
+        alpha = np.max(abs(g.u))
+
+        # Lax Friedrichs Flux Splitting
+        fp = (f + alpha * g.u) / 2
+        fm = (f - alpha * g.u) / 2
+
+        stencil_size = self.weno_order * 2 - 1
+        num_stencils = g.real_length() + 1
+        offset = g.ng - self.weno_order
+        # Adding a row vector and column vector gives us an "outer product" matrix where each row is a stencil.
+        fp_stencil_indexes = offset + np.arange(stencil_size)[None, :] + np.arange(num_stencils)[:, None]
+        fm_stencil_indexes = fp_stencil_indexes + 1
+
+        fp_stencils = fp[fp_stencil_indexes]
+        fm_stencils = fm[fm_stencil_indexes]
+
+        # Flip fm stencils. Not sure how I missed this originally?
+        fm_stencils = np.flip(fm_stencils, axis=-1)
+
+        # Stack fp and fm on axis 1 so grid position is still axis 0.
+        state = np.stack([fp_stencils, fm_stencils], axis=1)
+
+        # save this state for convenience
+        self.current_state = state
+
+        return state
+
+
+    def reset(self):
+        """
+        Reset the environment.
+
+        Returns
+        -------
+        Initial state.
+
+        """
+        self.grid.reset()
+        self.solution.reset(**self.grid.init_params)
+
+        self.t = 0.0
+        self.steps = 0
+
+        self._all_learned_weights = []
+        self._all_weno_weights = []
+
+        return self.prep_state()
+
+
+    def step(self, action):
+        """
+        Perform a single time step.
+
+        Parameters
+        ----------
+        action : np array
+          Weights for construction the flux.
+          size: (grid-size + 1) X 2 (fp, fm) X (2 * order - 1)
+
+        Returns
+        -------
+        state: np array.
+          solution predicted using action
+        reward: float
+          reward for current action
+        done: boolean
+          boolean signifying end of episode
+        info : dictionary
+          not passing anything now
+        """
+
+        if np.isnan(action).any():
+            raise Exception("NaN detected in action.")
+
+        state = self.current_state
+
+        fp_state = state[:, 0, :]
+        fm_state = state[:, 1, :]
+
+        done = False
+        g = self.grid
+
+        # Store the data at the start of the time step
+        u_copy = g.get_real()
+
+        # Should probably find a way to pass this to agent if dt varies.
+        dt = self.timestep()
+
+        fp_action = action[:, 0, :]
+        fm_action = action[:, 1, :]
+
+        fpr = np.sum(fp_action * fp_state, axis=-1)
+        fml = np.sum(fm_action * fm_state, axis=-1)
+
+        flux = fml + fpr
+
+        if self.eps > 0.0:
+            R = self.eps * self.lap()
+            rhs = (flux[:-1] - flux[1:]) / g.dx + R[g.ilo:g.ihi+1]
+        else:
+            rhs = (flux[:-1] - flux[1:]) / g.dx
+
+        u_copy += dt * rhs
+        self.grid.update(u_copy)
+
+        # update the solution time
+        self.t += dt
+
+        # Calculate new RL state.
+        state = self.prep_state()
+
+        self.steps += 1
+        if self.steps >= self.episode_length:
+            done = True
+
+        # compute reward
+        # Error-based reward.
+        reward = 0.0
+        self.solution.update(dt, self.t)
+        error = self.solution.get_full() - g.get_full()
+
+        # Reward as function of the errors in the stencil.
+        # max error across stencil
+        stencil_indexes = create_stencil_indexes(
+                stencil_size=(self.weno_order * 2 - 1),
+                num_stencils=(self.nx + 1),
+                offset=(self.ng - self.weno_order))
+        error_stencils = error[stencil_indexes]
+        reward = np.amax(np.abs(error_stencils), axis=-1)
+
+        # Squash error.
+        reward = -np.arctan(reward)
+        max_penalty = np.pi / 2
+
+
+        # Give a penalty and end the episode if we're way off.
+        if np.max(state) > 1e7 or np.isnan(np.max(state)):
+            reward -= max_penalty / 2 * self.steps
+            done = True
+
+        if np.isnan(state).any():
+            raise Exception("NaN detected in state.")
+        if np.isnan(reward).any():
+            raise Exception("NaN detected in reward.")
+
+        return state, reward, done, {}
+
 
