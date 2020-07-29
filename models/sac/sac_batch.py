@@ -5,6 +5,8 @@ import warnings
 
 import numpy as np
 import tensorflow as tf
+from gym.spaces import Box
+
 from stable_baselines import logger
 from stable_baselines.common import tf_util, OffPolicyRLModel, SetVerbosity, TensorboardWriter
 from stable_baselines.common.buffers import ReplayBuffer
@@ -13,7 +15,6 @@ from stable_baselines.common.schedules import get_schedule_fn
 from stable_baselines.common.vec_env import VecEnv
 from stable_baselines.sac.policies import SACPolicy
 
-from util.softmax_box import SoftmaxBox
 from util.misc import rescale
 
 
@@ -126,13 +127,13 @@ class SACBatch(OffPolicyRLModel):
 
         if env is not None:
             # PDE Set up spaces for the individual agents
-            # PDE Just assume we're using SoftmaxBox for now.
+            # PDE Just assume the spaces are Box.
             obs_shape = self.observation_space.shape
-            i_obs_shape = (obs_shape[0], obs_shape[2])
-            self.i_observation_space = SoftmaxBox(low=0.0, high=1.0, shape=i_obs_shape)
+            i_obs_shape = tuple(list(obs_shape)[1:])
+            self.i_observation_space = Box(low=0.0, high=1.0, shape=i_obs_shape)
             a_shape = self.action_space.shape
-            i_a_shape = (a_shape[0], a_shape[2])
-            self.i_action_space = SoftmaxBox(low=0.0, high=1.0, shape=i_a_shape)
+            i_a_shape = tuple(list(a_shape)[1:])
+            self.i_action_space = Box(low=0.0, high=1.0, shape=i_a_shape)
 
             if _init_setup_model:
                 self.setup_model()
@@ -143,11 +144,11 @@ class SACBatch(OffPolicyRLModel):
     def set_env(self, env):
         super(SACBatch, self).set_env(env)
         obs_shape = self.observation_space.shape
-        i_obs_shape = (obs_shape[0], obs_shape[2])
-        self.i_observation_space = SoftmaxBox(low=0.0, high=1.0, shape=i_obs_shape)
+        i_obs_shape = tuple(list(obs_shape)[1:])
+        self.i_observation_space = Box(low=0.0, high=1.0, shape=i_obs_shape)
         a_shape = self.action_space.shape
-        i_a_shape = (a_shape[0], a_shape[2])
-        self.i_action_space = SoftmaxBox(low=0.0, high=1.0, shape=i_a_shape)
+        i_a_shape = tuple(list(a_shape)[1:])
+        self.i_action_space = Box(low=0.0, high=1.0, shape=i_a_shape)
 
     def normalize_obs(self, obs):
         obs = np.clip((obs - obs.mean()) / np.sqrt(obs.std() + self.obs_std_epsilon), -self.clip_obs, self.clip_obs)
@@ -451,7 +452,7 @@ class SACBatch(OffPolicyRLModel):
                 else:
                     # PDE Need to collect a batch of actions along the spatial dimension.
                     # PDE However, the step function already accepts observations in batches.
-                    action = self.policy_tf.step(obs_batch, deterministic=False).flatten()
+                    action = self.policy_tf.step(obs, deterministic=False).flatten()
                     action = action.reshape((-1,) + (self.i_action_space.shape))
 
                     # Add noise to the action (improve exploration,
@@ -504,7 +505,7 @@ class SACBatch(OffPolicyRLModel):
 
                 if writer is not None:
                     # Write reward per episode to tensorboard
-                    ep_reward = np.array([reward_]).reshape((1, -1))
+                    ep_reward = np.array([reward]).reshape((1, -1))
                     ep_done = np.array([done]).reshape((1, -1))
                     tf_util.total_episode_reward_logger(self.episode_reward, ep_reward,
                                                         ep_done, writer, self.num_timesteps)
@@ -536,7 +537,7 @@ class SACBatch(OffPolicyRLModel):
 
                     callback.on_rollout_start()
 
-                episode_rewards[-1] += reward_
+                episode_rewards[-1] += reward
                 if done:
                     if render is not None:
                         if ((log_interval is not None and len(episode_rewards) % log_interval == 0) 
