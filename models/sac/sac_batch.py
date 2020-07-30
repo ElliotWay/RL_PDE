@@ -69,7 +69,8 @@ class SACBatch(OffPolicyRLModel):
                  gradient_steps=1, target_entropy='auto', action_noise=None,
                  random_exploration=0.0, verbose=0, tensorboard_log=None,
                  _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False,
-                 seed=None, n_cpu_tf_sess=None):
+                 seed=None, n_cpu_tf_sess=None,
+                 action_adjust=None, action_adjust_inverse=None, obs_adjust=None):
 
         super(SACBatch, self).__init__(policy=policy, env=env, replay_buffer=None, verbose=verbose,
                                        policy_base=SACPolicy, requires_vec_env=False, policy_kwargs=policy_kwargs,
@@ -140,6 +141,17 @@ class SACBatch(OffPolicyRLModel):
 
         self.obs_std_epsilon = 1e-10
         self.clip_obs = 5  # 5 std is pretty big
+
+        self.action_adjust = action_adjust
+        if self.action_adjust is None:
+            self.action_adjust = lambda a: rescale(a, [-1,1], [0,1])
+            assert(action_adjust_inverse is None)
+        self.action_adjust_inverse = action_adjust_inverse
+        if self.action_adjust_inverse is None:
+            self.action_adjust_inverse = lambda a: rescale(a, [0,1], [-1,1])
+        self.obs_adjust = obs_adjust
+        if self.obs_adjust is None:
+            self.obs_adjust = lambda a: a
 
     def set_env(self, env):
         super(SACBatch, self).set_env(env)
@@ -418,12 +430,7 @@ class SACBatch(OffPolicyRLModel):
             if self.action_noise is not None:
                 self.action_noise.reset()
             obs = self.env.reset()
-            # PDE Normalize state.
-            obs = np.apply_along_axis(self.normalize_obs, -1, obs)
-            # obs = (obs - obs.mean(axis=0)) / obs.std(axis=0)
-            # Retrieve unnormalized observation for saving into the buffer
-            if self._vec_normalize_env is not None:
-                obs_ = self._vec_normalize_env.get_original_obs().squeeze()
+            obs = self.obs_adjust(obs)
 
             n_updates = 0
             infos_values = []
@@ -445,10 +452,10 @@ class SACBatch(OffPolicyRLModel):
                 # if random_exploration is set to 0 (normal setting)
                 if self.num_timesteps < self.learning_starts or np.random.rand() < self.random_exploration:
                     # PDE Sampling directly from the action space returns a batch.
-                    unscaled_action = self.env.action_space.sample()
+                    env_action = self.env.action_space.sample()
                     # actions sampled from action space are from range specific to the environment
                     # but algorithm operates on tanh-squashed actions therefore simple scaling is used
-                    action = rescale(unscaled_action, [0,1], [-1,1])
+                    action = self.action_adjust_inverse(env_action)
                 else:
                     # PDE Need to collect a batch of actions along the spatial dimension.
                     # PDE However, the step function already accepts observations in batches.
@@ -460,21 +467,17 @@ class SACBatch(OffPolicyRLModel):
                     if self.action_noise is not None:
                         action = np.clip(action + self.action_noise(), -1, 1)
                     # inferred actions need to be transformed to environment action_space before stepping
-                    unscaled_action = rescale(action, [-1,1], [0,1])
-                    # PDE Adjust actions so they sum up to 1.
-                    unscaled_action = unscaled_action / np.sum(unscaled_action, axis=-1)[..., np.newaxis]
-                    #action = scale_action(self.action_space, unscaled_action) # action isn't used after this, I don't think this is needed anyway?
+                    env_action = self.action_adjust(action)
 
                 assert action.shape == self.env.action_space.shape
 
                 # PDE The reward may now be a vector. Convert if still a scalar.
-                new_obs, reward, done, info = self.env.step(unscaled_action)
+                new_obs, reward, done, info = self.env.step(env_action)
                 if not hasattr(reward, '__len__'):
                     reward = np.full(new_obs.shape[1], reward)
 
                 # Normalize obs.
-                new_obs = np.apply_along_axis(self.normalize_obs, -1, new_obs)
-                # new_obs = (new_obs - new_obs.mean(axis=0)) / new_obs.std(axis=0)
+                new_obs = self.obs_adjust(new_obs)
 
                 self.num_timesteps += 1
                 ep_steps += 1
@@ -614,26 +617,23 @@ class SACBatch(OffPolicyRLModel):
         """
         observation = np.array(observation)
 
-        is_batch = (len(observation.shape) == 3)
+        is_batch = (observation.shape == self.observation_space.shape)
         if not is_batch:
-            assert (len(observation.shape) == 2)
+            assert (observation.shape == self.i_observation_space.shape)
 
         if is_batch:
-            observation = np.apply_along_axis(self.normalize_obs, -1, observation)
-            # observation = (observation - observation.mean(axis=0)) / observation.std(axis=0)
+            observation = self.obs_adjust(observation)
             actions = self.policy_tf.step(observation, deterministic=deterministic)
             actions = actions.reshape((-1,) + self.i_action_space.shape)
-            unscaled_action = rescale(actions, [-1,1], [0,1])
-            # PDE Make sure the actions sum up to 1 before taking a step
-            unscaled_action = unscaled_action / np.sum(unscaled_action, axis=-1)[..., np.newaxis]
-            return unscaled_action, None
+            env_actions = self.action_adjust(actions)
+            return env_actions, None
         else:
+            observation = observation[None, ...]
             action = self.policy_tf.step(observation, deterministic=deterministic)
-            actions = action.reshape(self.i_action_space.shape)
-            unscaled_action = rescale(actions, [-1,1], [0,1])
-            # PDE Make sure the actions sum up to 1 before taking a step
-            unscaled_action = unscaled_action / np.sum(unscaled_action, axis=-1)[..., np.newaxis]
-            return unscaled_action, None
+            action = action.reshape(self.i_action_space.shape)
+            env_action = self.action_adjust(action)
+            env_action = env_actions.reshape(self.i_action_space.shape)
+            return env_action, None
 
     def get_parameter_list(self):
         return (self.params +

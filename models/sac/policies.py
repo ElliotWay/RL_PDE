@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 from stable_baselines.common.policies import nature_cnn, register_policy
 from stable_baselines.common.tf_layers import mlp
-from stable_baselines.sac.policies import SACPolicy, gaussian_likelihood, gaussian_entropy, apply_squashing_func
+from stable_baselines.sac.policies import SACPolicy
 
 EPS = 1e-6  # Avoid NaN (prevents division by zero or log of zero)
 # CAP the standard deviation of the actor
@@ -62,6 +62,10 @@ def apply_squashing_func(mu_, pi_, logp_pi):
     logp_pi -= tf.reduce_sum(tf.log(1 - policy ** 2 + EPS), axis=1)
     return deterministic_policy, policy, logp_pi
 
+def default_squash_correction(squashed_policy, logp_pi):
+    corrected_logp_pi = logp_pi - tf.reduce_sum(tf.log(1 - squashed_policy ** 2 + EPS), axis=1)
+    return corrected_logp_pi
+
 
 class ScaledFeedForwardPolicy(SACPolicy):
     """
@@ -85,7 +89,8 @@ class ScaledFeedForwardPolicy(SACPolicy):
 
     def __init__(self, sess, ob_space, ac_space, n_env=1, n_steps=1, n_batch=None, reuse=False, layers=None,
                  cnn_extractor=nature_cnn, feature_extraction="cnn", reg_weight=0.0,
-                 layer_norm=False, act_fun=tf.nn.relu, **kwargs):
+                 layer_norm=False, act_fun=tf.nn.relu, 
+                 squash_function=None, squash_correction=None, **kwargs):
         super(ScaledFeedForwardPolicy, self).__init__(sess, ob_space, ac_space, n_env, n_steps, n_batch,
                                                       reuse=reuse, scale=(feature_extraction == "cnn"))
 
@@ -105,6 +110,15 @@ class ScaledFeedForwardPolicy(SACPolicy):
         assert len(layers) >= 1, "Error: must have at least one hidden layer for the policy."
 
         self.activ_fn = act_fun
+
+        if squash_function is None:
+            assert(squash_correction is None)
+            self.squash_function = tf.tanh
+            self.squash_correction = default_squash_correction
+        else:
+            assert(squash_correction is not None)
+            self.squash_function = squash_function
+            self.squash_correction = squash_correction
 
     def make_actor(self, obs=None, reuse=False, scope="pi"):
         if obs is None:
@@ -142,7 +156,10 @@ class ScaledFeedForwardPolicy(SACPolicy):
         self.entropy = gaussian_entropy(log_std)
         # MISSING: reg params for log and mu
         # Apply squashing and account for it in the probability
-        deterministic_policy, policy, logp_pi = apply_squashing_func(mu_, pi_, logp_pi)
+        # PDE Adjusted squash function to be parameter.
+        deterministic_policy = self.squash_function(mu_)
+        policy = self.squash_function(pi_)
+        logp_pi = self.squash_correction(policy, logp_pi)
         self.policy = policy
         self.deterministic_policy = deterministic_policy
 

@@ -25,6 +25,7 @@ from models.ddpg import DDPGBatch
 from models.sac import LnScaledMlpPolicy as SACPolicy
 from models.ddpg import LnMlpPolicy as DDPGPolicy
 from util import metadata
+from util.misc import rescale
 
 
 def main():
@@ -101,11 +102,60 @@ def main():
     env = build_env(args.env, args)
     eval_env = build_env(args.env, args) # Some algos like an extra env for evaluation.
 
+    # Things like this make me wish I was writing in a functional language.
+    # I sure could go for some partial evaluation and some function composition.
+    def flat_rescale_from_tanh(action):
+        action = rescale(action, [-1,1], [0,1])
+        return action / np.sum(action, axis=-1)[..., np.newaxis]
+
+    def back_to_tanh(action):
+        return rescale(action, [0,1], [-1,1])
+
+    def identity_function(arg):
+        return arg
+
+    def identity_correction(squashed_policy, logp_pi):
+        return logp_pi
+
+    clip_obs = 5 # (in stddevs from the mean)
+    epsilon = 1e-10
+    def z_score_last_dim(obs):
+        z_score = (obs - obs.mean(axis=-1)[..., None]) / (obs.std(axis=-1)[..., None] + epsilon)
+        return np.clip(z_score, -clip_obs, clip_obs)
+
+    def z_score_all_dims(obs):
+        z_score = (obs - obs.mean()) / (obs.std() + epsilon)
+        return np.clip(z_score, -clip_obs, clip_obs)
+
+    # Need to handle different state and action spaces differently.
+    if args.env == "weno_burgers":
+        squash_function = None   # Use default tanh squash/correction.
+        squash_correction = None
+        action_adjust = flat_rescale_from_tanh
+        action_adjust_inverse = back_to_tanh
+        obs_adjust = z_score_last_dim
+    elif args.env == "split_flux_burgers":
+        squash_function = identity_function
+        squash_correction = identity_correction
+        action_adjust = identity_function
+        action_adjust_inverse = identity_function
+        obs_adjust = z_score_last_dim
+    else:
+        raise Exception("Need to implement parameterized scaling for: \"{}\".".format(args.env))
+
+    policy_kwargs = {'layers':[32, 32], 'squash_function':squash_function}
     if args.algo == "sac":
-        policy_kwargs = dict(layers=[32, 32])
+        policy_kwargs['squash_correction'] = squash_correction
+
+
+    if args.algo == "sac":
         model = SACBatch(SACPolicy, env, policy_kwargs=policy_kwargs, learning_rate=args.learning_rate, buffer_size=args.buffer_size,
-                 learning_starts=100, batch_size=args.batch_size, verbose=1, tensorboard_log="./log/weno_burgers/tensorboard")
+                 learning_starts=100, batch_size=args.batch_size, verbose=1, tensorboard_log="./log/weno_burgers/tensorboard",
+                 action_adjust=action_adjust, action_adjust_inverse=action_adjust_inverse, obs_adjust=obs_adjust)
+        print("TODO: save parameterized functions?")
     elif args.algo == "ddpg":
+        print("TODO: add parameterized squash function, action/state scaling to DDPG")
+        sys.exit(0)
         # Parse noise_type
         action_noise = None
         param_noise = None
@@ -127,7 +177,6 @@ def main():
             else:
                 raise RuntimeError('unknown noise type "{}"'.format(current_noise_type))
 
-        policy_kwargs = dict(layers=[32, 32])
         model = DDPGBatch(DDPGPolicy, env, eval_env=eval_env,
                 policy_kwargs=policy_kwargs, actor_lr=args.actor_lr, critic_lr=args.critic_lr, buffer_size=args.buffer_size,
                 batch_size=args.batch_size, action_noise=action_noise, param_noise=param_noise,

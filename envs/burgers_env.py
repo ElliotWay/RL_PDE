@@ -274,7 +274,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         super().__init__(*args, **kwargs)
         self.record_weights = record_weights
 
-        self.action_space = SoftmaxBox(low=0.0, high=1.0,
+        self.action_space = SoftmaxBox(low=0.0, high=1.0, 
                                        shape=(self.grid.real_length() + 1, 2, self.weno_order),
                                        dtype=np.float64)
         self.observation_space = spaces.Box(low=-1e7, high=1e7,
@@ -546,7 +546,7 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.action_space = SoftmaxBox(low=0.0, high=1.0,
+        self.action_space = SoftmaxBox(low=-np.inf, high=np.inf,
                                        shape=(self.grid.real_length() + 1, 2, 2 * self.weno_order - 1),
                                        dtype=np.float64)
         self.observation_space = spaces.Box(low=-1e7, high=1e7,
