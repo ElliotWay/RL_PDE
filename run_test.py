@@ -166,6 +166,10 @@ def main():
         mode = "weno"
     elif args.env.startswith("split_flux"):
         mode = "split_flux"
+    elif args.env.startswith("flux"):
+        mode = "flux"
+    else:
+        mode = "n/a"
 
     if args.agent == "default":
         agent = StandardWENOAgent(order=args.order, mode=mode)

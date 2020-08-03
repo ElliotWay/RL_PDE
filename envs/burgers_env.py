@@ -93,8 +93,8 @@ class AbstractBurgersEnv(gym.Env):
     This abstract class handles preparation of the state for an agent,
     the simulation of the baseline state using established methods,
     and plotting of the current state compared to the baseline state.
-    How the agent sees the state, how the agent's actions are applied to the
-    state, and how the agent's reward is calculated are left to subclasses.
+    How the agent sees the state, and how the agent's actions are applied to
+    the state are left to subclasses.
     Namely, subclasses still need to implement step and reset, and override
     __init__ to declare the action and observation spaces.
     Subclasses should make use of self.grid, the Grid1d object that contains
@@ -144,7 +144,6 @@ class AbstractBurgersEnv(gym.Env):
         # This is the only thing unique to Burgers, could we make this a general class with this as a parameter?
         return 0.5 * q ** 2
 
-
     def lap(self):
         """
         Returns the Laplacian of g.u.
@@ -165,7 +164,6 @@ class AbstractBurgersEnv(gym.Env):
 
         return lapu
 
-
     def timestep(self):
         if self.C is None:  # return a constant time step
             return self.fixed_step
@@ -173,13 +171,11 @@ class AbstractBurgersEnv(gym.Env):
             return self.C * self.grid.dx / max(abs(self.grid.u[self.grid.ilo:
                                                           self.grid.ihi + 1]))
 
-
     def render(self, mode='file', **kwargs):
         if mode == "file":
             self.save_plot(**kwargs)
         else:
             raise Exception("Render mode: \"" + str(mode) + "\" not currently implemented.")
-
 
     def save_plot(self, suffix=None, title=None, fixed_axes=False, no_x_borders=False, show_ghost=True):
         fig = plt.figure()
@@ -251,7 +247,6 @@ class AbstractBurgersEnv(gym.Env):
 
         plt.close(fig)
 
-
     def step(self):
         raise NotImplementedError()
 
@@ -305,7 +300,6 @@ class AbstractBurgersEnv(gym.Env):
 
         return reward, done
 
-
     def close(self):
         # Delete references for easier garbage collection.
         self.grid = None
@@ -329,11 +323,8 @@ class WENOBurgersEnv(AbstractBurgersEnv):
                                             shape=(self.grid.real_length() + 1, 2, 2 * self.weno_order - 1),
                                             dtype=np.float64)
 
-
-
     def set_record_weights(self, record_weights):
         self.record_weights = record_weights
-
 
     def prep_state(self):
         """
@@ -381,7 +372,6 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         return state
 
-
     def reset(self):
         """
         Reset the environment.
@@ -401,7 +391,6 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         self._all_weno_weights = []
 
         return self.prep_state()
-
 
     def step(self, action):
         """
@@ -492,7 +481,6 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         return state, reward, done, {}
 
-
     def plot_weights(self, timestep=None, location=None):
         assert(len(self._all_learned_weights) == len(self._all_weno_weights))
         if len(self._all_learned_weights) == 0:
@@ -552,7 +540,6 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         plt.close(fig)
 
-
 class SplitFluxBurgersEnv(AbstractBurgersEnv):
 
     def __init__(self, *args, **kwargs):
@@ -564,7 +551,6 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
         self.observation_space = spaces.Box(low=-1e7, high=1e7,
                                             shape=(self.grid.real_length() + 1, 2, 2 * self.weno_order - 1),
                                             dtype=np.float64)
-
 
     def prep_state(self):
         """
@@ -612,7 +598,6 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
 
         return state
 
-
     def reset(self):
         """
         Reset the environment.
@@ -628,11 +613,7 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
         self.t = 0.0
         self.steps = 0
 
-        self._all_learned_weights = []
-        self._all_weno_weights = []
-
         return self.prep_state()
-
 
     def step(self, action):
         """
@@ -680,6 +661,139 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
         fml = np.sum(fm_action * fm_state, axis=-1)
 
         flux = fml + fpr
+
+        if self.eps > 0.0:
+            R = self.eps * self.lap()
+            rhs = (flux[:-1] - flux[1:]) / g.dx + R[g.ilo:g.ihi+1]
+        else:
+            rhs = (flux[:-1] - flux[1:]) / g.dx
+
+        u_copy += dt * rhs
+        self.grid.update(u_copy)
+
+        # update the solution time
+        self.t += dt
+
+        # Calculate new RL state.
+        state = self.prep_state()
+
+        self.steps += 1
+        if self.steps >= self.episode_length:
+            done = True
+
+        self.solution.update(dt, self.t)
+
+        reward, force_done = self.calculate_reward()
+        done = done or force_done
+
+        if np.isnan(state).any():
+            raise Exception("NaN detected in state.")
+        if np.isnan(reward).any():
+            raise Exception("NaN detected in reward.")
+
+        return state, reward, done, {}
+
+
+class FluxBurgersEnv(AbstractBurgersEnv):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.action_space = SoftmaxBox(low=-np.inf, high=np.inf,
+                                       shape=(self.grid.real_length() + 1, 2 * self.weno_order),
+                                       dtype=np.float64)
+        self.observation_space = spaces.Box(low=-1e7, high=1e7,
+                                            shape=(self.grid.real_length() + 1, 2 * self.weno_order),
+                                            dtype=np.float64)
+
+    def prep_state(self):
+        """
+        Return state at current time step. State is flux.
+  
+        Returns
+        -------
+        state: np array.
+            State vector to be sent to the policy. 
+            Size: (grid_size + 1) BY stencil_size (2 * order)
+  
+        """
+        # get the solution data
+        g = self.grid
+
+        # compute flux at each point
+        f = self.burgers_flux(g.u)
+
+        # (Do not split flux for this version.)
+
+        # stencil_size is 1 more than in other versions. This is because we
+        # need to include the stencils for both + and -.
+        stencil_indexes = create_stencil_indexes(stencil_size=self.weno_order * 2,
+                                                 num_stencils=g.real_length() + 1,
+                                                 offset=g.ng - self.weno_order
+                                                 )
+
+        stencils = f[stencil_indexes]
+        state = stencils
+
+        # save this state for convenience
+        self.current_state = state
+
+        return state
+
+    def reset(self):
+        """
+        Reset the environment.
+
+        Returns
+        -------
+        Initial state.
+
+        """
+        self.grid.reset()
+        self.solution.reset(**self.grid.init_params)
+
+        self.t = 0.0
+        self.steps = 0
+
+        return self.prep_state()
+
+    def step(self, action):
+        """
+        Perform a single time step.
+
+        Parameters
+        ----------
+        action : np array
+          Weights for construction the flux.
+          size: (grid-size + 1) X 2 (fp, fm) X (2 * order - 1)
+
+        Returns
+        -------
+        state: np array.
+          solution predicted using action
+        reward: float
+          reward for current action
+        done: boolean
+          boolean signifying end of episode
+        info : dictionary
+          not passing anything now
+        """
+
+        if np.isnan(action).any():
+            raise Exception("NaN detected in action.")
+
+        state = self.current_state
+
+        done = False
+        g = self.grid
+
+        # Store the data at the start of the time step
+        u_copy = g.get_real()
+
+        # Should probably find a way to pass this to agent if dt varies.
+        dt = self.timestep()
+
+        flux = np.sum(action * state, axis=-1)
 
         if self.eps > 0.0:
             R = self.eps * self.lap()

@@ -140,7 +140,12 @@ def main():
         action_adjust = identity_function
         action_adjust_inverse = identity_function
         obs_adjust = z_score_last_dim
-    #elif args.env == "flux_burgers":
+    elif args.env == "flux_burgers":
+        squash_function = identity_function
+        squash_correction = identity_correction
+        action_adjust = identity_function
+        action_adjust_inverse = identity_function
+        obs_adjust = z_score_last_dim
     else:
         raise Exception("Need to implement parameterized scaling for: \"{}\".".format(args.env))
 

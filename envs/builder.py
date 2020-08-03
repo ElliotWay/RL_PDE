@@ -1,4 +1,4 @@
-from envs import WENOBurgersEnv, SplitFluxBurgersEnv
+from envs import WENOBurgersEnv, SplitFluxBurgersEnv, FluxBurgersEnv
 
 def build_env(env_name, args):
     if args.fixed_timesteps:

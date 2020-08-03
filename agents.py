@@ -110,7 +110,7 @@ class StationaryAgent():
             state_shape = list(state.shape)
             state_shape[-1] = self.order
             action_shape = tuple(state_shape)
-        elif self.mode == "split_flux":
+        elif self.mode == "split_flux" or self.mode == "flux":
             action_shape = state.shape
 
         return np.zeros(action_shape), None
@@ -212,7 +212,7 @@ class RandomAgent():
             exp_logits = np.exp(random_logits)
 
             return exp_logits / (np.sum(exp_logits, axis=-1)[..., None]), None
-        elif self.mode == "split_flux": 
+        elif self.mode == "split_flux" or self.mode == "flux": 
             # e^(order - 1) is chosen ad-hoc to vaguely relate to the max weights in WENO that increase with order.
             return np.random.normal(size=state.shape, scale=(np.exp(self.order - 1))), None
 
