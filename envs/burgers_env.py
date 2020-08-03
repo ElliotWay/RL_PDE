@@ -258,6 +258,54 @@ class AbstractBurgersEnv(gym.Env):
     def reset(self):
         raise NotImplementedError()
 
+    def calculate_reward(self):
+        """ Optional reward calculation based on the error between grid and solution. """
+
+        done = False
+
+        # Error-based reward.
+        reward = 0.0
+        error = self.solution.get_full() - self.grid.get_full()
+
+        # Clip tiny errors.
+        #error[error < 0.001] = 0
+        # Enhance extreme errors.
+        #error[error > 0.1] *= 10
+
+        # error = error[self.ng:-self.ng]
+        # These give reward based on error in cell right of interface, so missing reward for rightmost interface.
+        #reward = np.max(np.abs(error))
+        #reward = (error) ** 2
+
+        # Reward as function of the errors in the stencil.
+        # max error across stencil
+        stencil_indexes = create_stencil_indexes(
+                stencil_size=(self.weno_order * 2 - 1),
+                num_stencils=(self.nx + 1),
+                offset=(self.ng - self.weno_order))
+        error_stencils = error[stencil_indexes]
+        reward = np.amax(np.abs(error_stencils), axis=-1)
+        #reward = np.sqrt(np.sum(error_stencils**2, axis=-1))
+
+        # Squash error.
+        reward = -np.arctan(reward)
+        max_penalty = np.pi / 2
+        #reward = -error
+        #max_penalty = 1e7
+
+
+        # Conservation-based reward.
+        # reward = -np.log(np.sum(rhs[g.ilo:g.ihi+1]))
+
+        # Give a penalty and end the episode if we're way off.
+        #if np.max(state) > 1e7 or np.isnan(np.max(state)): state possibly made more sense here
+        if np.max(error) > 1e7 or np.isnan(np.max(error)):
+            reward -= max_penalty * (self.episode_length - self.steps)
+            done = True
+
+        return reward, done
+
+
     def close(self):
         # Delete references for easier garbage collection.
         self.grid = None
@@ -432,46 +480,10 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         if self.steps >= self.episode_length:
             done = True
 
-        # compute reward
-        # Error-based reward.
-        reward = 0.0
         self.solution.update(dt, self.t)
-        error = self.solution.get_full() - g.get_full()
+        reward, force_done = self.calculate_reward()
 
-        # Clip tiny errors.
-        #error[error < 0.001] = 0
-        # Enhance extreme errors.
-        #error[error > 0.1] *= 10
-
-        # error = error[self.ng:-self.ng]
-        # These give reward based on error in cell right of interface, so missing reward for rightmost interface.
-        #reward = np.max(np.abs(error))
-        #reward = (error) ** 2
-
-        # Reward as function of the errors in the stencil.
-        # max error across stencil
-        stencil_indexes = create_stencil_indexes(
-                stencil_size=(self.weno_order * 2 - 1),
-                num_stencils=(self.nx + 1),
-                offset=(self.ng - self.weno_order))
-        error_stencils = error[stencil_indexes]
-        reward = np.amax(np.abs(error_stencils), axis=-1)
-        #reward = np.sqrt(np.sum(error_stencils**2, axis=-1))
-
-        # Squash error.
-        reward = -np.arctan(reward)
-        max_penalty = np.pi / 2
-        #reward = -error
-        #max_penalty = 1e7
-
-
-        # Conservation-based reward.
-        # reward = -np.log(np.sum(rhs[g.ilo:g.ihi+1]))
-
-        # Give a penalty and end the episode if we're way off.
-        if np.max(state) > 1e7 or np.isnan(np.max(state)):
-            reward -= max_penalty / 2 * self.steps
-            done = True
+        done = done or force_done
 
         if np.isnan(state).any():
             raise Exception("NaN detected in state.")
@@ -688,30 +700,10 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
         if self.steps >= self.episode_length:
             done = True
 
-        # compute reward
-        # Error-based reward.
-        reward = 0.0
         self.solution.update(dt, self.t)
-        error = self.solution.get_full() - g.get_full()
 
-        # Reward as function of the errors in the stencil.
-        # max error across stencil
-        stencil_indexes = create_stencil_indexes(
-                stencil_size=(self.weno_order * 2 - 1),
-                num_stencils=(self.nx + 1),
-                offset=(self.ng - self.weno_order))
-        error_stencils = error[stencil_indexes]
-        reward = np.amax(np.abs(error_stencils), axis=-1)
-
-        # Squash error.
-        reward = -np.arctan(reward)
-        max_penalty = np.pi / 2
-
-
-        # Give a penalty and end the episode if we're way off.
-        if np.max(state) > 1e7 or np.isnan(np.max(state)):
-            reward -= max_penalty / 2 * self.steps
-            done = True
+        reward, force_done = self.calculate_reward()
+        done = done or force_done
 
         if np.isnan(state).any():
             raise Exception("NaN detected in state.")
@@ -719,5 +711,4 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
             raise Exception("NaN detected in reward.")
 
         return state, reward, done, {}
-
 

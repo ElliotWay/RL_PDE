@@ -544,8 +544,12 @@ class SACBatch(OffPolicyRLModel):
                 if done:
                     if render is not None:
                         if ((log_interval is not None and len(episode_rewards) % log_interval == 0) 
-                            or (render_every is not None)):
-                            self.env.render(mode=render, fixed_axes=True,
+                                or (render_every is not None)):
+                            if render_every is None:
+                                fixed_axes = False
+                            else:
+                                fixed_axes = True
+                            self.env.render(mode=render, fixed_axes=fixed_axes,
                                             suffix="_ep_{:03d}_step_{:03d}".format(len(episode_rewards), ep_steps),
                                             title="Episode {:03d}, t = {:05.4f}".format(len(episode_rewards), self.env.t))
                     if self.action_noise is not None:
