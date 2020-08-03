@@ -162,10 +162,15 @@ def main():
     logger.configure(folder=args.log_dir, format_strs=['stdout'])  # ,tensorboard'
     logger.set_level(logger.DEBUG)  # logger.INFO
 
+    if args.env.startswith("weno"):
+        mode = "weno"
+    elif args.env.startswith("split_flux"):
+        mode = "split_flux"
+
     if args.agent == "default":
-        agent = StandardWENOAgent(order=args.order)
+        agent = StandardWENOAgent(order=args.order, mode=mode)
     elif args.agent == "stationary":
-        agent = StationaryAgent(order=args.order)
+        agent = StationaryAgent(order=args.order, mode=mode)
     elif args.agent == "equal":
         agent = EqualAgent(order=args.order)
     elif args.agent == "middle":
@@ -175,7 +180,7 @@ def main():
     elif args.agent == "right":
         agent = RightAgent(order=args.order)
     elif args.agent == "random":
-        agent = RandomAgent(order=args.order)
+        agent = RandomAgent(order=args.order, mode=mode)
     else:
         if args.algo == "sac":
             agent = SACBatch.load(args.agent)

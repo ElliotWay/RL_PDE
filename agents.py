@@ -4,19 +4,41 @@ import envs.weno_coefficients as weno_coefficients
 
 
 class StandardWENOAgent():
-    def __init__(self, order=3):
+    def __init__(self, order=3, mode="weno"):
         self.order = order
+        self.mode = mode
 
     def predict(self, state):
-        actions = self._weno_i_weights_batch(state)
+        weno_weights = self._weno_weights_batch(state)
 
-        return actions, None
+        if self.mode == "weno":
+            return actions, None
+
+        if self.mode == "split_flux":
+            order = self.order
+            a_mat = weno_coefficients.a_all[order]
+            a_mat = np.flip(a_mat, axis=-1)
+    
+            # a_mat is [sub_stencil_index, inner_index]
+            # weno_weights is [location, (fp,fm), sub_stencil_index]
+            # We want [location, (fp,fm), inner_index].
+            combined_weights = a_mat[None, None, :, :] * weno_weights[:, :, :, None]
+
+            flux_weights = np.zeros_like(state)
+            # TODO: figure out a way to vectorize this. This is a weird broadcast I'm trying to do,
+            # which would be easier if numpy had bultin support for banded matrices.
+            for sub_stencil_index in range(order):
+                flux_weights[:, :, sub_stencil_index:sub_stencil_index + order] += combined_weights[:, :, sub_stencil_index, :]
+
+            return flux_weights, None
+
+        raise Exception("{} mode not implemented.".format(mode))
 
     # Future note: we're wasting some computations.
     # The q^2 matrix for the kth sub-stencil has a lot of overlap with the q^2 matrix with the k+1st sub-stencil.
     # Also the upper triangle of the q^2 matrix is not needed.
     # Not a huge deal, but could be relevant with higher orders or factors of increasing complexity.
-    def _weno_i_weights_batch(self, q_batch):
+    def _weno_weights_batch(self, q_batch):
         """
         Get WENO weights for a batch
   
@@ -74,19 +96,22 @@ class StandardWENOAgent():
         return np.stack([weights_fp, weights_fm], axis=1)
 
 
-
 class StationaryAgent():
     """ Agent that always returns vectors of 0s, causing the environment to stay still. """
 
-    def __init__(self, order=3):
+    def __init__(self, order=3, mode="weno"):
         
         self.order = order
+        self.mode = mode
 
     def predict(self, state):
 
-        state_shape = list(state.shape)
-        state_shape[-1] = self.order
-        action_shape = tuple(state_shape)
+        if self.mode == "weno":
+            state_shape = list(state.shape)
+            state_shape[-1] = self.order
+            action_shape = tuple(state_shape)
+        elif self.mode == "split_flux":
+            action_shape = state.shape
 
         return np.zeros(action_shape), None
 
@@ -170,18 +195,25 @@ class RightAgent():
 class RandomAgent():
     """ Agent that gives random weights (that still add up to 1). """
 
-    def __init__(self, order=3):
+    def __init__(self, order=3, mode="weno"):
 
         self.order = order
+        self.mode = mode
 
     def predict(self, state):
 
-        action_shape = list(state.shape)
-        action_shape[-1] = self.order
-        action_shape = tuple(action_shape)
+        if self.mode == "weno":
+            action_shape = list(state.shape)
+            action_shape[-1] = self.order
+            action_shape = tuple(action_shape)
 
-        # Do Gaussian sample, then apply softmax.
-        random_logits = np.random.normal(size=action_shape)
-        exp_logits = np.exp(random_logits)
+            # Do Gaussian sample, then apply softmax.
+            random_logits = np.random.normal(size=action_shape)
+            exp_logits = np.exp(random_logits)
 
-        return exp_logits / (np.sum(exp_logits, axis=-1)[..., None])
+            return exp_logits / (np.sum(exp_logits, axis=-1)[..., None]), None
+        elif self.mode == "split_flux": 
+            # e^(order - 1) is chosen ad-hoc to vaguely relate to the max weights in WENO that increase with order.
+            return np.random.normal(size=state.shape, scale=(np.exp(self.order - 1))), None
+
+        raise Exception("{} mode not implemented.".format(mode))
