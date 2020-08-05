@@ -9,8 +9,8 @@ def build_env(env_name, args):
                              init_type=args.init_type, boundary=args.boundary,
                              C=args.C, fixed_step=args.timestep,
                              weno_order=args.order, eps=args.eps, episode_length=args.ep_length,
-                             analytical=args.analytical, precise_weno_order=args.precise_order, precise_scale=args.precise_scale
-                             )
+                             analytical=args.analytical, precise_weno_order=args.precise_order,
+                             precise_scale=args.precise_scale, srca=args.srca)
     else:
         print("Unrecognized environment type: \"" + str(env_name) + "\".")
         sys.exit(0)

@@ -5,7 +5,36 @@ import sys
 
 import numpy as np
 
-class Grid1d(object):
+class GridBase:
+
+    def __init__(self, nx, ng, xmin, xmax):
+        self.xmin = xmin
+        self.xmax = xmax
+        self.nx = nx
+        self.ng = ng
+
+        # physical coords -- cell-centered, left and right edges
+        self.dx = (xmax - xmin) / (nx)
+        self.x = xmin + (np.arange(nx + 2 * ng) - ng + 0.5) * self.dx
+    
+    def update(self, dt, time):
+        raise NotImplementedError()
+
+    def get_real(self):
+        raise NotImplementedError()
+
+    def get_full(self):
+        raise NotImplementedError()
+
+    def reset(self, **params):
+        raise NotImplementedError()
+
+    def scratch_array(self):
+        """ Return a zeroed array dimensioned for this grid. """
+        return np.zeros((self.nx + 2 * self.ng), dtype=np.float64)
+
+
+class Grid1d(GridBase):
     """
     1-dimensional grid of values for use in modelling differential equations.
     
@@ -52,15 +81,9 @@ class Grid1d(object):
         boundary : string
             Type of boundary condition, either "periodic", "outflow",
             or None to choose based on the initial condition.
-        keep_actual : bool
-            Whether to maintain an
         """
 
-        self.nx = nx
-        self.ng = ng
-
-        self.xmin = xmin
-        self.xmax = xmax
+        super().__init__(nx=nx, ng=ng, xmin=xmin, xmax=xmax)
 
         # _init_type and _boundary do not change, init_type and boundary may
         # change if init_type is scheduled or sampled.
@@ -73,23 +96,13 @@ class Grid1d(object):
         self._init_sample_types = self._init_schedule
         self._init_sample_probs = [0.2, 0.2, 0.2, 0.2, 0.2]
 
-
         # 0 and len-1 are indexes for values beyond the boundary,
         # so create ilo and ihi as indexes to real values
         self.ilo = ng
         self.ihi = ng + nx - 1
 
-        # physical coords -- cell-centered, left and right edges
-        self.dx = (xmax - xmin) / (nx)
-        self.x = xmin + (np.arange(nx + 2 * ng) - ng + 0.5) * self.dx
-
         # storage for the solution
         self.u = np.zeros((nx + 2 * ng), dtype=np.float64)
-
-    def scratch_array(self):
-        """ return a scratch array dimensioned for our grid """
-        return np.zeros((self.nx + 2 * self.ng), dtype=np.float64)
-
 
     def get_real(self):
         """ Get the real (non-ghost) values in the grid. """
@@ -104,8 +117,7 @@ class Grid1d(object):
         """ Return the number of indexes of all points, including ghost points """
         return self.nx + 2 * self.ng
 
-
-    def reset(self, params=[]):
+    def reset(self, params={}):
         """
         Reset the grid to initial conditions.
 
@@ -212,12 +224,17 @@ class Grid1d(object):
                 self.boundary = "outflow"
             self.u[:] = 1.0
             self.u[self.x > 0.5] = 2.0
+
+        elif self.init_type == "zero":
+            if boundary is None:
+                self.boundary = "outflow"
+            self.u[:] = 0
+
         else:
             raise Exception("Initial condition type \"" + str(type_) + "\" not recognized.")
 
         self.init_params['boundary'] = self.boundary
         self.update_boundary()
-
 
     def update(self, new_values):
         """

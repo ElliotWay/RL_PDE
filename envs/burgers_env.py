@@ -1,5 +1,6 @@
 import os
 import sys
+from datetime import datetime
 
 import gym
 import matplotlib.pyplot as plt
@@ -8,6 +9,7 @@ from gym import spaces
 from stable_baselines import logger
 
 from envs.grid import Grid1d
+from envs.source import RandomSource
 from envs.solutions import PreciseWENOSolution, SmoothSineSolution, SmoothRareSolution
 import envs.weno_coefficients as weno_coefficients
 from util.softmax_box import SoftmaxBox
@@ -192,13 +194,18 @@ class WENOBurgersEnv(gym.Env):
     def __init__(self,
             xmin=0.0, xmax=1.0, nx=128, boundary=None, init_type="smooth_sine",
             fixed_step=0.0005, C=0.5,
-            weno_order=3, eps=0.0, episode_length=300,
+            weno_order=3, eps=0.0, srca = 0.0, episode_length=300,
             analytical=False, precise_weno_order=None, precise_scale=1,
             record_weights=False):
 
         self.ng = weno_order+1
         self.nx = nx
         self.grid = Grid1d(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng, boundary=boundary, init_type=init_type)
+        
+        if srca > 0.0:
+            self.source = RandomSource(nx=nx, ng=self.ng, xmin=xmin, xmax=xmax, amplitude=srca)
+        else:
+            self.source = None
 
         if analytical:
             if init_type == "smooth_sine":
@@ -212,14 +219,14 @@ class WENOBurgersEnv(gym.Env):
                 precise_weno_order = weno_order
             self.solution = PreciseWENOSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng,
                                                 precise_scale=precise_scale, precise_order=precise_weno_order,
-                                                boundary=boundary, init_type=init_type, flux_function=flux)
+                                                boundary=boundary, init_type=init_type, flux_function=flux, source=self.source,
+                                                eps=eps)
 
         self.t = 0.0  # simulation time
         self.fixed_step = fixed_step
         self.C = C  # CFL number
         self.weno_order = weno_order
         self.eps = eps
-
         self.episode_length = episode_length
         self.steps = 0
         self.record_weights = record_weights
@@ -283,6 +290,10 @@ class WENOBurgersEnv(gym.Env):
             rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:]) + R[1:-1]
         else:
             rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:])
+
+        if self.source is not None:
+            rhs[1:-1] += self.source.get_full()[1:-1]
+
         return rhs
 
     def Euler_actual(self, dt):
@@ -460,6 +471,10 @@ class WENOBurgersEnv(gym.Env):
             rhs = (flux[:-1] - flux[1:]) / g.dx + R[g.ilo:g.ihi+1]
         else:
             rhs = (flux[:-1] - flux[1:]) / g.dx
+
+        if self.source is not None:
+            self.source.update(dt, self.t + dt)
+            rhs += self.source.get_real()
 
         u_copy += dt * rhs
         self.grid.update(u_copy)

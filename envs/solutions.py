@@ -1,36 +1,20 @@
 import numpy as np
 
 import envs.weno_coefficients as weno_coefficients
-from envs.grid import Grid1d
+from envs.grid import GridBase, Grid1d
 
-class SolutionBase:
 
-    def __init__(self, xmin, xmax, nx, ng):
-        self.xmin = xmin
-        self.xmax = xmax
-        self.nx = nx
-        self.ng = ng
-
-        self.dx = (xmax - xmin) / (nx)
-        self.x = xmin + (np.arange(nx + 2 * ng) - ng + 0.5) * self.dx
-    
-    def update(self, dt, time):
-        raise NotImplementedError()
-
-    def get_real(self):
-        raise NotImplementedError()
-
-    def get_full(self):
-        raise NotImplementedError()
-
-    def reset(self, **params):
-        raise NotImplementedError()
+class SolutionBase(GridBase):
+    """ SolutionBase is the same as GridBase but indicates that subclasses are intended to be solutions. """
+    pass
 
 
 class PreciseWENOSolution(SolutionBase):
     #TODO: should also calculate precise WENO with smaller timesteps.
 
-    def __init__(self, xmin, xmax, nx, ng, precise_order, precise_scale, init_type, boundary, flux_function, eps=0.0):
+    def __init__(self, nx, ng, xmin, xmax, precise_order, precise_scale, init_type, boundary, flux_function, eps=0.0, source=None):
+        super().__init__(nx=nx, ng=ng, xmin=xmin, xmax=xmax)
+
         assert (precise_scale % 2 == 1), "Precise scale must be odd for easier downsampling."
 
         self.precise_scale = precise_scale
@@ -48,9 +32,7 @@ class PreciseWENOSolution(SolutionBase):
         self.flux_function = flux_function
         self.eps = eps
         self.order = precise_order
-
-        super().__init__(xmin, xmax, nx, ng)
-
+        self.source = source
 
     def weno_stencils(self, q):
         """
@@ -76,7 +58,6 @@ class PreciseWENOSolution(SolutionBase):
                     q_stencils[k, i] += a[k, l] * q[i + k - l]
 
         return q_stencils
-
 
     def weno_weights(self, q):
         """
@@ -111,7 +92,6 @@ class PreciseWENOSolution(SolutionBase):
 
         return w
 
-
     def weno_new(self, q):
         """
         Compute WENO reconstruction
@@ -136,7 +116,6 @@ class PreciseWENOSolution(SolutionBase):
             qL[i] = np.dot(weights[:, i], q_stencils[:, i])
 
         return qL
-
 
     def rk_substep(self):
 
@@ -173,8 +152,11 @@ class PreciseWENOSolution(SolutionBase):
             rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:]) + R[1:-1]
         else:
             rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:])
-        return rhs
 
+        if self.source is not None:
+            rhs[1:-1] += self.source.get_full()[1:-1]
+
+        return rhs
 
     def lap(self):
         """
@@ -195,9 +177,9 @@ class PreciseWENOSolution(SolutionBase):
 
         return lapu
 
-
     def update(self, dt, time):
         # Do Euler step, though rk_substep is separated so this can be converted to RK4.
+        self.t = time
         euler_step = dt * self.rk_substep()
 
         self.precise_grid.u += euler_step
