@@ -158,7 +158,6 @@ def main():
         model = SACBatch(SACPolicy, env, policy_kwargs=policy_kwargs, learning_rate=args.learning_rate, buffer_size=args.buffer_size,
                  learning_starts=100, batch_size=args.batch_size, verbose=1, tensorboard_log="./log/weno_burgers/tensorboard",
                  action_adjust=action_adjust, action_adjust_inverse=action_adjust_inverse, obs_adjust=obs_adjust)
-        print("TODO: save parameterized functions?")
     elif args.algo == "ddpg":
         print("TODO: add parameterized squash function, action/state scaling to DDPG")
         sys.exit(0)
