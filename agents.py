@@ -12,7 +12,7 @@ class StandardWENOAgent():
         weno_weights = self._weno_weights_batch(state)
 
         if self.mode == "weno":
-            return actions, None
+            return weno_weights, None
 
         if self.mode == "split_flux":
             order = self.order

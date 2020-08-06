@@ -25,7 +25,7 @@ def create_meta_file(log_dir, args):
         import pwd
         current_user = pwd.getpwuid(os.getuid()).pw_name
         meta_file.write("initiated by user: {}\n".format(current_user))
-    else:
+    except ImportError:
         meta_file.write("initiated by user: UNKNOWN (run on Windows machine)\n")
 
     # Get commit id of HEAD.

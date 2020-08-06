@@ -668,7 +668,14 @@ class SACBatch(OffPolicyRLModel):
             "action_noise": self.action_noise,
             "random_exploration": self.random_exploration,
             "_vectorize_action": self._vectorize_action,
-            "policy_kwargs": self.policy_kwargs
+            "policy_kwargs": self.policy_kwargs,
+
+            # PDE Save these parameterized functions.
+            # cloudpickle apparently has helpful functions to serialize lambdas.
+            # Note that some of these functions are already in the policy_kwargs dict.
+            "action_adjust": self.action_adjust,
+            "action_adjust_inverse": self.action_adjust_inverse,
+            "obs_adjust": self.obs_adjust,
         }
 
         params_to_save = self.get_parameters()

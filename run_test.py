@@ -147,15 +147,6 @@ def main():
         shutil.rmtree(args.log_dir)
         os.makedirs(args.log_dir)
 
-    # Create symlink for convenience.
-    try:
-        log_link_name = "last"
-        if os.path.islink(log_link_name):
-            os.unlink(log_link_name)
-        os.symlink(args.log_dir, log_link_name, target_is_directory=True)
-    except OSError:
-        print("Failed to create \"last\" symlink. Maybe you're a non-admin on a Windows machine?")
-
     metadata.create_meta_file(args.log_dir, args)
 
     # Put stable-baselines logs in same directory.
@@ -190,7 +181,15 @@ def main():
             agent = SACBatch.load(args.agent)
         else:
             print("Algorithm {} not recognized.".format(args.algo))
-        
+ 
+    # Create symlink for convenience. (Do this after loading the agent in case we are loading from last.)
+    try:
+        log_link_name = "last"
+        if os.path.islink(log_link_name):
+            os.unlink(log_link_name)
+        os.symlink(args.log_dir, log_link_name, target_is_directory=True)
+    except OSError:
+        print("Failed to create \"last\" symlink. Maybe you're a non-admin on a Windows machine?")
 
     # Run test.
     signal.signal(signal.SIGINT, signal.default_int_handler)
