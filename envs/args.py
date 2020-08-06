@@ -31,6 +31,8 @@ def get_env_arg_parser():
                         help="The default boundary conditions depend on the init_type. Use --boundary if you want them to be something in particular.")
     parser.add_argument('--eps', type=nonnegative_float, default=0.0,
                         help="Viscosity parameter. Higher eps means more viscous.")
+    parser.add_argument('--srca', type=nonnegative_float, default=0.0,
+                        help="Source strength, Higher srca means stronger source.")
     parser.add_argument('--analytical', dest='analytical', action='store_true',
                         help="Use an analytical solution, if available.")
     parser.add_argument('--precise_order', type=positive_int, default=None,

@@ -1,5 +1,4 @@
 import os
-import pwd
 import re
 import sys
 import time
@@ -8,7 +7,9 @@ META_FILE_NAME = "meta.txt"
 
 
 def create_meta_file(log_dir, args):
-    # If adding new metadata, remember that lines must end with \n.
+    #################################################################
+    # If adding new metadata, remember that lines MUST end with \n. #
+    #################################################################
 
     meta_filename = os.path.join(log_dir, META_FILE_NAME)
     meta_file = open(meta_filename, 'x')
@@ -20,8 +21,12 @@ def create_meta_file(log_dir, args):
     meta_file.write("time finished: ????\n")
     meta_file.write("status: running\n")
 
-    current_user = pwd.getpwuid(os.getuid()).pw_name
-    meta_file.write("initated by user: {}\n".format(current_user))
+    try:
+        import pwd
+        current_user = pwd.getpwuid(os.getuid()).pw_name
+        meta_file.write("initiated by user: {}\n".format(current_user))
+    else:
+        meta_file.write("initiated by user: UNKNOWN (run on Windows machine)\n")
 
     # Get commit id of HEAD.
     git_head_file = open('.git/HEAD', 'r')
