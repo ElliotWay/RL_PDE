@@ -388,6 +388,8 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         """
         self.grid.reset()
+        if self.source is not None:
+            self.source.reset()
         self.solution.reset(**self.grid.init_params)
 
         self.t = 0.0
@@ -618,6 +620,8 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
 
         """
         self.grid.reset()
+        if self.source is not None:
+            self.source.reset()
         self.solution.reset(**self.grid.init_params)
 
         self.t = 0.0
@@ -764,6 +768,8 @@ class FluxBurgersEnv(AbstractBurgersEnv):
 
         """
         self.grid.reset()
+        if self.source is not None:
+            self.source.reset()
         self.solution.reset(**self.grid.init_params)
 
         self.t = 0.0
