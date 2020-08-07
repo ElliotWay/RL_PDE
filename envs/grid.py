@@ -227,7 +227,7 @@ class Grid1d(GridBase):
 
         elif self.init_type == "zero":
             if boundary is None:
-                self.boundary = "outflow"
+                self.boundary = "periodic"
             self.u[:] = 0
 
         else:

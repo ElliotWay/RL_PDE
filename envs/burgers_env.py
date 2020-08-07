@@ -116,7 +116,7 @@ class AbstractBurgersEnv(gym.Env):
         self.grid = Grid1d(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng, boundary=boundary, init_type=init_type)
         
         if srca > 0.0:
-            self.source = RandomSource(nx=nx, ng=self.ng, xmin=xmin, xmax=xmax, amplitude=srca)
+            self.source = RandomSource(grid=self.grid, amplitude=srca)
         else:
             self.source = None
 
