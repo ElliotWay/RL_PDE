@@ -531,14 +531,6 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         fp_state = state[:, 0, :]
         fm_state = state[:, 1, :]
 
-        # Record weights if that mode is enabled.
-        if self.record_weights:
-            self._all_learned_weights.append(action)
-            weno_weights_fp = weno_weights_batch(self.weno_order, fp_state)
-            weno_weights_fm = weno_weights_batch(self.weno_order, fm_state)
-            weno_weights = np.array([weno_weights_fp, weno_weights_fm])
-            self._all_weno_weights.append(weno_weights)
-
         done = False
         g = self.grid
 
