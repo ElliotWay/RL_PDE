@@ -13,9 +13,13 @@ class GridBase:
         self.nx = nx
         self.ng = ng
 
-        # physical coords -- cell-centered, left and right edges
         self.dx = (xmax - xmin) / (nx)
+
+        # Physical coordinates: cell-centered, left and right edges
         self.x = xmin + (np.arange(nx + 2 * ng) - ng + 0.5) * self.dx
+
+        # Physical coordinates: interfaces, left edges
+        self.inter_x = xmin + (np.arange(nx + 2 * ng) - ng) * self.dx
     
     def update(self, dt, time):
         raise NotImplementedError()

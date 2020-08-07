@@ -143,8 +143,16 @@ class AbstractBurgersEnv(gym.Env):
         self.eps = eps
         self.episode_length = episode_length
         self.steps = 0
+        self.action_history = []
 
-        self._solution_axes = None
+        self._state_axes = None
+        self._action_axes = None
+
+    def step(self):
+        raise NotImplementedError()
+
+    def reset(self):
+        raise NotImplementedError()
 
     def burgers_flux(self, q):
         # This is the only thing unique to Burgers, could we make this a general class with this as a parameter?
@@ -178,12 +186,14 @@ class AbstractBurgersEnv(gym.Env):
                                                           self.grid.ihi + 1]))
 
     def render(self, mode='file', **kwargs):
-        if mode == "file":
-            self.save_plot(**kwargs)
+        if "file" in mode:
+            self.plot_state(**kwargs)
+        if "action" in mode:
+            self.plot_action(**kwargs)
         else:
             raise Exception("Render mode: \"" + str(mode) + "\" not currently implemented.")
 
-    def save_plot(self, suffix=None, title=None, fixed_axes=False, no_x_borders=False, show_ghost=True):
+    def plot_state(self, suffix=None, title=None, fixed_axes=False, no_x_borders=False, show_ghost=True):
         fig = plt.figure()
 
         full_x = self.grid.x
@@ -235,17 +245,19 @@ class AbstractBurgersEnv(gym.Env):
             ax.set_xmargin(0.0)
 
         if fixed_axes:
-            if self._solution_axes is None:
-                self._solution_axes = (ax.get_xlim(), ax.get_ylim())
+            if self._state_axes is None:
+                self._state_axes = (ax.get_xlim(), ax.get_ylim())
             else:
-                xlim, ylim = self._solution_axes
+                xlim, ylim = self._state_axes
                 ax.set_xlim(xlim)
                 ax.set_ylim(ylim)
 
         log_dir = logger.get_dir()
         if suffix is None:
+            # Find number of digits in last step so files are sorted correctly.
+            # E.g., use 001 instead of 1.
             step_precision = int(np.ceil(np.log(self.episode_length) / np.log(10)))
-            suffix = ("_t{:0" + str(step_precision) + "}").format(self.steps)
+            suffix = ("_step{:0" + str(step_precision) + "}").format(self.steps)
         filename = 'burgers' + suffix + '.png'
         filename = os.path.join(log_dir, filename)
         plt.savefig(filename)
@@ -253,11 +265,102 @@ class AbstractBurgersEnv(gym.Env):
 
         plt.close(fig)
 
-    def step(self):
-        raise NotImplementedError()
+    def plot_action(self, timestep=None, location=None, suffix=None, title=None, fixed_axes=False, no_x_borders=False, **kwargs):
+        """
+        Plot actions at either a timestep or a specific location.
 
-    def reset(self):
-        raise NotImplementedError()
+        Either the timestep parameter or the location parameter can be specified, but not both.
+        By default, the most recent timestep is used.
+
+        This requires actions to be recorded in self.action_history in the subclasses step function.
+
+        Parameters
+        ----------
+        timestep : int
+            Timestep at which to plot actions. By default, use the most recent timestep.
+        location : int
+            Index of location at which to plot actions.
+        suffix : string
+            The plot will be saved to burgers_action_{suffix}.png. By default, the timestep/location
+            is used for the suffix.
+        title : string
+            Title for the plot. By default, the title is based on the timestep/location.
+        fixed_axes : bool
+            If true, use the same axis limits on every plot. Useful for animation.
+        no_x_border : bool
+            If true, trim the plot to exactly the extent of the x coordinates. Useful for animation.
+      
+        """
+
+        assert (timestep is None or location is None), "Can't plot action at both a timestep and a location."
+
+        action_dimensions = np.prod(list(self.action_space.shape)[1:])
+
+        vertical_size = 5.0
+        horizontal_size = 0.5 + 3.0 * action_dimensions
+        fig, axes = plt.subplots(1, action_dimensions, sharex=True, sharey=True, figsize=(horizontal_size, vertical_size))
+
+        action_history = np.array(self.action_history)
+        action_history = action_history.reshape((action_history.shape[0], action_history.shape[1], -1))
+
+        # If plotting actions at a timestep, need to transpose location to the last dimension.
+        # If plotting actions at a location, need to transpose time to the last dimension.
+        if location is not None:
+            action_history = action_history[:,location,:].transpose()
+
+            actual_location = self.grid.x[location]
+            if title is None:
+                fig.suptitle("actions at x = {:.4} (i = {} - 1/2)".format(actual_location, location))
+            else:
+                fig.suptitle(title)
+        else:
+            if timestep is None:
+                timestep = len(action_history) - 1
+            action_history = action_history[timestep, :, :].transpose()
+
+            if title is None:
+                if self.C is None:
+                    actual_time = timestep * self.fixed_step
+                    fig.suptitle("actions at t = {:.4} (step {})".format(actual_time, timestep))
+                else:
+                    # TODO get time with variable timesteps.
+                    fig.suptitle("actions at step {}".format(actual_time, timestep))
+            else:
+                fig.suptitle(title)
+
+        real_x = self.grid.inter_x[self.ng:-(self.ng-1)]
+
+        for dim in range(action_dimensions):
+            ax = axes[dim]
+
+            ax.plot(real_x, action_history[dim, :], c='k', linestyle='-')
+
+            if no_x_borders:
+                ax.set_xmargin(0.0)
+
+            if fixed_axes:
+               if self._state_axes is None:
+                   self._state_axes = (ax.get_xlim(), ax.get_ylim())
+               else:
+                   xlim, ylim = self._state_axes
+                   ax.set_xlim(xlim)
+                   ax.set_ylim(ylim)
+
+        log_dir = logger.get_dir()
+        if suffix is None:
+            if location is not None:
+                location_precision = int(np.ceil(np.log(self.nx) / np.log(10)))
+                suffix = ("_step{:0" + str(location_precision) + "}").format(location)
+            else:
+                step_precision = int(np.ceil(np.log(self.episode_length) / np.log(10)))
+                suffix = ("_step{:0" + str(step_precision) + "}").format(timestep)
+        filename = 'burgers_action' + suffix + '.png'
+
+        filename = os.path.join(log_dir, filename)
+        plt.savefig(filename)
+        print('Saved plot to ' + filename + '.')
+
+        plt.close(fig)
 
     def calculate_reward(self):
         """ Optional reward calculation based on the error between grid and solution. """
@@ -318,9 +421,8 @@ class AbstractBurgersEnv(gym.Env):
 
 class WENOBurgersEnv(AbstractBurgersEnv):
 
-    def __init__(self, *args, record_weights=False, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.record_weights = record_weights
 
         self.action_space = SoftmaxBox(low=0.0, high=1.0, 
                                        shape=(self.grid.real_length() + 1, 2, self.weno_order),
@@ -328,9 +430,6 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         self.observation_space = spaces.Box(low=-1e7, high=1e7,
                                             shape=(self.grid.real_length() + 1, 2, 2 * self.weno_order - 1),
                                             dtype=np.float64)
-
-    def set_record_weights(self, record_weights):
-        self.record_weights = record_weights
 
     def prep_state(self):
         """
@@ -425,6 +524,8 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         if np.isnan(action).any():
             raise Exception("NaN detected in action.")
 
+        self.action_history.append(action)
+
         state = self.current_state
 
         fp_state = state[:, 0, :]
@@ -492,66 +593,6 @@ class WENOBurgersEnv(AbstractBurgersEnv):
             raise Exception("NaN detected in reward.")
 
         return state, reward, done, {}
-
-    def plot_weights(self, timestep=None, location=None):
-        assert(len(self._all_learned_weights) == len(self._all_weno_weights))
-        if len(self._all_learned_weights) == 0:
-            print("Can't plot weights without recording them.\n"
-                    + "Use env.set_record_weights(True) (costs performance).")
-            return
-
-        vertical_size = 1.0 + 4.0 * (2)
-        horizontal_size = 1.0 + 4.0 * (self.weno_order)
-        fig, axes = plt.subplots(2, self.weno_order, sharex=True, sharey=True, figsize=(horizontal_size, vertical_size))
-
-        # These arrays are time X (nx+1) X 2 X order
-        learned_weights = np.array(self._all_learned_weights)
-        weno_weights = np.array(self._all_weno_weights)
-
-        if location is not None:
-            learned_weights = learned_weights[:,location,:,:].transpose((1, 2, 0))
-            weno_weights = weno_weights[:,location,:,:].transpose((1, 2, 0))
-            fig.suptitle("weights at interface " + str(location) + " - 1/2")
-        else:
-            if timestep is None:
-                timestep = len(self._all_learned_weights) - 1
-            learned_weights = learned_weights[timestep, :, :, :].transpose((1, 2, 0))
-            weno_weights = weno_weights[timestep, :, :, :].transpose((1, 2, 0))
-            fig.suptitle("weights at step " + str(timestep))
-
-        color_dim = np.arange(learned_weights.shape[2])
-        offsets = np.arange(self.weno_order) - int((self.weno_order - 1)/ 2)
-        for row, sign in zip((0, 1), ("+", "-")):
-            for col, offset in zip(range(self.weno_order), offsets):  # TODO: figure out offset with order!=3
-                label = "f^" + sign + "[" + str(offset) + "]"
-
-                axes[row, col].set_title(label)
-                if col == 0:
-                    axes[row, col].set_ylabel("WENO")
-                if row == 1:
-                    axes[row, col].set_xlabel("RL")
-                paths = axes[row, col].scatter(x=learned_weights[row, col, :], y=weno_weights[row, col, :], c=color_dim, cmap='viridis')
-                axes[row, col].set(aspect='equal')
-        cbar = fig.colorbar(paths, ax=axes.ravel().tolist())
-        if location is not None:
-            cbar.set_label("timestep")
-        else:
-            cbar.set_label("location")
-
-        log_dir = logger.get_dir()
-        filename = 'burgers_weights_comparison_'
-        if location is not None:
-            filename += 'i_' + str(location)
-        else:
-            filename += 'step_' + str(timestep)
-        filename += '.png'
-
-        filename = os.path.join(log_dir, filename)
-        plt.savefig(filename)
-        print('Saved plot to ' + filename + '.')
-
-        plt.close(fig)
-
 class SplitFluxBurgersEnv(AbstractBurgersEnv):
 
     def __init__(self, *args, **kwargs):
@@ -653,6 +694,8 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
 
         if np.isnan(action).any():
             raise Exception("NaN detected in action.")
+
+        self.action_history.append(action)
 
         state = self.current_state
 
@@ -801,6 +844,8 @@ class FluxBurgersEnv(AbstractBurgersEnv):
 
         if np.isnan(action).any():
             raise Exception("NaN detected in action.")
+
+        self.action_history.append(action)
 
         state = self.current_state
 

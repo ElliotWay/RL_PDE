@@ -24,9 +24,6 @@ from util import metadata
 
 
 def do_test(env, agent, args):
-    if args.plot_weights:
-        env.set_record_weights(True)
-
     state = env.reset()
 
     done = False
@@ -36,10 +33,19 @@ def do_test(env, agent, args):
     rewards = []
     total_reward = 0
 
+    render_args = {"mode": "file"}
+    if args.plot_actions:
+        render_args["mode"] = "file_actions"
+    if args.animate:
+        render_args["fixed_axes"] = True
+        render_args["no_x_borders"] = True
+        render_args["show_ghost"] = False
+    else:
+        render_args["fixed_axes"] = False
+
     start_time = time.time()
 
     while not done:
-
         # The agent's policy function takes a batch of states and returns a batch of actions.
         # However, we take that batch of actions and pass it to the environment like a single action.
         actions, _ = agent.predict(state)
@@ -49,32 +55,22 @@ def do_test(env, agent, args):
         total_reward += reward
 
         if args.animate:
-            env.render(fixed_axes=True, no_x_borders=True, show_ghost=False)
+            env.render(**render_args)
 
         if t >= args.ep_length * (next_update / 10):
             print("step = " + str(t))
             next_update += 1
             if not args.animate:
-                env.render(fixed_axes=False)
-            if args.plot_weights:
-                env.plot_weights()
-
-            # TODO: log other information?
+                env.render(**render_args)
 
         t += 1
 
     end_time = time.time()
 
+    env.render(**render_args)
+
     print("Test finished in " + str(end_time - start_time) + " seconds.")
     print("Total reward was " + str(total_reward) + ".")
-
-    if args.animate:
-        env.render(fixed_axes=True, no_x_borders=True, show_ghost=False)
-    else:
-        env.render(fixed_axes=False)
-
-    if args.plot_weights:
-        env.plot_weights()
 
 
 def main():
@@ -95,8 +91,8 @@ def main():
                         help="Number of timesteps in an episode.")
     parser.add_argument('--seed', type=int, default=1,
                         help="Set random seed for reproducibility.")
-    parser.add_argument('--plot-weights', default=False, action='store_true',
-                        help="Plot a comparison of weights across the episode instead of plotting the state.")
+    parser.add_argument('--plot-actions', '--plot_actions', default=False, action='store_true',
+                        help="Plot the actions in addition to the state.")
     parser.add_argument('--animate', default=False, action='store_true',
                         help="Enable animation mode. Plot the state at every timestep, and keep the axes fixed across every plot.")
     parser.add_argument('-y', default=False, action='store_true',
