@@ -173,7 +173,7 @@ class PreciseWENOSolution(SolutionBase):
                 a_mat = np.flip(a_mat, axis=-1)
                 combined_weights = a_mat[None, None, :, :] * action_weights[:, :, :, None]
 
-                flux_weights = np.zeros((g.get_real_length() + 1, 2, self.order * 2 - 1))
+                flux_weights = np.zeros((g.real_length() + 1, 2, self.order * 2 - 1))
                 for sub_stencil_index in range(order):
                     flux_weights[:, :, sub_stencil_index:sub_stencil_index + order] += combined_weights[:, :, sub_stencil_index, :]
                 self.action_history.append(flux_weights)

@@ -729,7 +729,7 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
         if self.source is not None:
             self.source.reset()
         self.solution.reset(**self.grid.init_params)
-        if self.weno_solutions is not None:
+        if self.weno_solution is not None:
             self.weno_solution.reset(**self.grid.init_params)
 
         self.t = 0.0
