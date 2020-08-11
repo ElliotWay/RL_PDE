@@ -113,6 +113,7 @@ class AbstractBurgersEnv(gym.Env):
 
         self.ng = weno_order+1
         self.nx = nx
+        self.weno_order = weno_order
         self.grid = Grid1d(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng, boundary=boundary, init_type=init_type)
         
         if srca > 0.0:
@@ -131,15 +132,24 @@ class AbstractBurgersEnv(gym.Env):
         else:
             if precise_weno_order is None:
                 precise_weno_order = weno_order
+            self.precise_weno_order = precise_weno_order
+            self.precise_nx = nx * precise_scale
             self.solution = PreciseWENOSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng,
                                                 precise_scale=precise_scale, precise_order=precise_weno_order,
                                                 boundary=boundary, init_type=init_type, flux_function=flux, source=self.source,
                                                 eps=eps)
 
+        if self.analytical or self.precise_weno_order != self.weno_order or self.precise_nx != self.nx:
+            self.weno_solution = PreciseWENOSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng,
+                                                     precise_scale=1, precise_order=weno_order,
+                                                     boundary=boundary, init_type=init_type, flux_function=flux,
+                                                     source=self.source, eps=eps)
+        else:
+            self.weno_solution = None
+
         self.t = 0.0  # simulation time
         self.fixed_step = fixed_step
         self.C = C  # CFL number
-        self.weno_order = weno_order
         self.eps = eps
         self.episode_length = episode_length
         self.steps = 0
@@ -190,8 +200,6 @@ class AbstractBurgersEnv(gym.Env):
             self.plot_state(**kwargs)
         if "action" in mode:
             self.plot_action(**kwargs)
-        else:
-            raise Exception("Render mode: \"" + str(mode) + "\" not currently implemented.")
 
     def plot_state(self, suffix=None, title=None, fixed_axes=False, no_x_borders=False, show_ghost=True):
         fig = plt.figure()
@@ -199,11 +207,26 @@ class AbstractBurgersEnv(gym.Env):
         full_x = self.grid.x
         real_x = full_x[self.ng:-self.ng]
 
-        full_actual = self.solution.get_full()
-        real_actual = full_actual[self.ng:-self.ng]
+        full_true = self.solution.get_full()
+        real_true = full_true[self.ng:-self.ng]
 
-        full_learned = self.grid.u
-        real_learned = full_learned[self.ng:-self.ng]
+        if self.weno_solution is not None:
+            full_weno = self.weno_solution.get_full()
+            real_weno = full_weno[self.ng:-self.ng]
+            weno_color = "tab:blue"
+            weno_ghost_color = "#75bdf0"
+            true_color = "tab:pink"
+            true_ghost_color = "#f7e4ed"
+        else:
+            true_color = "tab:blue"
+            true_ghost_color = "#75bdf0"
+
+        full_agent = self.grid.u
+        real_agent = full_agent[self.ng:-self.ng]
+        agent_color = "tab:orange"
+        agent_ghost_color =  "#ffad66"
+
+        # ghost green: "#94d194"
 
         # The ghost arrays slice off one real point so the line connects to the real points.
         # Leave off labels for these lines so they don't show up in the legend.
@@ -211,25 +234,37 @@ class AbstractBurgersEnv(gym.Env):
         if show_ghost:
             ghost_x_left = full_x[:num_ghost_points]
             ghost_x_right = full_x[-num_ghost_points:]
-            ghost_actual_left = full_actual[:num_ghost_points]
-            ghost_actual_right = full_actual[-num_ghost_points:]
-            ghost_blue = "#80b0ff"
-            plt.plot(ghost_x_left, ghost_actual_left, ls='-', color=ghost_blue)
-            plt.plot(ghost_x_right, ghost_actual_right, ls='-', color=ghost_blue)
-            ghost_learned_left = full_learned[:num_ghost_points]
-            ghost_learned_right = full_learned[-num_ghost_points:]
-            ghost_black = "#808080"  # ie grey
-            plt.plot(ghost_x_left, ghost_learned_left, ls='-', color=ghost_black)
-            plt.plot(ghost_x_right, ghost_learned_right, ls='-', color=ghost_black)
 
-        actual_label = "WENO"
+            ghost_true_left = full_true[:num_ghost_points]
+            ghost_true_right = full_true[-num_ghost_points:]
+            plt.plot(ghost_x_left, ghost_true_left, ls='-', color=true_ghost_color)
+            plt.plot(ghost_x_right, ghost_true_right, ls='-', color=true_ghost_color)
+
+            if self.weno_solution is not None:
+                ghost_weno_left = full_weno[:num_ghost_points]
+                ghost_weno_right = full_weno[-num_ghost_points:]
+                plt.plot(ghost_x_left, ghost_weno_left, ls='-', color=weno_ghost_color)
+                plt.plot(ghost_x_right, ghost_weno_right, ls='-', color=weno_ghost_color)
+
+            ghost_agent_left = full_agent[:num_ghost_points]
+            ghost_agent_right = full_agent[-num_ghost_points:]
+            plt.plot(ghost_x_left, ghost_agent_left, ls='-', color=agent_ghost_color)
+            plt.plot(ghost_x_right, ghost_agent_right, ls='-', color=agent_ghost_color)
+
         if self.analytical:
-            actual_label = "Analytical"
-        plt.plot(real_x, real_actual, ls='-', color='b', label=actual_label)
+            true_label = "Analytical"
+        else:
+            true_label = "WENO (order = {}, res = {})".format(self.precise_weno_order, self.precise_nx)
+        plt.plot(real_x, real_true, ls='-', color=true_color, label=true_label)
 
-        plt.plot(real_x, real_learned, ls='-', color='k', label="RL")
+        if self.weno_solution is not None:
+            weno_label = "WENO (order = {}, res = {})".format(self.weno_order, self.nx)
+            plt.plot(real_x, real_weno, ls='-', color=weno_color, label=weno_label)
+
+        agent_label = "RL"
+        plt.plot(real_x, real_agent, ls='-', color=agent_color, label=agent_label)
+
         plt.legend()
-
         ax = plt.gca()
 
         # Recalculate automatic axis scaling.
@@ -301,12 +336,27 @@ class AbstractBurgersEnv(gym.Env):
         fig, axes = plt.subplots(1, action_dimensions, sharex=True, sharey=True, figsize=(horizontal_size, vertical_size))
 
         action_history = np.array(self.action_history)
-        action_history = action_history.reshape((action_history.shape[0], action_history.shape[1], -1))
+
+        if self.solution.is_recording_actions():
+            weno_action_history = np.array(self.solution.get_action_history())
+            assert(action_history.shape == weno_action_history.shape)
+        elif self.weno_solution is not None and self.weno_solution.is_recording_actions():
+            weno_action_history = np.array(self.weno_solution.get_action_history())
+            assert(action_history.shape == weno_action_history.shape)
+        else:
+            weno_action_history = None
+
+        new_shape = (action_history.shape[0], action_history.shape[1], action_dimensions)
+        action_history = action_history.reshape(new_shape)
+        if weno_action_history is not None:
+            weno_action_history = weno_action_history.reshape(new_shape)
 
         # If plotting actions at a timestep, need to transpose location to the last dimension.
         # If plotting actions at a location, need to transpose time to the last dimension.
         if location is not None:
             action_history = action_history[:,location,:].transpose()
+            if weno_action_history is not None:
+                weno_action_history = weno_action_history[:, location, :].transpose()
 
             actual_location = self.grid.x[location]
             if title is None:
@@ -317,6 +367,8 @@ class AbstractBurgersEnv(gym.Env):
             if timestep is None:
                 timestep = len(action_history) - 1
             action_history = action_history[timestep, :, :].transpose()
+            if weno_action_history is not None:
+                weno_action_history = weno_action_history[timestep, :, :].transpose()
 
             if title is None:
                 if self.C is None:
@@ -330,10 +382,14 @@ class AbstractBurgersEnv(gym.Env):
 
         real_x = self.grid.inter_x[self.ng:-(self.ng-1)]
 
+        agent_color = "tab:orange"
+        weno_color = "tab:blue"
         for dim in range(action_dimensions):
             ax = axes[dim]
 
-            ax.plot(real_x, action_history[dim, :], c='k', linestyle='-')
+            if weno_action_history is not None:
+                ax.plot(real_x, weno_action_history[dim, :], c=weno_color, linestyle='-', label="WENO")
+            ax.plot(real_x, action_history[dim, :], c=agent_color, linestyle='-', label="RL")
 
             if no_x_borders:
                 ax.set_xmargin(0.0)
@@ -345,6 +401,8 @@ class AbstractBurgersEnv(gym.Env):
                    xlim, ylim = self._state_axes
                    ax.set_xlim(xlim)
                    ax.set_ylim(ylim)
+
+        plt.legend()
 
         log_dir = logger.get_dir()
         if suffix is None:
@@ -431,6 +489,11 @@ class WENOBurgersEnv(AbstractBurgersEnv):
                                             shape=(self.grid.real_length() + 1, 2, 2 * self.weno_order - 1),
                                             dtype=np.float64)
 
+        if self.weno_solution is not None:
+            self.weno_solution.set_record_actions("weno")
+        else:
+            self.solution.set_record_actions("weno")
+
     def prep_state(self):
         """
         Return state at current time step. Returns fpr and fml vector slices.
@@ -490,6 +553,8 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         if self.source is not None:
             self.source.reset()
         self.solution.reset(**self.grid.init_params)
+        if self.weno_solution is not None:
+            self.weno_solution.reset(**self.grid.init_params)
 
         self.t = 0.0
         self.steps = 0
@@ -576,8 +641,10 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         self.solution.update(dt, self.t)
         reward, force_done = self.calculate_reward()
-
         done = done or force_done
+
+        if self.weno_solution is not None:
+            self.weno_solution.update(dt, self.t)
 
         if np.isnan(state).any():
             raise Exception("NaN detected in state.")
@@ -585,6 +652,8 @@ class WENOBurgersEnv(AbstractBurgersEnv):
             raise Exception("NaN detected in reward.")
 
         return state, reward, done, {}
+
+
 class SplitFluxBurgersEnv(AbstractBurgersEnv):
 
     def __init__(self, *args, **kwargs):
@@ -596,6 +665,10 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
         self.observation_space = spaces.Box(low=-1e7, high=1e7,
                                             shape=(self.grid.real_length() + 1, 2, 2 * self.weno_order - 1),
                                             dtype=np.float64)
+        if self.weno_solution is None:
+            self.solution.set_record_actions("coef")
+        else:
+            self.weno_solution.set_record_actions("coef")
 
     def prep_state(self):
         """
@@ -656,6 +729,8 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
         if self.source is not None:
             self.source.reset()
         self.solution.reset(**self.grid.init_params)
+        if self.weno_solutions is not None:
+            self.weno_solution.reset(**self.grid.init_params)
 
         self.t = 0.0
         self.steps = 0
@@ -735,9 +810,11 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
             done = True
 
         self.solution.update(dt, self.t)
-
         reward, force_done = self.calculate_reward()
         done = done or force_done
+
+        if self.weno_solution is not None:
+            self.weno_solution.update(dt, self.t)
 
         if np.isnan(state).any():
             raise Exception("NaN detected in state.")
@@ -806,6 +883,8 @@ class FluxBurgersEnv(AbstractBurgersEnv):
         if self.source is not None:
             self.source.reset()
         self.solution.reset(**self.grid.init_params)
+        if self.weno_solution is not None:
+            self.weno_solution.reset(**self.grid.init_params)
 
         self.t = 0.0
         self.steps = 0
@@ -876,9 +955,11 @@ class FluxBurgersEnv(AbstractBurgersEnv):
             done = True
 
         self.solution.update(dt, self.t)
-
         reward, force_done = self.calculate_reward()
         done = done or force_done
+
+        if self.weno_solution is not None:
+            self.weno_solution.update(dt, self.t)
 
         if np.isnan(state).any():
             raise Exception("NaN detected in state.")

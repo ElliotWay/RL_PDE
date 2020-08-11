@@ -6,13 +6,17 @@ from envs.grid import GridBase, Grid1d
 
 class SolutionBase(GridBase):
     """ SolutionBase is the same as GridBase but indicates that subclasses are intended to be solutions. """
-    pass
-
+    def is_recording_actions(self):
+        # Override this if you are indeed recording actions.
+        return False
 
 class PreciseWENOSolution(SolutionBase):
     #TODO: should also calculate precise WENO with smaller timesteps.
 
-    def __init__(self, nx, ng, xmin, xmax, precise_order, precise_scale, init_type, boundary, flux_function, eps=0.0, source=None):
+    def __init__(self, nx, ng, xmin, xmax,
+                 precise_order, precise_scale, init_type, boundary, flux_function,
+                 eps=0.0, source=None,
+                 record_actions=None):
         super().__init__(nx=nx, ng=ng, xmin=xmin, xmax=xmax)
 
         assert (precise_scale % 2 == 1), "Precise scale must be odd for easier downsampling."
@@ -33,6 +37,18 @@ class PreciseWENOSolution(SolutionBase):
         self.eps = eps
         self.order = precise_order
         self.source = source
+
+        self.record_action = record_actions
+        if record_actions is not None:
+            self.action_history = []
+
+    def is_recording_actions(self):
+        return (self.record_actions is not None)
+    def set_record_actions(self, record_mode):
+        self.record_actions = record_mode
+        self.action_history = []
+    def get_action_history(self):
+        return self.action_history
 
     def weno_stencils(self, q):
         """
@@ -114,8 +130,7 @@ class PreciseWENOSolution(SolutionBase):
         num_points = len(q) - 2 * self.order
         for i in range(self.order, num_points + self.order):
             qL[i] = np.dot(weights[:, i], q_stencils[:, i])
-
-        return qL
+        return qL, weights
 
     def rk_substep(self):
 
@@ -138,10 +153,30 @@ class PreciseWENOSolution(SolutionBase):
 
         # compute fluxes at the cell edges
         # compute f plus to the right
-        fpr[1:] = self.weno_new(fp[:-1])
+        fpr[1:], fp_weights = self.weno_new(fp[:-1])
         # compute f minus to the left
         # pass the data in reverse order
-        fml[-1::-1] = self.weno_new(fm[-1::-1])
+        fml[-1::-1], fm_weights = self.weno_new(fm[-1::-1])
+
+        if self.record_actions is not None:
+            action_weights = np.stack((fp_weights[:, self.ng-1:-(self.ng-1)], fm_weights[:, -(self.ng+1):self.ng-2:-1]))
+            # resulting array is (fp, fm) X stencil X location
+            # transpose to location X (fp, fm) X stencil
+            action_weights = action_weights.transpose((2, 0, 1))
+
+            if self.record_actions == "weno":
+                self.action_history.append(action_weights)
+            elif self.record_actions == "coef":
+                # Same as in Standard WENO agent in agents.py.
+                order = self.order
+                a_mat = weno_coefficients.a_all[order]
+                a_mat = np.flip(a_mat, axis=-1)
+                combined_weights = a_mat[None, None, :, :] * action_weights[:, :, :, None]
+
+                flux_weights = np.zeros((g.get_real_length() + 1, 2, self.order * 2 - 1))
+                for sub_stencil_index in range(order):
+                    flux_weights[:, :, sub_stencil_index:sub_stencil_index + order] += combined_weights[:, :, sub_stencil_index, :]
+                self.action_history.append(flux_weights)
 
         # compute flux from fpr and fml
         flux[1:-1] = fpr[1:-1] + fml[1:-1]
@@ -206,14 +241,15 @@ class PreciseWENOSolution(SolutionBase):
 
 class ImplicitSolution(SolutionBase):
 
-    def __init__(self, xmin, xmax, nx, ng, epsilon=1e-10):
+    def __init__(self, nx, ng, xmin, xmax, epsilon=1e-10):
         self.epsilon = epsilon
-        super().__init__(xmin, xmax, nx, ng)
+        super().__init__(nx=nx, ng=ng, xmin=xmin, xmax=xmax)
 
     def update(self, dt, time):
 
         old_u = self.u
         new_u = self.iterate(old_u, time)
+
         max_diff = np.max(np.abs(old_u - new_u))
         prev_diff = 1024
 
@@ -261,9 +297,10 @@ class SmoothSineSolution(ImplicitSolution):
 
         self.u = self.amplitude*np.sin(2 * np.pi * self.x)
 
-class SmoothRareSolution(SolutionBase):
+class SmoothRareSolution(ImplicitSolution):
     def iterate(self, old_u, time):
         new_u = self.amplitude * np.tanh(self.k * (self.x - 0.5 - old_u*time))
+        return new_u
 
     def reset(self, A=1.0, k=1.0, **kwargs):
         self.amplitude = A
