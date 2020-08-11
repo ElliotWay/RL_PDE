@@ -69,6 +69,8 @@ def main():
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     algo_arg_parser.add_argument('--layers', type=int, nargs='+', default=[32, 32],
             help="Size of network layers.")
+    algo_arg_parser.add_argument('--gamma', type=float, default=0.99,
+            help="Discount factor on future rewards.")
     algo_arg_parser.add_argument('--learning-rate', '--learning_rate', '--lr', type=float, default=3e-4,
             help="Learning rate for SAC, which uses same rate for all networks.")
     algo_arg_parser.add_argument('--actor-lr', '--actor_lr', type=float, default=1e-4,
@@ -155,7 +157,7 @@ def main():
 
 
     if args.algo == "sac":
-        model = SACBatch(SACPolicy, env, policy_kwargs=policy_kwargs, learning_rate=args.learning_rate, buffer_size=args.buffer_size,
+        model = SACBatch(SACPolicy, env, gamma=args.gamma, policy_kwargs=policy_kwargs, learning_rate=args.learning_rate, buffer_size=args.buffer_size,
                  learning_starts=100, batch_size=args.batch_size, verbose=1, tensorboard_log="./log/weno_burgers/tensorboard",
                  action_adjust=action_adjust, action_adjust_inverse=action_adjust_inverse, obs_adjust=obs_adjust)
     elif args.algo == "ddpg":
@@ -182,7 +184,7 @@ def main():
             else:
                 raise RuntimeError('unknown noise type "{}"'.format(current_noise_type))
 
-        model = DDPGBatch(DDPGPolicy, env, eval_env=eval_env,
+        model = DDPGBatch(DDPGPolicy, env, eval_env=eval_env, gamma=args.gamma,
                 policy_kwargs=policy_kwargs, actor_lr=args.actor_lr, critic_lr=args.critic_lr, buffer_size=args.buffer_size,
                 batch_size=args.batch_size, action_noise=action_noise, param_noise=param_noise,
                 verbose=1)
