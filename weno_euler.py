@@ -1,13 +1,16 @@
 import sys
+import os
 import numpy
 import numpy as np
-from matplotlib import pyplot
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 import tensorflow as tf
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
-import weno_coefficients
+from envs import weno_coefficients
 #import riemann
 from models.sac import SACBatch
 from util.misc import create_stencil_indexes
@@ -198,7 +201,7 @@ class WENOSimulation(object):
             self.grid.q[0, :] = rho[:]
             self.grid.q[1, :] = S[:]
             self.grid.q[2, :] = E[:]
-        elif type == "double rarefaction":
+        elif type == "double_rarefaction":
             rho_l = 1
             rho_r = 1
             v_l =-2
@@ -220,6 +223,8 @@ class WENOSimulation(object):
             self.grid.q[2] = numpy.where(self.grid.x < 0,
                                          E_l * numpy.ones_like(self.grid.x),
                                          E_r * numpy.ones_like(self.grid.x))
+        else:
+            raise Exception("Invalid initial condition: \"{}\":".format(type))
 
 
     def max_lambda(self):
@@ -344,13 +349,15 @@ class WENOSimulation(object):
         if reconstruction == 'characteristic':
             stepper = self.rk_substep_characteristic
 
+        step_count = 0
+        self.save_plot("step0")
+
         # main evolution loop
         while self.t < tmax:
 
             # fill the boundary conditions
             g.fill_BCs()
 
-            # get the timestep
             dt = self.timestep()
 
             if self.t + dt > tmax:
@@ -377,8 +384,27 @@ class WENOSimulation(object):
             g.q[:, :] = q2[:, :]
             g.q = (q_start + 2 * q2 + 2 * dt * stepper()) / 3
 
+            step_count += 1
+            if step_count % 5 == 0:
+                self.save_plot(suffix="step{}".format(step_count))
+
             self.t += dt
 #            print("t=", self.t)
+
+    def evolve_step(self, dt, reconstruction = 'componentwise'):
+        stepper = self.rk_substep
+        if reconstruction == 'characteristic':
+            stepper = self.rk_substep_characteristic
+
+        g = self.grid
+        g.fill_BCs()
+
+        q_start = g.q.copy()
+        q1 = q_start + dt * stepper()
+        g.q[:, :] = q1[:, :]
+        q2 = (3 * q_start + q1 + dt * stepper()) / 4
+        g.q[:, :] = q2[:, :]
+        g.q = (q_start + 2 * q2 + 2 * dt * stepper()) / 3
 
     def rk_substep_agent(self, agent):
         g = self.grid
@@ -402,10 +428,16 @@ class WENOSimulation(object):
                 weno_stencils_batch(self.weno_order, state[:, 2])]
         q_stencils = np.array(q_stencils)
 
-        weights_0, _ = agent.predict(state[:, 0])
-        weights_1, _ = agent.predict(state[:, 1])
-        weights_2, _ = agent.predict(state[:, 2])
+        # The agent expects location to be first axis.
+        # (fp, fm) X var X location X stencil -> var X location X (fp,fm) X stencil
+        state = state.transpose((1, 2, 0, 3))
+
+        weights_0, _ = agent.predict(state[0])
+        weights_1, _ = agent.predict(state[1])
+        weights_2, _ = agent.predict(state[2])
         weights = np.array([weights_0, weights_1, weights_2])
+
+        weights = weights.transpose((0, 2, 1, 3))
 
         fml_and_fpr = np.sum(weights * q_stencils, axis=-1)
 
@@ -417,9 +449,12 @@ class WENOSimulation(object):
         return rhs
 
 
-    def evolve_with_agent(self, agent, tmax, reconstruction):
+    def evolve_with_agent(self, agent, tmax, solution=None):
         self.t = 0.0
         g = self.grid
+
+        step_count = 0
+        self.save_plot("step0", other=solution)
 
         while self.t < tmax:
             print("t={}".format(self.t))
@@ -430,65 +465,93 @@ class WENOSimulation(object):
             # Just Euler, skip RK for now.
             g.q += dt * self.rk_substep_agent(agent)
 
-            if np.any(g.q <= 0.0):
-                print("Solution dropped below 0!!!")
-                np.clip(g.q, a_min=1e-6)
+            if np.any(g.q[0] <= 0.0):
+                print("Density dropped below 0!!!")
+                #print(g.q[0])
+                #self.save_plot(suffix="step{}_fail".format(step_count), other=solution)
+                g.q[0] = np.clip(g.q[0], a_min=1e-6, a_max=None)
+                #raise Exception()
+            if np.any(g.q[2] <= 0.0):
+                print("Energy dropped below 0!!!")
+                #print(g.q[2])
+                #self.save_plot(suffix="step{}_fail".format(step_count), other=solution)
+                g.q[2] = np.clip(g.q[2], a_min=1e-6, a_max=None)
+                #raise Exception()
+
+            if solution is not None:
+                solution.evolve_step(dt)
+
+            step_count += 1
+            if step_count % 5 == 0:
+                self.save_plot(suffix="step{}".format(step_count), other=solution)
 
             self.t += dt
 
-    def save_plot(self, suffix=None):
-        # TODO: change to render all 3 components of the state.
+    def save_plot(self, suffix=None, other=None):
         fig = plt.figure()
 
+        fig, axes = plt.subplots(1, 3, sharex=True, sharey=True)
+
         full_x = self.grid.x
-        real_x = full_x[self.grid.ilo:self.grid.ihi + 1]
+        real_x = full_x[self.grid.ng:-self.grid.ng]
 
-        #full_actual = self.grid.uactual
-        #real_actual = full_actual[self.grid.ilo:self.grid.ihi + 1]
-        #plt.plot(real_x, real_actual, ls='-', color='b', label="WENO")
+        if other is not None:
+            full_other = other.grid.q
+            real_other = full_other[:, other.grid.ng:-other.grid.ng]
+            other_color = "tab:blue"
+            other_ghost_color = "#75bdf0"
 
-        full_learned = self.grid.u
-        real_learned = full_learned[self.grid.ilo:self.grid.ihi + 1]
-        plt.plot(real_x, real_learned, ls='-', color='k', label="learned")
+        full_value = self.grid.q
+        real_value = self.grid.q[:, self.grid.ng:-self.grid.ng]
+        value_color = "tab:orange"
+        value_ghost_color = "#ffad66"
 
-        show_ghost = True
         # The ghost arrays slice off one real point so the line connects to the real points.
         # Leave off labels for these lines so they don't show up in the legend.
+        num_ghost_points = self.grid.ng + 1
+        show_ghost = False
         if show_ghost:
-            ghost_x_left = full_x[:self.grid.ilo + 1]
-            ghost_x_right = full_x[self.grid.ihi:]
-            #ghost_actual_left = full_actual[:self.grid.ilo + 1]
-            #ghost_actual_right = full_actual[self.grid.ihi:]
-            #ghost_blue = "#80b0ff"
-            #plt.plot(ghost_x_left, ghost_actual_left, ls='-', color=ghost_blue)
-            #plt.plot(ghost_x_right, ghost_actual_right, ls='-', color=ghost_blue)
-            ghost_learned_left = full_learned[:self.grid.ilo + 1]
-            ghost_learned_right = full_learned[self.grid.ihi:]
-            ghost_black = "#808080"  # ie grey
-            plt.plot(ghost_x_left, ghost_learned_left, ls='-', color=ghost_black)
-            plt.plot(ghost_x_right, ghost_learned_right, ls='-', color=ghost_black)
+            ghost_x_left = full_x[:num_ghost_points]
+            ghost_x_right = full_x[-num_ghost_points:]
+
+            if other is not None:
+                ghost_other_left = full_other[:, :num_ghost_points]
+                ghost_other_right = full_other[:, -num_ghost_points:]
+                for i in range(3):
+                    axes[i].plot(ghost_x_left, ghost_other_left[i], ls='-', color=other_ghost_color)
+                    axes[i].plot(ghost_x_right, ghost_other_right[i], ls='-', color=other_ghost_color)
+
+            ghost_value_left = full_value[:, :num_ghost_points]
+            ghost_value_right = full_value[:, -num_ghost_points:]
+
+            for i in range(3):
+                axes[i].plot(ghost_x_left, ghost_value_left[i], ls='-', color=value_ghost_color)
+                axes[i].plot(ghost_x_right, ghost_value_right[i], ls='-', color=value_ghost_color)
+
+        var_labels = ["\N{GREEK SMALL LETTER RHO}", "S", "E"]
+        for i in range(3):
+            axes[i].set_title(var_labels[i])
+            if other is not None:
+                axes[i].plot(real_x, real_other[i], ls='-', color=other_color, label="WENO")
+            axes[i].plot(real_x, real_value[i], ls='-', color=value_color, label="agent")
+
+        title = "t = {:.3f}s".format(self.t)
+        fig.suptitle(title)
 
         plt.legend()
 
-        ax = plt.gca()
-
-        # Recalculate automatic axis scaling.
-        ax.relim()
-        ax.autoscale_view()
-
-        ax.set_title("step=" + str(self.steps))
-
-        log_dir = "test/euler/"#logger.get_dir()
+        log_dir = LOG_DIR
         if suffix is None:
-            step_precision = int(np.ceil(np.log(self.episode_length) / np.log(10)))
-            suffix = ("_t{:0" + str(step_precision) + "}").format(self.steps)
-        filename = 'burgers' + suffix + '.png'
+            suffix = ""
+        filename = 'eulers' + suffix + '.png'
         filename = os.path.join(log_dir, filename)
         plt.savefig(filename)
         print('Saved plot to ' + filename + '.')
 
         plt.close(fig)
 
+LOG_DIR = "test/weno_eulers/double_rarefaction"
+#LOG_DIR = "test/weno_eulers/advection"
 
 
 if __name__ == "__main__":
@@ -500,16 +563,24 @@ if __name__ == "__main__":
     tmax = 0.1
     C = 0.5
 
-    order = 3
+    order = 2
     ng = order+2
 
-    g = Grid1d(nx, ng, xmin, xmax, bc="outflow")
-    s = WENOSimulation(g, C, order)
-    s.init_cond("advection")
+    init = "double_rarefaction"
+    #init = "advection"
 
-    agent_file = "log/weno_burgers/sac/sine_init/720_3/model_final.zip"
+    agent_grid = Grid1d(nx, ng, xmin, xmax, bc="outflow")
+    agent_sim = WENOSimulation(agent_grid, C, order)
+    agent_sim.init_cond(init)
+
+    weno_grid = Grid1d(nx, ng, xmin, xmax, bc="outflow")
+    weno_sim = WENOSimulation(weno_grid, C, order)
+    weno_sim.init_cond(init)
+
+    agent_file = "possible_good_model.zip"
     agent = SACBatch.load(agent_file)
+    agent_sim.evolve_with_agent(agent, tmax, solution=weno_sim)
+    agent_sim.save_plot("last", other=weno_sim)
 
-    s.evolve_with_agent(agent, tmax, reconstruction="componentwise")
-
-    s.save_plot()
+    #weno_sim.evolve(tmax)
+    #weno_sim.save_plot("last")
