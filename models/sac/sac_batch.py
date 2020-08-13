@@ -63,7 +63,7 @@ class SACBatch(OffPolicyRLModel):
         If None, the number of cpu of the current machine will be used.
     """
 
-    def __init__(self, policy, env, gamma=0.99, learning_rate=3e-4, buffer_size=50000,
+    def __init__(self, policy, env, eval_env, gamma=0.99, learning_rate=3e-4, buffer_size=50000,
                  learning_starts=100, train_freq=1, batch_size=64,
                  tau=0.005, ent_coef='auto', target_update_interval=1,
                  gradient_steps=1, target_entropy='auto', action_noise=None,
@@ -75,6 +75,8 @@ class SACBatch(OffPolicyRLModel):
         super(SACBatch, self).__init__(policy=policy, env=env, replay_buffer=None, verbose=verbose,
                                        policy_base=SACPolicy, requires_vec_env=False, policy_kwargs=policy_kwargs,
                                        seed=seed, n_cpu_tf_sess=n_cpu_tf_sess)
+
+        self.eval_env = eval_env
 
         self.buffer_size = buffer_size
         self.learning_rate = learning_rate
@@ -406,7 +408,7 @@ class SACBatch(OffPolicyRLModel):
 
     def learn(self, total_timesteps, callback=None,
               log_interval=4, tb_log_name="SAC", reset_num_timesteps=True, replay_wrapper=None,
-              render=None, render_every=None):
+              eval_episodes=1, render=None, render_every=None):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
         callback = self._init_callback(callback)
@@ -557,7 +559,7 @@ class SACBatch(OffPolicyRLModel):
                     if not isinstance(self.env, VecEnv):
                         obs = self.env.reset()
                         # Normalize initial state.
-                        obs = np.apply_along_axis(self.normalize_obs, -1, obs)
+                        obs = self.obs_adjust(obs)
                     episode_rewards.append(0.0)
 
                     ep_steps = 0
@@ -566,41 +568,77 @@ class SACBatch(OffPolicyRLModel):
                     if maybe_is_success is not None:
                         episode_successes.append(float(maybe_is_success))
 
-                if len(episode_rewards[-101:-1]) == 0:
-                    mean_reward = -np.inf
-                else:
-                    mean_reward = round(float(np.mean(episode_rewards[-101:-1])), 1)
+                    if log_interval is not None and len(episode_rewards) % log_interval == 0:
 
-                num_episodes = len(episode_rewards)
-                # Display training infos
-                if self.verbose >= 1 and done and log_interval is not None and len(episode_rewards) % log_interval == 0:
-                    fps = int(step / (time.time() - start_time))
-                    logger.logkv("episodes", num_episodes)
-                    logger.logkv("mean 100 episode reward", mean_reward)
-                    if len(self.ep_info_buf) > 0 and len(self.ep_info_buf[0]) > 0:
-                        logger.logkv('ep_rewmean', safe_mean([ep_info['r'] for ep_info in self.ep_info_buf]))
-                        logger.logkv('eplenmean', safe_mean([ep_info['l'] for ep_info in self.ep_info_buf]))
-                    logger.logkv("n_updates", n_updates)
-                    logger.logkv("current_lr", current_lr)
-                    logger.logkv("fps", fps)
-                    logger.logkv('time_elapsed', int(time.time() - start_time))
-                    if len(episode_successes) > 0:
-                        logger.logkv("success rate", np.mean(episode_successes[-100:]))
-                    if len(infos_values) > 0:
-                        for (name, val) in zip(self.infos_names, infos_values):
-                            logger.logkv(name, val)
-                    logger.logkv("total timesteps", self.num_timesteps)
-                    logger.dumpkvs()
-                    # Reset infos:
-                    infos_values = []
+                        total_eval_reward = 0
+                        for eval_ep in range(eval_episodes):
+                            if render_every is not None and ep_steps % render_every == 0:
+                                if eval_episodes > 1:
+                                    suffix = "_ep_{:03d}_eval_{}_step_{:03d}".format(len(episode_rewards), eval_ep + 1, eval_ep_steps)
+                                else:
+                                    suffix = "_ep_{:03d}_step_{:03d}".format(len(episode_rewards), eval_ep_steps)
+                                self.env.render(mode=render, fixed_axes=True, suffix=suffix,
+                                                title="Episode {:03d} training episodes, t = {:05.4f}".format(len(episode_rewards), self.eval_env.t))
+                            eval_done = False
+                            eval_obs = self.eval_env.reset()
+                            eval_obs = self.obs_adjust(eval_obs)
+                            eval_ep_steps = 0
+                            while not eval_done:
+                                eval_action = self.policy_tf.step(eval_obs, deterministic=True).flatten()
+                                eval_action = action.reshape((-1,) + (self.i_action_space.shape))
+                                eval_action = self.action_adjust(action)
 
-                    # PDE Save current model.
-                    # TODO Also save model when an interrupt occurs. Needs signal catching around network updates. See https://stackoverflow.com/a/21919644/2860127
-                    log_dir = logger.get_dir()
-                    model_file_name = os.path.join(log_dir, "model" + str(len(episode_rewards)))
-                    self.save(model_file_name)
-                    print("Saved model to " + model_file_name + ".")
+                                new_eval_obs, eval_reward, eval_done, _ = self.eval_env.step(eval_action)
+                                new_eval_obs = self.obs_adjust(new_eval_obs)
+                                eval_obs = new_eval_obs
 
+                                eval_ep_steps += 1
+                                total_eval_reward += np.mean(eval_reward)
+
+                            if render is not None:
+                                if eval_episodes > 1:
+                                    suffix = "_ep_{:03d}_eval_{}_step_{:03d}".format(len(episode_rewards), eval_ep + 1, eval_ep_steps)
+                                else:
+                                    suffix = "_ep_{:03d}_step_{:03d}".format(len(episode_rewards), eval_ep_steps)
+                                self.env.render(mode=render, fixed_axes=(render_every is not None), suffix=suffix,
+                                                title="{:03d} training episodes, t = {:05.4f}".format(len(episode_rewards), self.eval_env.t))
+
+                        average_eval_reward = total_eval_reward / eval_episodes
+
+                        if len(episode_rewards[-101:-1]) == 0:
+                            mean_reward = -np.inf
+                        else:
+                            mean_reward = round(float(np.mean(episode_rewards[-101:-1])), 1)
+
+                        # Display training infos
+                        if self.verbose >= 1:
+                            fps = int(step / (time.time() - start_time))
+                            logger.logkv("episodes", len(episode_rewards))
+                            logger.logkv("mean 100 training episode reward", mean_reward)
+                            logger.logkv("mean {} eval episode reward".format(eval_episodes), average_eval_reward)
+                            if len(self.ep_info_buf) > 0 and len(self.ep_info_buf[0]) > 0:
+                                logger.logkv('ep_rewmean', safe_mean([ep_info['r'] for ep_info in self.ep_info_buf]))
+                                logger.logkv('eplenmean', safe_mean([ep_info['l'] for ep_info in self.ep_info_buf]))
+                            logger.logkv("n_updates", n_updates)
+                            logger.logkv("current_lr", current_lr)
+                            logger.logkv("fps", fps)
+                            logger.logkv('time_elapsed', int(time.time() - start_time))
+                            if len(episode_successes) > 0:
+                                logger.logkv("success rate", np.mean(episode_successes[-100:]))
+                            if len(infos_values) > 0:
+                                for (name, val) in zip(self.infos_names, infos_values):
+                                    logger.logkv(name, val)
+                            logger.logkv("total timesteps", self.num_timesteps)
+                            logger.dumpkvs()
+                            # Reset infos:
+                            infos_values = []
+
+                        # PDE Save current model.
+                        # TODO Also save model when an interrupt occurs. Needs signal catching around network updates. See https://stackoverflow.com/a/21919644/2860127
+                        log_dir = logger.get_dir()
+                        model_file_name = os.path.join(log_dir, "model" + str(len(episode_rewards)))
+                        self.save(model_file_name)
+                        print("Saved model to " + model_file_name + ".")
                     
             callback.on_training_end()
             return self

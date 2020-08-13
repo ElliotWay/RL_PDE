@@ -157,7 +157,7 @@ def main():
 
 
     if args.algo == "sac":
-        model = SACBatch(SACPolicy, env, gamma=args.gamma, policy_kwargs=policy_kwargs, learning_rate=args.learning_rate, buffer_size=args.buffer_size,
+        model = SACBatch(SACPolicy, env, eval_env=eval_env, gamma=args.gamma, policy_kwargs=policy_kwargs, learning_rate=args.learning_rate, buffer_size=args.buffer_size,
                  learning_starts=100, batch_size=args.batch_size, verbose=1, tensorboard_log="./log/weno_burgers/tensorboard",
                  action_adjust=action_adjust, action_adjust_inverse=action_adjust_inverse, obs_adjust=obs_adjust)
     elif args.algo == "ddpg":
