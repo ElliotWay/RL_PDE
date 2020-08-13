@@ -443,10 +443,6 @@ class SACBatch(OffPolicyRLModel):
             ep_steps = 0
 
             for step in range(total_timesteps):
-                if render_every is not None and ep_steps % render_every == 0:
-                    self.env.render(mode=render, fixed_axes=True,
-                                    suffix="_ep_{:03d}_step_{:03d}".format(len(episode_rewards), ep_steps),
-                                    title="Episode {:03d}, t = {:05.4f}".format(len(episode_rewards), self.env.t))
 
                 # Before training starts, randomly sample actions
                 # from a uniform distribution for better exploration.
@@ -544,16 +540,6 @@ class SACBatch(OffPolicyRLModel):
 
                 episode_rewards[-1] += reward
                 if done:
-                    if render is not None:
-                        if ((log_interval is not None and len(episode_rewards) % log_interval == 0) 
-                                or (render_every is not None)):
-                            if render_every is None:
-                                fixed_axes = False
-                            else:
-                                fixed_axes = True
-                            self.env.render(mode=render, fixed_axes=fixed_axes,
-                                            suffix="_ep_{:03d}_step_{:03d}".format(len(episode_rewards), ep_steps),
-                                            title="Episode {:03d}, t = {:05.4f}".format(len(episode_rewards), self.env.t))
                     if self.action_noise is not None:
                         self.action_noise.reset()
                     if not isinstance(self.env, VecEnv):
@@ -577,7 +563,7 @@ class SACBatch(OffPolicyRLModel):
                                     suffix = "_ep_{:03d}_eval_{}_step_{:03d}".format(len(episode_rewards), eval_ep + 1, eval_ep_steps)
                                 else:
                                     suffix = "_ep_{:03d}_step_{:03d}".format(len(episode_rewards), eval_ep_steps)
-                                self.env.render(mode=render, fixed_axes=True, suffix=suffix,
+                                self.eval_env.render(mode=render, fixed_axes=True, suffix=suffix,
                                                 title="Episode {:03d} training episodes, t = {:05.4f}".format(len(episode_rewards), self.eval_env.t))
                             eval_done = False
                             eval_obs = self.eval_env.reset()
@@ -600,7 +586,7 @@ class SACBatch(OffPolicyRLModel):
                                     suffix = "_ep_{:03d}_eval_{}_step_{:03d}".format(len(episode_rewards), eval_ep + 1, eval_ep_steps)
                                 else:
                                     suffix = "_ep_{:03d}_step_{:03d}".format(len(episode_rewards), eval_ep_steps)
-                                self.env.render(mode=render, fixed_axes=(render_every is not None), suffix=suffix,
+                                self.eval_env.render(mode=render, fixed_axes=(render_every is not None), suffix=suffix,
                                                 title="{:03d} training episodes, t = {:05.4f}".format(len(episode_rewards), self.eval_env.t))
 
                         average_eval_reward = total_eval_reward / eval_episodes
@@ -614,8 +600,8 @@ class SACBatch(OffPolicyRLModel):
                         if self.verbose >= 1:
                             fps = int(step / (time.time() - start_time))
                             logger.logkv("episodes", len(episode_rewards))
-                            logger.logkv("mean 100 training episode reward", mean_reward)
-                            logger.logkv("mean {} eval episode reward".format(eval_episodes), average_eval_reward)
+                            logger.logkv("avg 100ep train reward", mean_reward)
+                            logger.logkv("avg {}ep eval reward".format(eval_episodes), average_eval_reward)
                             if len(self.ep_info_buf) > 0 and len(self.ep_info_buf[0]) > 0:
                                 logger.logkv('ep_rewmean', safe_mean([ep_info['r'] for ep_info in self.ep_info_buf]))
                                 logger.logkv('eplenmean', safe_mean([ep_info['l'] for ep_info in self.ep_info_buf]))

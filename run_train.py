@@ -40,6 +40,9 @@ def main():
                         help="Algorithm to train with. sac or ddpg, though ddpg hasn't been updated in a while.")
     parser.add_argument('--env', type=str, default="weno_burgers",
                         help="Name of the environment in which to deploy the agent.")
+    parser.add_argument('--same_eval_env', default=False, action='store_true',
+                        help="Use an evaluation environment identical to the training environment."
+                        + " (The default is an environment of multiple representative initial conditions.)")
     parser.add_argument('--log-dir', '--log_dir', type=str, default=None,
                         help="Directory to place log file and other results. Default is log/env/algo/timestamp.")
     parser.add_argument('--ep-length', '--ep_length', type=int, default=250,
@@ -53,7 +56,8 @@ def main():
     parser.add_argument('--render', type=str, default="file",
                         help="How to render output. Options are file, human, and none.")
     parser.add_argument('--animate', type=int, default=None, 
-                        help="Enable animation mode. Plot the state at every nth timestep, and keep the axes fixed across every plot.")
+                        help="Enable animation mode. Plot the state at every nth timestep, and keep the axes fixed across every plot."
+                        + " This option also forces the same_eval_env option.")
     parser.add_argument('-y', default=False, action='store_true',
                         help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
     parser.add_argument('-n', default=False, action='store_true',
@@ -98,11 +102,21 @@ def main():
             algo_arg_parser.print_help()
         sys.exit(0)
 
+    if args.animate:
+        args.same_eval_env = True
+
     np.random.seed(args.seed)
     tf.set_random_seed(args.seed)
 
     env = build_env(args.env, args)
     eval_env = build_env(args.env, args) # Some algos like an extra env for evaluation.
+    eval_episodes = 1
+    if not args.same_eval_env:
+        #TODO fix this ugly hack and make these parameters.
+        eval_env.grid._init_type = "schedule"
+        eval_env.grid._init_schedule = ["sine", "rarefaction", "accelshock"]
+        eval_episodes = 3
+        eval_env.episode_length = 2*args.ep_length
 
     # Things like this make me wish I was writing in a functional language.
     # I sure could go for some partial evaluation and some function composition.
@@ -230,7 +244,7 @@ def main():
     # Call model.learn().
     signal.signal(signal.SIGINT, signal.default_int_handler)
     try:
-        model.learn(total_timesteps=args.total_timesteps, log_interval=args.log_freq, render=args.render, render_every=args.animate)
+        model.learn(total_timesteps=args.total_timesteps, log_interval=args.log_freq, eval_episodes=eval_episodes, render=args.render, render_every=args.animate)
     except KeyboardInterrupt:
         print("Training stopped by interrupt.")
         metadata.log_finish_time(args.log_dir, status="stopped by interrupt")
