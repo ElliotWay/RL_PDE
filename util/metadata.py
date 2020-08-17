@@ -2,6 +2,7 @@ import os
 import re
 import sys
 import time
+import argparse
 
 META_FILE_NAME = "meta.txt"
 
@@ -100,3 +101,49 @@ def log_finish_time(log_dir, status="finished"):
     for line in all_lines:
         meta_file.write(line)
     meta_file.close()
+
+def load_meta_file(meta_filename):
+    meta_file = open(meta_filename)
+    meta_dict = {}
+    for line in meta_file:
+        matches = re.fullmatch("([^:]+):\s*(.+)\n?", line)
+        if matches:
+            meta_dict[matches.group(1)] = matches.group(2)
+    meta_file.close()
+    return meta_dict
+
+def load_to_namespace(meta_filename, args_ns, arg_list=None):
+    " arg_list defaults to the command line arguments. Doesn't work if dest arg was used for parser. Assumes bools are default-false flags. "
+    # TODO find a way to get around some of this stuff? Might not be possible.
+
+    # Note that this is not a deep copy - changes to the dict will also change the namespace.
+    arg_dict = vars(args_ns)
+
+    no_default_parser = argparse.ArgumentParser(argument_default=argparse.SUPPRESS)
+    for arg, value in arg_dict.items():
+        arg = "--" + arg
+        arg_names = [arg]
+        # Allow for arguments with - instead of _.
+        if '_' in arg:
+            arg_names.append(arg.replace('_', '-'))
+        # Assume bools are flags.
+        if isinstance(value, bool):
+            no_default_parser.add_argument(*arg_names, action='store_true')
+        else:
+            no_default_parser.add_argument(*arg_names)
+
+    explicit_args, other = no_default_parser.parse_known_args(arg_list)
+    if len(other) > 0:
+        raise Exception("Loading meta file had issues. Couldn't understand these arguments: {}".format(" ".join(other)))
+
+    print(explicit_args)
+    meta_dict = load_meta_file(meta_filename)
+    for arg in arg_dict:
+        if arg not in meta_dict:
+            print("{} not found in meta file - using default/explicit value ({}).".format(arg, arg_dict[arg]))
+        elif arg in explicit_args:
+            print("Explicit {} overriding parameter in {}.".format(arg, meta_filename))
+        else:
+            arg_dict[arg] = meta_dict[arg]
+
+        # Note: If a parameter was in the meta file, but not the arg namespace, it was just a non-parameter field in the meta file.

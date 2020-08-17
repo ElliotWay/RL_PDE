@@ -53,6 +53,10 @@ def main():
                         help="Number of episodes to wait between logging information.")
     parser.add_argument('--seed', type=int, default=1,
                         help="Set random seed for reproducibility.")
+    parser.add_argument('--repeat', type=str, default=None,
+                        help="Copy parameters from a meta.txt file to run a similar or identical experiment."
+                        + " Explicitly passed parameters override parameters in the meta file."
+                        + " Passing an explicit --log-dir is recommended.")
     parser.add_argument('--render', type=str, default="file",
                         help="How to render output. Options are file, human, and none.")
     parser.add_argument('--animate', type=int, default=None, 
@@ -101,6 +105,9 @@ def main():
         if args.help_algo:
             algo_arg_parser.print_help()
         sys.exit(0)
+
+    if args.repeat is not None:
+        metadata.load_to_namespace(args.repeat, args)
 
     if args.animate:
         args.same_eval_env = True
