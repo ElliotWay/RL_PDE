@@ -63,7 +63,7 @@ class SACBatch(OffPolicyRLModel):
         If None, the number of cpu of the current machine will be used.
     """
 
-    def __init__(self, policy, env, eval_env, gamma=0.99, learning_rate=3e-4, buffer_size=50000,
+    def __init__(self, policy, env, eval_env=None, gamma=0.99, learning_rate=3e-4, buffer_size=50000,
                  learning_starts=100, train_freq=1, batch_size=64,
                  tau=0.005, ent_coef='auto', target_update_interval=1,
                  gradient_steps=1, target_entropy='auto', action_noise=None,
