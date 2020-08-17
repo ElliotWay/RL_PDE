@@ -112,9 +112,40 @@ def load_meta_file(meta_filename):
     meta_file.close()
     return meta_dict
 
+# This version didn't quite work as intended.
+def override_argv(meta_arg_name="--repeat"):
+    new_argv = sys.argv
+    new_argv.append("$override_sentinel")
+    if meta_arg_name in sys.argv:
+        meta_filename = sys.argv[sys.argv.index(meta_arg_name) + 1]
+        meta_dict = load_meta_file(meta_filename)
+        for arg, value in meta_dict.items():
+            if value != "None":
+                arg = "--" + arg
+                if arg in sys.argv or arg.replace('_', '-') in sys.argv:
+                    print("Explicit {} overriding parameter in {}.".format(arg, meta_filename))
+                else:
+                    if isinstance(value, bool):
+                        new_argv.append(arg)
+                    elif value[0] == '[' and value[-1] == ']':
+                        values = value[1:-1].split(",")
+                        new_argv.append(arg)
+                        new_argv += values
+                    else:
+                        new_argv += [arg, value]
+    return new_argv[1:] # Remove name of file.
+
+def destring_value(string):
+    try:
+        return eval(string)
+    except Exception:
+        return string
+
 def load_to_namespace(meta_filename, args_ns, arg_list=None):
     " arg_list defaults to the command line arguments. Doesn't work if dest arg was used for parser. Assumes bools are default-false flags. "
     # TODO find a way to get around some of this stuff? Might not be possible.
+
+    print("M Loading from meta file: {}".format(meta_filename))
 
     # Note that this is not a deep copy - changes to the dict will also change the namespace.
     arg_dict = vars(args_ns)
@@ -134,16 +165,16 @@ def load_to_namespace(meta_filename, args_ns, arg_list=None):
 
     explicit_args, other = no_default_parser.parse_known_args(arg_list)
     if len(other) > 0:
-        raise Exception("Loading meta file had issues. Couldn't understand these arguments: {}".format(" ".join(other)))
+        raise Exception("Loading meta file had issues. Couldn't understand these arguments: {}"
+                .format(" ".join(other)))
 
-    print(explicit_args)
     meta_dict = load_meta_file(meta_filename)
     for arg in arg_dict:
         if arg not in meta_dict:
-            print("{} not found in meta file - using default/explicit value ({}).".format(arg, arg_dict[arg]))
+            print("M {} not found in meta file - using default/explicit value ({}).".format(arg, arg_dict[arg]))
         elif arg in explicit_args:
-            print("Explicit {} overriding parameter in {}.".format(arg, meta_filename))
+            print("M Explicit {} overriding parameter in {}.".format(arg, meta_filename))
         else:
-            arg_dict[arg] = meta_dict[arg]
+            arg_dict[arg] = destring_value(meta_dict[arg])
 
         # Note: If a parameter was in the meta file, but not the arg namespace, it was just a non-parameter field in the meta file.

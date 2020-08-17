@@ -62,10 +62,13 @@ def main():
     parser.add_argument('--animate', type=int, default=None, 
                         help="Enable animation mode. Plot the state at every nth timestep, and keep the axes fixed across every plot."
                         + " This option also forces the same_eval_env option.")
-    parser.add_argument('-y', default=False, action='store_true',
+    parser.add_argument('-y', '--y', default=False, action='store_true',
                         help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
-    parser.add_argument('-n', default=False, action='store_true',
+    parser.add_argument('-n', '--n', default=False, action='store_true',
                         help="Choose no for any questions, namely overwriting existing files. Useful for scripts. Overrides the -y option.")
+
+    # Do some hacks with argv to handle repeat argument.
+    #argv = metadata.override_argv()
 
     main_args, rest = parser.parse_known_args()
 
@@ -95,6 +98,7 @@ def main():
 
     args = Namespace(**vars(main_args), **vars(env_args), **vars(algo_args))
 
+    #rest = rest[:rest.index("$override_sentinel")]
     if len(rest) > 0:
         print("Unrecognized arguments: " + " ".join(rest))
         sys.exit(0)
