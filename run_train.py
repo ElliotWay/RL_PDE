@@ -47,7 +47,7 @@ def main():
                         help="Directory to place log file and other results. Default is log/env/algo/timestamp.")
     parser.add_argument('--ep-length', '--ep_length', type=int, default=250,
                         help="Number of timesteps in an episode.")
-    parser.add_argument('--total-timesteps', '--total_timesteps', type=int, default=int(1e5),
+    parser.add_argument('--total-timesteps', '--total_timesteps', type=int, default=int(250000),
                         help="Total number of timesteps to train.")
     parser.add_argument('--log-freq', '--log_freq', type=int, default=10,
                         help="Number of episodes to wait between logging information.")
