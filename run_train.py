@@ -80,7 +80,7 @@ def main():
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     algo_arg_parser.add_argument('--layers', type=int, nargs='+', default=[32, 32],
             help="Size of network layers.")
-    algo_arg_parser.add_argument('--gamma', type=float, default=0.99,
+    algo_arg_parser.add_argument('--gamma', type=float, default=0.0,
             help="Discount factor on future rewards.")
     algo_arg_parser.add_argument('--learning-rate', '--learning_rate', '--lr', type=float, default=3e-4,
             help="Learning rate for SAC, which uses same rate for all networks.")
