@@ -39,10 +39,10 @@ def main():
     parser.add_argument('--algo', '-a', type=str, default="sac",
                         help="Algorithm to train with. sac or ddpg, though ddpg hasn't been updated in a while.")
     parser.add_argument('--env', type=str, default="weno_burgers",
-                        help="Name of the environment in which to deploy the agent.")
-    parser.add_argument('--same_eval_env', default=False, action='store_true',
-                        help="Use an evaluation environment identical to the training environment."
-                        + " (The default is an environment of multiple representative initial conditions.)")
+                        help="Name of the environment in which to train the agent.")
+    parser.add_argument('--eval-env', '--eval_env', default=None,
+                        help="Evaluation env. Default is to use an identical environment to the training environment."
+                        + " Pass 'custom' to use a representative sine/rarefaction/accelshock combination.")
     parser.add_argument('--log-dir', '--log_dir', type=str, default=None,
                         help="Directory to place log file and other results. Default is log/env/algo/timestamp.")
     parser.add_argument('--ep-length', '--ep_length', type=int, default=250,
@@ -113,16 +113,15 @@ def main():
     if args.repeat is not None:
         metadata.load_to_namespace(args.repeat, args)
 
-    if args.animate:
-        args.same_eval_env = True
-
     np.random.seed(args.seed)
     tf.set_random_seed(args.seed)
 
     env = build_env(args.env, args)
     eval_env = build_env(args.env, args) # Some algos like an extra env for evaluation.
-    eval_episodes = 1
-    if not args.same_eval_env:
+    if args.eval_env is None:
+        eval_episodes = 1
+    else:
+        assert(args.eval_env == "custom")
         #TODO fix this ugly hack and make these parameters.
         eval_env.grid._init_type = "schedule"
         eval_env.grid._init_schedule = ["sine", "rarefaction", "accelshock"]
