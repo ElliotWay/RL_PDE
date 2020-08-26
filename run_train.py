@@ -132,7 +132,11 @@ def main():
     # I sure could go for some partial evaluation and some function composition.
     def flat_rescale_from_tanh(action):
         action = rescale(action, [-1,1], [0,1])
-        return action / np.sum(action, axis=-1)[..., np.newaxis]
+        return action / np.sum(action, axis=-1)[..., None]
+
+    def softmax(action):
+        exp_actions = np.exp(action)
+        return exp_actions / np.sum(exp_actions, axis=-1)[..., None]
 
     def back_to_tanh(action):
         return rescale(action, [0,1], [-1,1])
@@ -157,7 +161,7 @@ def main():
     if args.env == "weno_burgers":
         squash_function = None   # Use default tanh squash/correction.
         squash_correction = None
-        action_adjust = flat_rescale_from_tanh
+        action_adjust = softmax
         action_adjust_inverse = back_to_tanh
         obs_adjust = z_score_last_dim
     elif args.env == "split_flux_burgers":
