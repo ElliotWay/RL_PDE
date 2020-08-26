@@ -1,4 +1,5 @@
 #!/bin/bash
+trap "exit" INT
 
 ############################################################
 # This is a template for creating a parameter sweep script. Make a copy of this file, don't edit it directly.
