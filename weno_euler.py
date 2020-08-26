@@ -163,6 +163,8 @@ class WENOSimulation(object):
         self.weno_order = weno_order
         self.eos_gamma = eos_gamma # Gamma law EOS
 
+        self._state_axes = [None, None, None]
+
     def init_cond(self, type="sod"):
         if type == "sod":
             rho_l = 1
@@ -454,7 +456,7 @@ class WENOSimulation(object):
         g = self.grid
 
         step_count = 0
-        self.save_plot("step0", other=solution)
+        self.save_plot("step000", other=solution)
 
         while self.t < tmax:
             print("t={}".format(self.t))
@@ -482,13 +484,15 @@ class WENOSimulation(object):
                 solution.evolve_step(dt)
 
             step_count += 1
-            if step_count % 5 == 0:
-                self.save_plot(suffix="step{}".format(step_count), other=solution)
+            if step_count % 1 == 0:
+                self.save_plot(suffix="step{:03}".format(step_count), other=solution)
 
             self.t += dt
 
     def save_plot(self, suffix=None, other=None):
-        fig = plt.figure()
+        fixed_axes = True
+        no_x_border = True
+        show_ghost = False
 
         fig, axes = plt.subplots(1, 3, sharex=True, sharey=True)
 
@@ -509,7 +513,6 @@ class WENOSimulation(object):
         # The ghost arrays slice off one real point so the line connects to the real points.
         # Leave off labels for these lines so they don't show up in the legend.
         num_ghost_points = self.grid.ng + 1
-        show_ghost = False
         if show_ghost:
             ghost_x_left = full_x[:num_ghost_points]
             ghost_x_right = full_x[-num_ghost_points:]
@@ -534,6 +537,18 @@ class WENOSimulation(object):
             if other is not None:
                 axes[i].plot(real_x, real_other[i], ls='-', color=other_color, label="WENO")
             axes[i].plot(real_x, real_value[i], ls='-', color=value_color, label="agent")
+
+            if no_x_border:
+                axes[i].set_xmargin(0.0)
+
+            if fixed_axes:
+                if self._state_axes[i] is None:
+                    self._state_axes[i] = (axes[i].get_xlim(), axes[i].get_ylim())
+                else:
+                    xlim, ylim = self._state_axes[i]
+                    axes[i].set_xlim(xlim)
+                    axes[i].set_ylim(ylim)
+
 
         title = "t = {:.3f}s".format(self.t)
         fig.suptitle(title)
@@ -560,7 +575,7 @@ if __name__ == "__main__":
     xmax = 0.5
     nx = 128
     
-    tmax = 0.1
+    tmax = 0.185 # 0.1
     C = 0.5
 
     order = 2
