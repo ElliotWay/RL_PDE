@@ -23,14 +23,14 @@ from agents import StandardWENOAgent, StationaryAgent, EqualAgent, MiddleAgent, 
 from models.sac import SACBatch
 from util import metadata
 
-def save_evolution_plot(x_values, original, state_record, final_solution, args):
+def save_evolution_plot(x_values, state_record, final_solution, args):
     #plt.plot(x_values, final_solution, ls='-', linewidth=4, color='c', label="WENO")
 
     light_grey = 0.9
-    plt.plot(x_values, original, ls='--', color=str(light_grey))
+    plt.plot(x_values, state_record[0], ls='--', color=str(light_grey))
 
-    for state_values, color in zip(state_record[:-1],
-                                    np.arange(light_grey, 0.0, -(light_grey / len(state_record)))):
+    for state_values, color in zip(state_record[1:-1],
+                                    np.arange(light_grey, 0.0, -light_grey / (len(state_record) - 1))):
         plt.plot(x_values, state_values, ls='-', color=str(color))
 
     plt.plot(x_values, state_record[-1], ls='-', color="0.0", label="RL")
@@ -51,14 +51,14 @@ def do_test(env, agent, args):
 
     done = False
     t = 0
-    next_update = 1
+    next_update = 0
+    NUM_UPDATES = 10
+    update_step = 0
 
     rewards = []
     total_reward = 0
 
-    render_args = {"mode": "file"}
-    if args.plot_actions:
-        render_args["mode"] = "file_actions"
+    render_args = {}
     if args.animate:
         render_args["fixed_axes"] = True
         render_args["no_x_borders"] = True
@@ -66,25 +66,35 @@ def do_test(env, agent, args):
     else:
         render_args["fixed_axes"] = False
     if args.evolution_plot:
-        render_args["mode"] = None
-        original_state = np.array(env.grid.get_real())
         state_record = []
 
     start_time = time.time()
 
     while not done:
+ 
+        if t >= update_step:
+            print("step = " + str(t))
+            if not args.animate:
+                env.render(mode="file", **render_args)
+            if args.evolution_plot:
+                state_record.append(np.array(env.grid.get_real()))
+
+        if args.animate:
+            env.render(mode="file", **render_args)
+
         # The agent's policy function takes a batch of states and returns a batch of actions.
         # However, we take that batch of actions and pass it to the environment like a single action.
         actions, _ = agent.predict(state)
         state, reward, done, info = env.step(actions)
 
-        if t >= args.ep_length * (next_update / 10):
-            print("step = " + str(t))
+        if t >= update_step:
             next_update += 1
-            if not args.animate:
-                env.render(**render_args)
-            if args.evolution_plot:
-                state_record.append(np.array(env.grid.get_real()))
+            update_step = args.ep_length * (next_update / NUM_UPDATES)
+            if not args.animate and args.plot_actions:
+                env.render(mode="actions", **render_args)
+
+        if args.animate and args.plot_actions:
+            env.render(mode="actions", **render_args)
 
         rewards.append(reward)
         total_reward += reward
@@ -96,11 +106,15 @@ def do_test(env, agent, args):
 
     end_time = time.time()
 
-    env.render(**render_args)
+    print("step = {} (done)".format(t))
+
+    env.render(mode="file")
+    if args.plot_actions:
+        env.render(mode="actions")
     if args.evolution_plot:
         state_record.append(np.array(env.grid.get_real()))
         final_solution_state = np.array(env.solution.get_real())
-        save_evolution_plot(env.grid.x[env.ng:-env.ng], original_state, state_record, final_solution_state, args)
+        save_evolution_plot(env.grid.x[env.ng:-env.ng], state_record, final_solution_state, args)
 
     print("Test finished in " + str(end_time - start_time) + " seconds.")
     print("Total reward was " + str(total_reward) + ".")
