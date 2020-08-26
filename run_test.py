@@ -7,6 +7,7 @@ import time
 from argparse import Namespace
 
 import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 
@@ -22,13 +23,35 @@ from agents import StandardWENOAgent, StationaryAgent, EqualAgent, MiddleAgent, 
 from models.sac import SACBatch
 from util import metadata
 
+def save_evolution_plot(x_values, original, state_record, final_solution, args):
+    #plt.plot(x_values, final_solution, ls='-', linewidth=4, color='c', label="WENO")
+
+    light_grey = 0.9
+    plt.plot(x_values, original, ls='--', color=str(light_grey))
+
+    for state_values, color in zip(state_record[:-1],
+                                    np.arange(light_grey, 0.0, -(light_grey / len(state_record)))):
+        plt.plot(x_values, state_values, ls='-', color=str(color))
+
+    plt.plot(x_values, state_record[-1], ls='-', color="0.0", label="RL")
+    plt.plot(x_values[::5], final_solution[::5], ls='', marker='x', color='c', label="WENO")
+
+    plt.legend()
+    ax = plt.gca()
+    ax.set_xmargin(0.0)
+    ax.set_xlabel('x')
+    ax.set_ylabel('u')
+
+    filename = os.path.join(args.log_dir, "evolution.png")
+    plt.savefig(filename)
+    print('Saved plot to ' + filename + '.')
 
 def do_test(env, agent, args):
     state = env.reset()
 
     done = False
     t = 0
-    next_update = 0
+    next_update = 1
 
     rewards = []
     total_reward = 0
@@ -42,6 +65,10 @@ def do_test(env, agent, args):
         render_args["show_ghost"] = False
     else:
         render_args["fixed_axes"] = False
+    if args.evolution_plot:
+        render_args["mode"] = None
+        original_state = np.array(env.grid.get_real())
+        state_record = []
 
     start_time = time.time()
 
@@ -51,23 +78,29 @@ def do_test(env, agent, args):
         actions, _ = agent.predict(state)
         state, reward, done, info = env.step(actions)
 
+        if t >= args.ep_length * (next_update / 10):
+            print("step = " + str(t))
+            next_update += 1
+            if not args.animate:
+                env.render(**render_args)
+            if args.evolution_plot:
+                state_record.append(np.array(env.grid.get_real()))
+
         rewards.append(reward)
         total_reward += reward
 
         if args.animate:
             env.render(**render_args)
 
-        if t >= args.ep_length * (next_update / 10):
-            print("step = " + str(t))
-            next_update += 1
-            if not args.animate:
-                env.render(**render_args)
-
         t += 1
 
     end_time = time.time()
 
     env.render(**render_args)
+    if args.evolution_plot:
+        state_record.append(np.array(env.grid.get_real()))
+        final_solution_state = np.array(env.solution.get_real())
+        save_evolution_plot(env.grid.x[env.ng:-env.ng], original_state, state_record, final_solution_state, args)
 
     print("Test finished in " + str(end_time - start_time) + " seconds.")
     print("Total reward was " + str(total_reward) + ".")
@@ -95,6 +128,9 @@ def main():
                         help="Plot the actions in addition to the state.")
     parser.add_argument('--animate', default=False, action='store_true',
                         help="Enable animation mode. Plot the state at every timestep, and keep the axes fixed across every plot.")
+    parser.add_argument('--evolution-plot', '--evolution_plot', default=False, action='store_true',
+                        help="Instead of usual rendering create 'evolution plot' which plots several states on the"
+                        + " same plot in increasingly dark color.")
     parser.add_argument('-y', default=False, action='store_true',
                         help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
     parser.add_argument('-n', default=False, action='store_true',

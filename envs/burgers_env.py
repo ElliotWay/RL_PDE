@@ -196,6 +196,8 @@ class AbstractBurgersEnv(gym.Env):
                                                           self.grid.ihi + 1]))
 
     def render(self, mode='file', **kwargs):
+        if mode is None:
+            return
         if "file" in mode:
             self.plot_state(**kwargs)
         if "action" in mode:
@@ -395,10 +397,10 @@ class AbstractBurgersEnv(gym.Env):
                 ax.set_xmargin(0.0)
 
             if fixed_axes:
-               if self._state_axes is None:
-                   self._state_axes = (ax.get_xlim(), ax.get_ylim())
+               if self._action_axes is None:
+                   self._action_axes = (ax.get_xlim(), ax.get_ylim())
                else:
-                   xlim, ylim = self._state_axes
+                   xlim, ylim = self._action_axes
                    ax.set_xlim(xlim)
                    ax.set_ylim(ylim)
 
