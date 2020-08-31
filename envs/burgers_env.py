@@ -10,7 +10,7 @@ from stable_baselines import logger
 
 from envs.grid import Grid1d
 from envs.source import RandomSource
-from envs.solutions import PreciseWENOSolution, SmoothSineSolution, SmoothRareSolution
+from envs.solutions import PreciseWENOSolution, SmoothSineSolution, SmoothRareSolution, AccelShockSolution
 import envs.weno_coefficients as weno_coefficients
 from util.softmax_box import SoftmaxBox
 from util.misc import create_stencil_indexes
@@ -127,6 +127,8 @@ class AbstractBurgersEnv(gym.Env):
                 self.solution = SmoothSineSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng)
             elif init_type == "smooth_rare":
                 self.solution = SmoothRareSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng)
+            elif init_type == "accelshock":
+                self.solution = AccelShockSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng)
             else:
                 raise Exception("No analytical solution available for \"{}\" type initial conditions.".format(init_type))
         else:

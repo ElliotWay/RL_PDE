@@ -57,7 +57,7 @@ def save_convergence_plot(grid_sizes, error, args):
     ax.set_xlabel("grid size")
     ax.set_xticks(grid_sizes)
     ax.set_ylabel("L2 error")
-    ax.set_yticks(error)
+    ax.set_yticks([0] + error)
 
     filename = os.path.join(args.log_dir, "convergence.png")
     plt.savefig(filename)

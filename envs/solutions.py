@@ -242,20 +242,11 @@ class PreciseWENOSolution(SolutionBase):
 MAX_ITERS = 1000
 class ImplicitSolution(SolutionBase):
 
-    def __init__(self, nx, ng, xmin, xmax, epsilon=1e-14):
+    def __init__(self, nx, ng, xmin, xmax):
         super().__init__(nx=nx, ng=ng, xmin=xmin, xmax=xmax)
-        self.epsilon = epsilon
         self.iterate = None
 
     def update(self, dt, time):
-
-        def iterate(old_u, time):
-            new_u = self.amplitude * np.tanh(self.k * (self.x - 0.5 - old_u*time))
-            return new_u
-
-        def smooth_rare(u):
-            return self.amplitude * np.tanh(self.k * (self.x - 0.5 - u*time))
-
         try:
             self.u = fixed_point(self.iterate, self.u, args=(time,))
         except Exception:
@@ -299,3 +290,35 @@ class SmoothRareSolution(ImplicitSolution):
         self.k = k
 
         self.u = self.amplitude * np.tanh(self.k * (self.x - 0.5))
+
+#TODO: Create an exact solution base class?
+class AccelShockSolution(SolutionBase):
+    def __init__(self, nx, ng, xmin, xmax):
+        super().__init__(nx=nx, ng=ng, xmin=xmin, xmax=xmax)
+        self.offset = 0.25
+        self.u_L = 3.0
+        self.u_R = 3.0
+        self.u = None
+
+    def update(self, dt, time):
+        shock_location = (self.u_L/self.u_R + 1) * (1 - np.sqrt(1 + self.u_R*time)) + self.u_L*time + self.offset*np.sqrt(self.u_R*time+1)
+        new_u = np.full_like(self.x, self.u_L)
+        index = self.x > shock_location
+        new_u[index] = (self.u_R*(self.x[index] - 1)) / (1 + self.u_R*time)
+        self.u = new_u
+
+    def reset(self, **kwargs):
+        self.u = np.full_like(self.x, self.u_L)
+        index = self.x > self.offset
+        self.u[index] = self.u_R * (self.x[index] - 1)
+
+        #Boundary conditions?
+        #self.u[x > self.xmax] = self.u[self.ihi]
+
+    def get_full(self):
+        return self.u
+
+    def get_real(self):
+        return self.u[self.ng:-self.ng]
+
+
