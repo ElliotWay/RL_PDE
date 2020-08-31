@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.optimize import fixed_point
 
 import envs.weno_coefficients as weno_coefficients
 from envs.grid import GridBase, Grid1d
@@ -238,40 +239,28 @@ class PreciseWENOSolution(SolutionBase):
     def reset(self, **init_params):
         self.precise_grid.reset(init_params)
 
-
+MAX_ITERS = 1000
 class ImplicitSolution(SolutionBase):
 
-    def __init__(self, nx, ng, xmin, xmax, epsilon=1e-10):
-        self.epsilon = epsilon
+    def __init__(self, nx, ng, xmin, xmax, epsilon=1e-14):
         super().__init__(nx=nx, ng=ng, xmin=xmin, xmax=xmax)
+        self.epsilon = epsilon
+        self.iterate = None
 
     def update(self, dt, time):
 
-        old_u = self.u
-        new_u = self.iterate(old_u, time)
+        def iterate(old_u, time):
+            new_u = self.amplitude * np.tanh(self.k * (self.x - 0.5 - old_u*time))
+            return new_u
 
-        max_diff = np.max(np.abs(old_u - new_u))
-        prev_diff = 1024
+        def smooth_rare(u):
+            return self.amplitude * np.tanh(self.k * (self.x - 0.5 - u*time))
 
-        count = 0
-        # Stop when we get close, or we start diverging or oscillating.
-        while (max_diff > self.epsilon and max_diff > prev_diff):
-            count += 1
-            if count % 5 == 0:
-                print(count)
-                print(np.max(np.abs(old_u - new_u)))
-            old_u = new_u
-            new_u = self.iterate(old_u, time)
-
-            prev_diff = max_diff
-            max_diff = np.max(np.abs(old_u - new_u))
-
-        if max_diff == prev_diff:
-            new_u = (old_u + new_u) / 2
-        elif max_diff > prev_diff:
-            new_u = old_u
-
-        self.u = new_u
+        try:
+            self.u = fixed_point(self.iterate, self.u, args=(time,))
+        except Exception:
+            print("Failed to converge.")
+            #TODO handle this better
 
     def get_full(self):
         return self.u
@@ -279,18 +268,18 @@ class ImplicitSolution(SolutionBase):
     def get_real(self):
         return self.u[self.ng:-self.ng]
 
-    def iterate(self, old_u, time):
-        raise NotImplementedError()
-
     def reset(self, **params):
         raise NotImplementedError()
 
 
-#TODO account for xmin, xmax
+#TODO account for xmin, xmax in case they're not 0 and 1.
 class SmoothSineSolution(ImplicitSolution):
-    def iterate(self, old_u, time):
-        new_u = self.amplitude * np.sin(2 * np.pi * (self.x - old_u * time))
-        return new_u
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        def iterate(old_u, time):
+            return self.amplitude * np.sin(2 * np.pi * (self.x - old_u * time))
+        self.iterate = iterate
 
     def reset(self, A=1.0, **kwargs):
         self.amplitude = A
@@ -298,9 +287,12 @@ class SmoothSineSolution(ImplicitSolution):
         self.u = self.amplitude*np.sin(2 * np.pi * self.x)
 
 class SmoothRareSolution(ImplicitSolution):
-    def iterate(self, old_u, time):
-        new_u = self.amplitude * np.tanh(self.k * (self.x - 0.5 - old_u*time))
-        return new_u
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        def iterate(old_u, time):
+            return self.amplitude * np.tanh(self.k * (self.x - 0.5 - old_u*time))
+        self.iterate = iterate
 
     def reset(self, A=1.0, k=1.0, **kwargs):
         self.amplitude = A
