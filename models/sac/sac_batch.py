@@ -645,8 +645,10 @@ class SACBatch(OffPolicyRLModel):
         """
         observation = np.array(observation)
 
-        is_batch = (observation.shape == self.observation_space.shape)
-        if not is_batch:
+        is_batch = len(observation.shape) == len(self.observation_space.shape)
+        if is_batch:
+            assert (observation.shape[1:] == self.i_observation_space.shape)
+        else:
             assert (observation.shape == self.i_observation_space.shape)
 
         if is_batch:
