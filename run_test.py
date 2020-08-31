@@ -48,6 +48,21 @@ def save_evolution_plot(x_values, state_record, final_solution, args):
     filename = os.path.join(args.log_dir, "evolution.png")
     plt.savefig(filename)
     print('Saved plot to ' + filename + '.')
+    plt.close()
+
+def save_convergence_plot(grid_sizes, error, args):
+    plt.plot(grid_sizes, error, ls='-', color='k')
+
+    ax = plt.gca()
+    ax.set_xlabel("grid size")
+    ax.set_xticks(grid_sizes)
+    ax.set_ylabel("L2 error")
+    ax.set_yticks(error)
+
+    filename = os.path.join(args.log_dir, "convergence.png")
+    plt.savefig(filename)
+    print('Saved plot to ' + filename + '.')
+    plt.close()
 
 def do_test(env, agent, args):
     state = env.reset()
@@ -120,7 +135,13 @@ def do_test(env, agent, args):
         save_evolution_plot(env.grid.x[env.ng:-env.ng], state_record, final_solution_state, args)
 
     print("Test finished in " + str(end_time - start_time) + " seconds.")
-    print("Total reward was " + str(total_reward) + ".")
+    print("Reward: mean = {}, min = {} @ {}, max = {} @ {}".format(
+        np.mean(total_reward), np.amin(total_reward), np.argmin(total_reward), np.amax(total_reward), np.argmax(total_reward)))
+
+    error = np.sqrt(np.sum(np.square(env.grid.get_real() - env.solution.get_real())))
+    print("Final error with solution was {}.".format(error))
+
+    return error
 
 
 def main():
@@ -148,6 +169,10 @@ def main():
     parser.add_argument('--evolution-plot', '--evolution_plot', default=False, action='store_true',
                         help="Instead of usual rendering create 'evolution plot' which plots several states on the"
                         + " same plot in increasingly dark color.")
+    parser.add_argument('--convergence-plot', '--convergence_plot', default=False, action='store_true',
+                        help="Do several runs with different grid sizes to create a convergence plot."
+                        " Overrides the --nx argument with 64, 128, 256, and 512, successively."
+                        " Sets the --analytical flag.")
     parser.add_argument('-y', default=False, action='store_true',
                         help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
     parser.add_argument('-n', default=False, action='store_true',
@@ -174,7 +199,15 @@ def main():
     np.random.seed(args.seed)
     tf.set_random_seed(args.seed)
 
-    env = build_env(args.env, args)
+    if not args.convergence_plot:
+        env = build_env(args.env, args)
+    else:
+        args.analytical = True
+        CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]
+        envs = []
+        for nx in CONVERGENCE_PLOT_GRID_RANGE:
+            args.nx = nx
+            envs.append(build_env(args.env, args))
 
     # Set up logging.
     start_time = time.localtime()
@@ -243,7 +276,20 @@ def main():
     # Run test.
     signal.signal(signal.SIGINT, signal.default_int_handler)
     try:
-        do_test(env, agent, args)
+        if not args.convergence_plot:
+            do_test(env, agent, args)
+        else:
+            error = []
+            for nx, env in zip(CONVERGENCE_PLOT_GRID_RANGE, envs):
+                args.nx = nx
+
+                sub_dir = os.path.join(args.log_dir, "nx_{}".format(nx))
+                os.makedirs(sub_dir)
+                logger.configure(folder=sub_dir, format_strs=['stdout'])  # ,tensorboard'
+
+                error.append(do_test(env, agent, args))
+
+            save_convergence_plot(CONVERGENCE_PLOT_GRID_RANGE, error, args)
     except KeyboardInterrupt:
         print("Test stopped by interrupt.")
         metadata.log_finish_time(args.log_dir, status="stopped by interrupt")
