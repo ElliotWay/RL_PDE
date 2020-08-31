@@ -24,7 +24,10 @@ from models.sac import SACBatch
 from util import metadata
 
 def save_evolution_plot(x_values, state_record, final_solution, args):
-    #plt.plot(x_values, final_solution, ls='-', linewidth=4, color='c', label="WENO")
+    weno_color = "#ffaa00" #"c"
+    #agent_color_target = "#000000"
+
+    plt.plot(x_values, final_solution, ls='-', linewidth=4, color=weno_color, label="WENO")
 
     light_grey = 0.9
     plt.plot(x_values, state_record[0], ls='--', color=str(light_grey))
@@ -34,7 +37,7 @@ def save_evolution_plot(x_values, state_record, final_solution, args):
         plt.plot(x_values, state_values, ls='-', color=str(color))
 
     plt.plot(x_values, state_record[-1], ls='-', color="0.0", label="RL")
-    plt.plot(x_values[::5], final_solution[::5], ls='', marker='x', color='c', label="WENO")
+    #plt.plot(x_values[::5], final_solution[::5], ls='', marker='x', color='c', label="WENO")
 
     plt.legend()
     ax = plt.gca()
