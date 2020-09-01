@@ -159,6 +159,7 @@ class AbstractBurgersEnv(gym.Env):
 
         self._state_axes = None
         self._action_axes = None
+        self._action_labels = None
 
     def step(self):
         raise NotImplementedError()
@@ -406,6 +407,9 @@ class AbstractBurgersEnv(gym.Env):
                    ax.set_xlim(xlim)
                    ax.set_ylim(ylim)
 
+            if self._action_labels is not None:
+                ax.set_title(self._action_labels[dim])
+
         plt.legend()
 
         log_dir = logger.get_dir()
@@ -497,6 +501,8 @@ class WENOBurgersEnv(AbstractBurgersEnv):
             self.weno_solution.set_record_actions("weno")
         else:
             self.solution.set_record_actions("weno")
+
+        self._action_labels = ["$w^+_1$", "$w^+_2$", "$w^-_1$", "$w^-_2$"]
 
     def prep_state(self):
         """
