@@ -568,6 +568,28 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         return self.prep_state()
 
+    def rk_substep_weno(self, weights):
+
+        state = self.current_state
+
+        fp_state = state[:, 0, :]
+        fm_state = state[:, 1, :]
+
+        fp_stencils = weno_i_stencils_batch(self.weno_order, fp_state)
+        fm_stencils = weno_i_stencils_batch(self.weno_order, fm_state)
+
+        fp_weights = weights[:, 0, :]
+        fm_weights = weights[:, 1, :]
+
+        fpr = np.sum(fp_weights * fp_stencils, axis=-1)
+        fml = np.sum(fm_weights * fm_stencils, axis=-1)
+
+        flux = fml + fpr
+
+        rhs = (flux[:-1] - flux[1:]) / self.grid.dx
+
+        return rhs
+
     def step(self, action):
         """
         Perform a single time step.
@@ -594,49 +616,47 @@ class WENOBurgersEnv(AbstractBurgersEnv):
             raise Exception("NaN detected in action.")
 
         self.action_history.append(action)
-
-        state = self.current_state
-
-        fp_state = state[:, 0, :]
-        fm_state = state[:, 1, :]
+        # Should probably find a way to pass this to agent if dt varies.
+        dt = self.timestep()
 
         done = False
         g = self.grid
 
-        # Store the data at the start of the time step
-        u_copy = g.get_real()
+        u_start = np.array(g.get_real())
 
-        # Should probably find a way to pass this to agent if dt varies.
-        dt = self.timestep()
+        step = dt * self.rk_substep_weno(action)
 
-        fp_stencils = weno_i_stencils_batch(self.weno_order, fp_state)
-        fm_stencils = weno_i_stencils_batch(self.weno_order, fm_state)
-
-        fp_action = action[:, 0, :]
-        fm_action = action[:, 1, :]
-
-        fpr = np.sum(fp_action * fp_stencils, axis=-1)
-        fml = np.sum(fm_action * fm_stencils, axis=-1)
-
-        flux = fml + fpr
+        # Partial adjustment to allow for RK4.
+        # Doesn't quite work yet (really we need an action for each substep).
+        # Leaving it commented here in case we use this later.
+        #mode = "euler"
+        #mode = "rk4"
+        #if mode == "euler":
+            #step = dt * self.rk_substep_weno(action)
+        #elif mode == "rk4":
+            #k1 = dt * self.rk_substep_weno(action)
+            #self.grid.update(u_start + k1 / 2)
+            #self.prep_state()
+            #k2 = dt * self.rk_substep_weno(action)
+            #self.grid.update(u_start + k2 / 2)
+            #self.prep_state()
+            #k3 = dt * self.rk_substep_weno(action)
+            #self.grid.update(u_start + k3)
+            #self.prep_state()
+            #k4 = dt * self.rk_substep_weno(action)
+            #step = (k1 + 2*(k2 + k3) + k4) / 6
 
         if self.eps > 0.0:
             R = self.eps * self.lap()
-            rhs = (flux[:-1] - flux[1:]) / g.dx + R[g.ilo:g.ihi+1]
-        else:
-            rhs = (flux[:-1] - flux[1:]) / g.dx
-
+            step += dt * R[g.ilo:g.ihi+1]
         if self.source is not None:
             self.source.update(dt, self.t + dt)
-            rhs += self.source.get_real()
+            step += dt * self.source.get_real()
 
-        u_copy += dt * rhs
-        self.grid.update(u_copy)
+        self.grid.update(u_start + step)
 
-        # update the solution time
         self.t += dt
 
-        # Calculate new RL state.
         state = self.prep_state()
 
         self.steps += 1
@@ -803,10 +823,8 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
         u_copy += dt * rhs
         self.grid.update(u_copy)
 
-        # update the solution time
         self.t += dt
 
-        # Calculate new RL state.
         state = self.prep_state()
 
         self.steps += 1
