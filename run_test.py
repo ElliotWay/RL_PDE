@@ -27,20 +27,21 @@ def save_evolution_plot(x_values, state_record, final_solution, args):
     weno_color = "#ffaa00" #"c"
     #agent_color_target = "#000000"
 
-    plt.plot(x_values, final_solution, ls='-', linewidth=4, color=weno_color, label="WENO")
+    weno = plt.plot(x_values, final_solution, ls='-', linewidth=4, color=weno_color, label="WENO")
 
     light_grey = 0.9
-    plt.plot(x_values, state_record[0], ls='--', color=str(light_grey))
+    init = plt.plot(x_values, state_record[0], ls='--', color=str(light_grey), label="init")
 
     for state_values, color in zip(state_record[1:-1],
                                     np.arange(light_grey, 0.0, -light_grey / (len(state_record) - 1))):
         plt.plot(x_values, state_values, ls='-', color=str(color))
 
-    plt.plot(x_values, state_record[-1], ls='-', color="0.0", label="RL")
+    rl = plt.plot(x_values, state_record[-1], ls='-', color="0.0", label="RL")
     #plt.plot(x_values[::5], final_solution[::5], ls='', marker='x', color='c', label="WENO")
 
-    plt.legend()
     ax = plt.gca()
+    ax.legend([init[0], rl[0], weno[0]], ["init", "RL", "WENO"])
+
     ax.set_xmargin(0.0)
     ax.set_xlabel('x')
     ax.set_ylabel('u')
@@ -151,7 +152,7 @@ def main():
     parser.add_argument('--help-env', default=False, action='store_true',
                         help="Do not test and show the environment parameters not listed here.")
     parser.add_argument('--agent', '-a', type=str, default="default",
-                        help="Agent to test. Either a file (unimplemented) or a string for a standard agent. \"default\" uses standard weno coefficients.")
+                        help="Agent to test. Either a file or a string for a standard agent. \"default\" uses standard weno coefficients.")
     parser.add_argument('--algo', type=str, default="sac",
                         help="Algorithm used to create the agent. Unfortunately necessary to open a model file.")
     parser.add_argument('--env', type=str, default="weno_burgers",
