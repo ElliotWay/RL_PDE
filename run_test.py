@@ -84,6 +84,8 @@ def do_test(env, agent, args):
         render_args["show_ghost"] = False
     else:
         render_args["fixed_axes"] = False
+
+    render_args["show_ghost"] = False
     if args.evolution_plot:
         state_record = []
 

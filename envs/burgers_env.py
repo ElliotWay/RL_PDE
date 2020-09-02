@@ -259,11 +259,14 @@ class AbstractBurgersEnv(gym.Env):
         if self.analytical:
             true_label = "Analytical"
         else:
-            true_label = "WENO (order = {}, res = {})".format(self.precise_weno_order, self.precise_nx)
+            if self.weno_solution is not None:
+                true_label = "WENO (order={}, res={})".format(self.precise_weno_order, self.precise_nx)
+            else:
+                true_label = "WENO"
         plt.plot(real_x, real_true, ls='-', color=true_color, label=true_label)
 
         if self.weno_solution is not None:
-            weno_label = "WENO (order = {}, res = {})".format(self.weno_order, self.nx)
+            weno_label = "WENO (order={}, res={})".format(self.weno_order, self.nx)
             plt.plot(real_x, real_weno, ls='-', color=weno_color, label=weno_label)
 
         agent_label = "RL"
