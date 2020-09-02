@@ -1,4 +1,5 @@
 import os
+import subprocess
 import re
 import sys
 import time
@@ -30,32 +31,27 @@ def create_meta_file(log_dir, args):
         meta_file.write("initiated by user: UNKNOWN (run on Windows machine)\n")
 
     # Get commit id of HEAD.
-    git_head_file = open('.git/HEAD', 'r')
-    current_head = git_head_file.readline()
-    git_head_file.close()
-    re_match = re.match("^ref: ([\w/]*)$", current_head)
-    if re_match is None:
+    git_head_proc = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True)
+    if git_head_proc.returncode != 0:
         if args.n:
-            raise Exception("Couldn't find git head \".git/HEAD\" to record commit id!".format(args.log_dir))
+            raise Exception("Git couldn't find HEAD! Are we still in a git repo?")
         elif not args.y:
-            _ignore = input("Couldn't find git head \".git/HEAD\" in usual spot."
+            _ignore = input("Git couldn't find HEAD."
                             + " Hit <Enter> to continue without recording commit id, or Ctrl-C to stop.")
     else:
-        ref_name = re_match.group(1)
-        ref_file_name = os.path.join(".git", ref_name)
-        ref_file = open(ref_file_name, 'r')
-        commit_id = ref_file.readline()
-        ref_file.close()
+        commit_id = git_head_proc.stdout.rstrip()
         if not re.match("^[0-9a-f]*$", commit_id):
-            print("Corrupted commit id in {}. Fix your git repo before continuing.".format(ref_file_name))
-            sys.exit(1)
-        else:
-            meta_file.write("git commit id: {}".format(commit_id))  # commit_id already has \n
-
-            if os.system("git diff --quiet"):
-                meta_file.write("git status: uncommited changes\n")
+            if not args.y:
+                print("Corrupted commit id: {}. Fix your git repo before continuing.".format(commit_id))
+                sys.exit(1)
             else:
-                meta_file.write("git status: clean\n")
+                print("Commit id is corrupted: {}. Something is seriously wrong!".format(commit_id))
+        meta_file.write("git commit id: {}\n".format(commit_id))
+
+        if os.system("git diff --quiet"):
+            meta_file.write("git status: uncommited changes\n")
+        else:
+            meta_file.write("git status: clean\n")
 
     pid = os.getpid()
     meta_file.write("pid: {}\n".format(pid))
