@@ -124,7 +124,7 @@ def main():
         assert(args.eval_env == "custom")
         #TODO fix this ugly hack and make these parameters.
         eval_env.grid._init_type = "schedule"
-        eval_env.grid._init_schedule = ["sine", "rarefaction", "accelshock"]
+        eval_env.grid._init_schedule = ["smooth_sine", "smooth_rare", "accelshock"]
         eval_episodes = 3
         eval_env.episode_length = 2*args.ep_length
 

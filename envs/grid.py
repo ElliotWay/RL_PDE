@@ -96,9 +96,10 @@ class Grid1d(GridBase):
         self._boundary = boundary
         self.boundary = boundary
         self._init_schedule_index = 0
-        self._init_schedule = ["smooth_rare", "smooth_sine", "random", "rarefaction", "accelshock"]
+        #self._init_schedule = ["smooth_rare", "smooth_sine", "random", "rarefaction", "accelshock"]
+        self._init_schedule = ["smooth_sine", "smooth_rare", "accelshock"]
         self._init_sample_types = self._init_schedule
-        self._init_sample_probs = [0.2, 0.2, 0.2, 0.2, 0.2]
+        self._init_sample_probs = [1/len(self._init_sample_types)]*len(self._init_sample_types)
 
         # 0 and len-1 are indexes for values beyond the boundary,
         # so create ilo and ihi as indexes to real values
