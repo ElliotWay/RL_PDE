@@ -125,8 +125,8 @@ def main():
         #TODO fix this ugly hack and make these parameters.
         eval_env.grid._init_type = "schedule"
         eval_env.grid._init_schedule = ["smooth_sine", "smooth_rare", "accelshock"]
-        eval_episodes = 3
-        eval_env.episode_length = 2*args.ep_length
+        eval_episodes = len(eval_env.grid._init_schedule)
+        eval_env.episode_length = 500
 
     # Things like this make me wish I was writing in a functional language.
     # I sure could go for some partial evaluation and some function composition.

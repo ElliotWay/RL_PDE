@@ -10,7 +10,7 @@ from stable_baselines import logger
 
 from envs.grid import Grid1d
 from envs.source import RandomSource
-from envs.solutions import PreciseWENOSolution, SmoothSineSolution, SmoothRareSolution, AccelShockSolution
+from envs.solutions import PreciseWENOSolution, AnalyticalSolution
 import envs.weno_coefficients as weno_coefficients
 from util.softmax_box import SoftmaxBox
 from util.misc import create_stencil_indexes
@@ -123,14 +123,7 @@ class AbstractBurgersEnv(gym.Env):
 
         self.analytical = analytical
         if analytical:
-            if init_type == "smooth_sine":
-                self.solution = SmoothSineSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng)
-            elif init_type == "smooth_rare":
-                self.solution = SmoothRareSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng)
-            elif init_type == "accelshock":
-                self.solution = AccelShockSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng)
-            else:
-                raise Exception("No analytical solution available for \"{}\" type initial conditions.".format(init_type))
+            self.solution = AnalyticalSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng, init_type=init_type)
         else:
             if precise_weno_order is None:
                 precise_weno_order = weno_order
@@ -141,7 +134,8 @@ class AbstractBurgersEnv(gym.Env):
                                                 boundary=boundary, init_type=init_type, flux_function=flux, source=self.source,
                                                 eps=eps)
 
-        if self.analytical or self.precise_weno_order != self.weno_order or self.precise_nx != self.nx:
+        # Disable this for now. The original idea was that you could compare both WENO and the learned RL solution to the analytical solution.
+        if False: #self.analytical or self.precise_weno_order != self.weno_order or self.precise_nx != self.nx:
             self.weno_solution = PreciseWENOSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng,
                                                      precise_scale=1, precise_order=weno_order,
                                                      boundary=boundary, init_type=init_type, flux_function=flux,
@@ -502,9 +496,10 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         if self.weno_solution is not None:
             self.weno_solution.set_record_actions("weno")
-        else:
+        elif not self.analytical:
             self.solution.set_record_actions("weno")
 
+        #TODO make labels apply to other orders
         self._action_labels = ["$w^+_1$", "$w^+_2$", "$w^-_1$", "$w^-_2$"]
 
     def prep_state(self):
@@ -565,9 +560,9 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         self.grid.reset()
         if self.source is not None:
             self.source.reset()
-        self.solution.reset(**self.grid.init_params)
+        self.solution.reset(self.grid.init_params)
         if self.weno_solution is not None:
-            self.weno_solution.reset(**self.grid.init_params)
+            self.weno_solution.reset(self.grid.init_params)
 
         self.t = 0.0
         self.steps = 0

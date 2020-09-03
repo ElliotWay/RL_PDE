@@ -236,89 +236,96 @@ class PreciseWENOSolution(SolutionBase):
     def get_real(self):
         return self.get_full()[self.ng:-self.ng]
 
-    def reset(self, **init_params):
+    def reset(self, init_params):
         self.precise_grid.reset(init_params)
 
-MAX_ITERS = 1000
-class ImplicitSolution(SolutionBase):
-
-    def __init__(self, nx, ng, xmin, xmax):
-        super().__init__(nx=nx, ng=ng, xmin=xmin, xmax=xmax)
-        self.iterate = None
-
-    def update(self, dt, time):
-        try:
-            self.u = fixed_point(self.iterate, self.u, args=(time,))
-        except Exception:
-            print("Failed to converge.")
-            #TODO handle this better
-
-    def get_full(self):
-        return self.u
-
-    def get_real(self):
-        return self.u[self.ng:-self.ng]
-
-    def reset(self, **params):
-        raise NotImplementedError()
-
-
+available_analytical_solutions = ["smooth_sine", "smooth_rare", "accelshock"]
+#TODO make this inherit from Grid1d somehow, a lot of the reset code is the same.
 #TODO account for xmin, xmax in case they're not 0 and 1.
-class SmoothSineSolution(ImplicitSolution):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        def iterate(old_u, time):
-            return self.amplitude * np.sin(2 * np.pi * (self.x - old_u * time))
-        self.iterate = iterate
-
-    def reset(self, A=1.0, **kwargs):
-        self.amplitude = A
-
-        self.u = self.amplitude*np.sin(2 * np.pi * self.x)
-
-class SmoothRareSolution(ImplicitSolution):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        def iterate(old_u, time):
-            return self.amplitude * np.tanh(self.k * (self.x - 0.5 - old_u*time))
-        self.iterate = iterate
-
-    def reset(self, A=1.0, k=1.0, **kwargs):
-        self.amplitude = A
-        self.k = k
-
-        self.u = self.amplitude * np.tanh(self.k * (self.x - 0.5))
-
-#TODO: Create an exact solution base class?
-class AccelShockSolution(SolutionBase):
-    def __init__(self, nx, ng, xmin, xmax):
+class AnalyticalSolution(SolutionBase):
+    def __init__(self, nx, ng, xmin, xmax, init_type="schedule"):
         super().__init__(nx=nx, ng=ng, xmin=xmin, xmax=xmax)
-        self.offset = 0.25
-        self.u_L = 3.0
-        self.u_R = 3.0
-        self.u = None
+
+        if init_type == "schedule" or init_type == "sample":
+            self._fixed_init = None
+        elif init_type in available_analytical_solutions:
+            self._fixed_init = init_type
+        else:
+            raise Exception("Invalid analytical type \"{}\", available options are {}.".format(init_type, available_analytical_solutions))
+
+        self.init_params = None
 
     def update(self, dt, time):
-        shock_location = (self.u_L/self.u_R + 1) * (1 - np.sqrt(1 + self.u_R*time)) + self.u_L*time + self.offset*np.sqrt(self.u_R*time+1)
-        new_u = np.full_like(self.x, self.u_L)
-        index = self.x > shock_location
-        new_u[index] = (self.u_R*(self.x[index] - 1)) / (1 + self.u_R*time)
-        self.u = new_u
+        params = self.init_params
+        init_type = params['init_type']
+        if init_type in ["smooth_sine", "smooth_rare"]:
+            if init_type == "smooth_sine":
+                iterate_func = lambda old_u, time: params['A'] * np.sin(2 * np.pi * (self.x - old_u * time))
+            elif init_type == "smooth_rare":
+                iterate_func = lambda old_u, time: params['A'] * np.tanh(params['k'] * (self.x - 0.5 - old_u*time))
 
-    def reset(self, **kwargs):
-        self.u = np.full_like(self.x, self.u_L)
-        index = self.x > self.offset
-        self.u[index] = self.u_R * (self.x[index] - 1)
+            try:
+                self.u = fixed_point(iterate_func, self.u, args=(time,))
+            except Exception:
+                print("failed to converge")
+                #TODO handle this better
 
-        #Boundary conditions?
-        #self.u[x > self.xmax] = self.u[self.ihi]
+        elif init_type == "accelshock":
+            offset = params['offset']
+            u_L = params['u_L']
+            u_R = params['u_R']
+            shock_location = (u_L/u_R + 1) * (1 - np.sqrt(1 + u_R*time)) + u_L*time + offset*np.sqrt(u_R*time+1)
+            new_u = np.full_like(self.x, u_L)
+            index = self.x > shock_location
+            new_u[index] = (u_R*(self.x[index] - 1)) / (1 + u_R*time)
+            self.u = new_u
+
+    def reset(self, params):
+        if self._fixed_init is not None:
+            init_type = self._fixed_init
+        else:
+            init_type = params['init_type']
+            if not init_type in available_analytical_solutions:
+                raise Exception("Invalid analytical type \"{}\", available options are {}.".format(init_type, available_analytical_solutions))
+
+        self.init_params = {'init_type': init_type}
+
+        if init_type == "smooth_sine":
+            if 'A' in params:
+                A = params['A']
+            else:
+                A = 1.0 / (2.0 * np.pi * 0.1)
+            self.init_params['A'] = A
+
+            self.u = A*np.sin(2 * np.pi * self.x)
+
+        elif init_type == "smooth_rare":
+            if 'A' in params:
+                A = params['A']
+            else:
+                A = 1.0
+            self.init_params['A'] = A
+            if 'k' in params:
+                k = params['k']
+            else:
+                k = np.random.uniform(20, 100)
+            self.init_params['k'] = k
+
+            self.u = A * np.tanh(k * (self.x - 0.5))
+
+        elif init_type == "accelshock":
+            offset = params['offset'] if 'offset' in params else 0.25
+            self.init_params['offset'] = offset
+            u_L = params['u_L'] if 'u_L' in params else 3.0
+            self.init_params['u_L'] = u_L
+            u_R = params['u_R'] if 'u_R' in params else 3.0
+            self.init_params['u_R'] = u_R
+
+            index = self.x > offset
+            self.u = np.full_like(self.x, u_L)
+            self.u[index] = u_R * (self.x[index] - 1)
 
     def get_full(self):
         return self.u
-
     def get_real(self):
         return self.u[self.ng:-self.ng]
-
-
