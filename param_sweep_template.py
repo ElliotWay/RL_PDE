@@ -1,3 +1,7 @@
+##################################################################################################
+# This is a template for creating a parameter sweep. Make a copy, don't edit this file directly. #
+##################################################################################################
+
 import os
 import sys
 import subprocess
@@ -9,7 +13,7 @@ import argparse
 # Thanks to this SO answer for non-blocking queues.
 # https://stackoverflow.com/a/4896288/2860127
 
-# And this SO answer for these colors: 
+# And this SO answer for these colors. 
 # https://stackoverflow.com/a/287944/2860127
 class colors:
     HEADER = '\033[95m'
@@ -21,19 +25,36 @@ class colors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
-ON_POSIX = 'posix' in sys.builtin_module_names
-
-MAX_PROCS = 4
-SLEEP_TIME = 0.25 # seconds
-
+###########################################
+# Declare your available parameters here. #
+###########################################
 # This isn't a dictionary so we can preserve order.
 values_table = []
 values_table.append(("--order", [2, 3]))
 values_table.append(("--init-type", ["sine", "smooth_sine", "random", "rarefaction", "smooth_rare", "accelshock"]))#, "schedule", "sample"]))
 values_table.append(("--seed", [1, 2, 3]))
 
-arg_matrix = []
+########################################################################
+# Declare the base command here.                                       #
+# Any parameters that should be the same for every run should go here. #
+########################################################################
+base_command = "python run_train.py -n"
 
+########################################
+# Declare the base log directory here. #
+########################################
+base_log_dir = "log/param_sweep"
+
+#############################################################
+# Adjust the maximum number of simultaneous processes here. #
+#############################################################
+MAX_PROCS = 4
+
+SLEEP_TIME = 0.25 # seconds
+
+ON_POSIX = 'posix' in sys.builtin_module_names
+
+arg_matrix = []
 def build_command_list(index, arg_list, log_dir):
     if index == len(values_table):
         arg_list += ["--log-dir", log_dir]
@@ -44,6 +65,11 @@ def build_command_list(index, arg_list, log_dir):
         for value in value_list:
             new_arg_list = list(arg_list)
             new_arg_list += [keyword, str(value)]
+            ####################################################################
+            # Some arguments, namely log_dir, need more careful manipulation.  #
+            # Right now the log_dir creates subdirectories for each parameter. #
+            # Make changes in here if you need such changes.                   #
+            ####################################################################
             new_log_dir = os.path.join(log_dir, "{}_{}".format(stripped_keyword, value))
             build_command_list(index + 1, new_arg_list, new_log_dir)
 
@@ -83,9 +109,12 @@ def main():
                         " prints the commands instead of running them.")
     args = parser.parse_args()
 
-    build_command_list(0, "", "log")
+    if not args.run:
+        print("{}Dry run. Look over the commands that will be run, then use --run to actually run the parameter sweep.{}".format(colors.OKBLUE, colors.ENDC))
 
-    command_prefix = "python proc_test.py -n "
+    build_command_list(0, "", base_log_dir)
+
+    command_prefix = base_command
     command_prefix = command_prefix.split()
 
     # Dictionaries instead of lists because procs should have the same index
