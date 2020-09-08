@@ -1,0 +1,82 @@
+V42, 831fc29, 9/8/20
+---------------------------------
+Version log moved into this text file instead of an email chain, because Outlook doesn't keep replies together unlike Gmail.
+It took me a while to get around to this, so there have been various changes since the previous log:
+
+- run_test.py can now take --evolution-plot to create a single plot with several states at different times on the sameplot.
+- run_test.py can now take --convergence-plot to create a plot of error vs grid size.
+- The action_adjust function for WENOBurgers was switched to softmax from the linear rescaling we used to use. This avoids issues at the discontinuity.
+- Implicit solutions was switched to scipy.optimize.fixed_point instead of the previous manual implementation. This seems to perform better.
+- An analytical solution for accelshock was added.
+- The standard "schedule" was switched to just smooth_sine, smooth_rare, and accelshock, where before it also included sine, rarefaction, and random.
+- A Python version of the parameter sweep was added. This should function on Windows, unlike the bash version. This version also allows for multiprocessing with an adjustable number of simultaneous processes.
+
+
+V38, 8ee570c, 8/18/20
+---------------------------------
+The plots created during training are now from a separate evaluation environment, instead of taken directly from the training episodes. This is useful because evaluation is run in deterministic mode, so may perform slightly better, and because it maintains a fixed policy for the entire episode, instead of training during the episode. By default, the evaluation environment is otherwise identical to the training environment. --eval_env custom will switch the evaluation environment to a combination of sine, rarefaction, and accelshock initial conditions to get a more comprehensive look at how the agent is training.
+
+You can repeat an experiment with the same or similar parameters with --repeat path/to/meta.txt. This will load the parameters in the passed meta file to use for a new training run. Parameters passed explicitly will override parameters in the meta file, so python run_train.py --repeat path/to/meta.txt --log-dir somewhere/else --seed 2 will use a different log-dir and seed from what is in the meta file. The implementation for this is kind of hacky and I haven't tested it extensively, but it should usually work and give an error when it doesn't.
+
+Other changes:
+The default value of gamma is now 0.0. The default value of total-timesteps is now 250000, or 1000 episodes worth.
+
+
+V37, ?, 8/11/20
+---------------------------------
+The plot_weights function has been moved to plot_action. It functions in the same way: you can pass either a timestep, or a location, or default to the most recent timestep; however, these plots are much easier to understand than the previous iteration.
+The default behavior can be accessed from run_test with the --plot-actions parameter, or by passing mode="action" to the render function of the environment.
+
+The normal state plots have also been updated to a higher contrast orange/blue color scheme. Also, if the "true" solution uses a higher resolution or order than the agent has (or if the true solution is analytical), the true solution is plotted in pink, where the WENO solution with the same resolution and order is plotted in blue.
+
+--gamma is now a parameter for run_train, though the default is still set to 0.99.
+
+
+V34, ?, 8/6/20
+---------------------------------
+Restructuring to make changes to the state and action spaces easier, namely operating directly on flux values instead of on per-stencil approximations. This includes:
+- Finally transposing state and action so the spatial dimension is first. This way we change the dimension and shape of the spaces without breaking things that assume the spatial dimension is on a specific axis.
+- Separating WENOBurgersEnv into an abstract base class and sub-class. Variants of the Burgers environment should inherit from the base class, but need implementation changes to deal with different state and action spaces.
+
+I've added two such variants: one where the agent supplies coefficients to the split flux, SplitFluxBurgersEnv, and one where the agent supplies coefficients to the UNSPLIT flux and reconstructs the flux using just those values, FluxBurgersEnv. These can be accessed by passing a non-default --env parameter; "split_flux_burgers" and "flux_burgers" respectively. (The default environment is "weno_burgers".)
+
+Also since the last email: a random external source (thanks to Changjin for some of this implementation) for permuting the state. This chooses a random sinusoidal function each episode that is added to the solution at each timestep. This can be accessed with --srca f, where "srca" means "source amplitude," and f is a mean parameter for the amplitude of the source. (The actual amplitude of the source varies randomly around this value.)
+
+Other things of note:
+Grid1d, PreciseWENOSolution, and RandomSource all inherit from the same GridBase abstract class as they all represent values along a grid. Each has reset(), get_full(), get_real(), and update() functions. For Grid1d, update is overrided to update(new_state), the rest use internal mechanisms to update and use update(dt, time).
+
+
+V?, ?, 7/28/20
+---------------------------------
+The structure of the "actual" solution has been changed. Now the environment has self.solution, where the type of solution is a solution class. The solution object maintains a separate Grid1d from the environment.
+
+This was part of adding a feature in the Learning to Discretize repo: their reward is calculated based on the error with a solution that has higher precision, i.e. more cells, than the agent sees. This behavior is now accessible in our environment by setting the --precise_scale parameter. Sometimes higher precision seems to cause oscillations relative to lower precision curves; I'm not sure what's causing this, which is why this behavior is disabled by default.
+
+While I was at it, I also added analytical solutions for smooth_sine and smooth_rare. This is accessible with --analytical. The solution for smooth_sine starts to struggle a little ways after forming a shock, and the implicit solution stops converging. Better behavior might be a matter of improving how this is handled.
+
+
+V?, ?, 7/23/20
+---------------------------------
+The burgers environment now implements eps, the viscosity parameter, as per Changjin's implementation. eps=0.0 by default, use e.g --eps 0.003 to enable it.
+
+Other changes:
+- small changes to plot formatting
+- file reorganization - things moved into new envs directory
+
+
+V?, ?, 7/23/20
+---------------------------------
+I've just added "schedule" and "sample" as initial conditions that can be selected with e.g. --init-type sample
+
+"schedule" cycles through a hardcoded schedule of smooth_rare, smooth_sine, random, rarefaction, and accelshock, and repeats that cycle.
+
+"sample" samples randomly from the same list.
+
+The list and sample probabilities are hardcoded into WENOBurgersEnv.__init__, if you want to change them.
+
+
+Other things in the master branch you may not have noticed:
+- smooth_rare and accelshock added as initial conditions
+- the most recent training or test run now links to a directory named last, to save you time typing out the entire log directory
+- -y and -n options are available for run_test and run_train, if you want to run them from other scripts
+- some defaults have changed: order now defaults to 2 instead of 3, and for run_test, the default for ep_length is now 500 instead of 300
