@@ -198,7 +198,8 @@ class Grid1d(GridBase):
             if 'k' in params:
                 k = params['k']
             else:
-                k = np.random.uniform(20, 100)
+                #k = np.random.uniform(20, 100)
+                k = np.random.choice(np.arange(20, 100, 5), 1)
             self.init_params['k'] = k
             self.u = A * np.tanh(k * (self.x - 0.5))
 
