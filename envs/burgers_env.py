@@ -10,7 +10,7 @@ from stable_baselines import logger
 
 from envs.grid import Grid1d
 from envs.source import RandomSource
-from envs.solutions import PreciseWENOSolution, AnalyticalSolution
+from envs.solutions import PreciseWENOSolution, AnalyticalSolution, MemoizedSolution
 import envs.weno_coefficients as weno_coefficients
 from util.softmax_box import SoftmaxBox
 from util.misc import create_stencil_indexes
@@ -109,7 +109,8 @@ class AbstractBurgersEnv(gym.Env):
             xmin=0.0, xmax=1.0, nx=128, boundary=None, init_type="smooth_sine",
             fixed_step=0.0005, C=0.5,
             weno_order=3, eps=0.0, srca=0.0, episode_length=300,
-            analytical=False, precise_weno_order=None, precise_scale=1):
+            analytical=False, precise_weno_order=None, precise_scale=1,
+            memoize=False):
 
         self.ng = weno_order+1
         self.nx = nx
@@ -129,10 +130,13 @@ class AbstractBurgersEnv(gym.Env):
                 precise_weno_order = weno_order
             self.precise_weno_order = precise_weno_order
             self.precise_nx = nx * precise_scale
-            self.solution = PreciseWENOSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng,
-                                                precise_scale=precise_scale, precise_order=precise_weno_order,
-                                                boundary=boundary, init_type=init_type, flux_function=flux, source=self.source,
-                                                eps=eps)
+            self.solution = PreciseWENOSolution(
+                    xmin=xmin, xmax=xmax, nx=nx, ng=self.ng,
+                    precise_scale=precise_scale, precise_order=precise_weno_order,
+                    boundary=boundary, init_type=init_type, flux_function=flux, source=self.source,
+                    eps=eps)
+        if memoize:
+            self.solution = MemoizedSolution(self.solution)
 
         # Disable this for now. The original idea was that you could compare both WENO and the learned RL solution to the analytical solution.
         if False: #self.analytical or self.precise_weno_order != self.weno_order or self.precise_nx != self.nx:

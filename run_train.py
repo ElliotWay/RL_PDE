@@ -18,8 +18,7 @@ matplotlib.use("Agg")
 from stable_baselines import logger
 from stable_baselines.ddpg.noise import AdaptiveParamNoiseSpec, OrnsteinUhlenbeckActionNoise, NormalActionNoise
 
-from envs import build_env
-from envs import get_env_arg_parser
+from envs import get_env_arg_parser, build_env
 from models.sac import SACBatch
 from models.ddpg import DDPGBatch
 from models.sac import LnScaledMlpPolicy as SACPolicy

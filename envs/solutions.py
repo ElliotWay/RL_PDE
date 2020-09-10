@@ -1,3 +1,4 @@
+import json
 import numpy as np
 from scipy.optimize import fixed_point
 
@@ -10,6 +11,7 @@ class SolutionBase(GridBase):
     def is_recording_actions(self):
         # Override this if you are indeed recording actions.
         return False
+
 
 class PreciseWENOSolution(SolutionBase):
     #TODO: should also calculate precise WENO with smaller timesteps.
@@ -40,14 +42,12 @@ class PreciseWENOSolution(SolutionBase):
         self.source = source
 
         self.record_action = record_actions
-        if record_actions is not None:
-            self.action_history = []
+        self.action_history = []
 
     def is_recording_actions(self):
         return (self.record_actions is not None)
     def set_record_actions(self, record_mode):
         self.record_actions = record_mode
-        self.action_history = []
     def get_action_history(self):
         return self.action_history
 
@@ -238,6 +238,85 @@ class PreciseWENOSolution(SolutionBase):
 
     def reset(self, init_params):
         self.precise_grid.reset(init_params)
+        self.action_history = []
+
+class MemoizedSolution(SolutionBase):
+    """
+    Decorator on solutions that memoizes their state to save computation.
+    
+    Useful for when the solution uses the same parameters every episode, or uses one of a set
+    of the same parameters.
+    Wastes memory for solutions that change every episode.
+    """
+    def __init__(self, solution):
+        super().__init__(nx=solution.nx, ng=solution.ng, xmin=solution.xmin, xmax=solution.xmax)
+
+        self.inner_solution = solution
+
+        self.master_state_dict = {}
+        self.master_action_dict = {}
+
+        self.isSavedSolution = False
+        self.state_history = []
+        self.time_index = -1
+
+        self.dt = None
+
+    def update(self, dt, time):
+        if self.isSavedSolution:
+            self.time_index += 1
+        else:
+            if self.dt is None:
+                self.dt = dt
+            else:
+                assert self.dt == dt, "Memoized solutions were not designed to work with variable timesteps!"
+            self.inner_solution.update(dt, time)
+            state = self.inner_solution.get_full()
+            self.state_history.append(state)
+            # Recording the action history is handled in PreciseWENO.
+
+    # These functions only makes sense to call if the inner_solution handles recording the
+    # action history.
+    def get_action_history(self):
+        if self.isSavedSolution:
+            return self.action_history[:self.time_index]
+        else:
+            return self.action_history
+    def is_recording_actions(self):
+        return self.inner_solution.is_recording_actions
+    def set_record_actions(self, record_mode):
+        self.inner_solution.set_record_actions(record_mode)
+    def get_action_history(self):
+        return self.action_history
+
+    def get_full(self):
+        if self.isSavedSolution:
+            return self.state_history[self.time_index]
+        else:
+            return self.state_history[-1]
+
+    def get_real(self):
+        return self.get_full()[self.ng:-self.ng]
+
+    def reset(self, init_params):
+        params_str = json.dumps(init_params, ensure_ascii=True, sort_keys=True)
+        if params_str in self.master_state_dict:
+            self.isSavedSolution = True
+            self.state_history = self.master_state_dict[params_str]
+            self.action_history = self.master_action_dict[params_str]
+            self.time_index = 0
+        else:
+            self.isSavedSolution = False
+            self.inner_solution.reset(init_params)
+            self.state_history = [self.inner_solution.get_full()]
+            self.master_state_dict[params_str] = self.state_history
+            # Do not assign to action_history after this, or action_history will not refer
+            # to the list in the master_action_dict.
+            # Unfortunately this makes some assumptions about how the inner_solution is implemented.
+            self.action_history = []
+            self.master_action_dict[params_str] = self.action_history
+            self.time_index = -1
+
 
 available_analytical_solutions = ["smooth_sine", "smooth_rare", "accelshock"]
 #TODO make this inherit from Grid1d somehow, a lot of the reset code is the same.

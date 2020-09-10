@@ -17,8 +17,7 @@ matplotlib.use("Agg")
 
 from stable_baselines import logger
 
-from envs import build_env
-from envs import get_env_arg_parser
+from envs import get_env_arg_parser, build_env
 from agents import StandardWENOAgent, StationaryAgent, EqualAgent, MiddleAgent, LeftAgent, RightAgent, RandomAgent
 from models.sac import SACBatch
 from util import metadata
@@ -27,20 +26,26 @@ def save_evolution_plot(x_values, state_record, final_solution, args):
     weno_color = "#ffaa00" #"c"
     #agent_color_target = "#000000"
 
-    weno = plt.plot(x_values, final_solution, ls='-', linewidth=4, color=weno_color, label="WENO")
+    if final_solution is not None:
+        weno = plt.plot(x_values, final_solution, ls='-', linewidth=4, color=weno_color)
 
     light_grey = 0.9
-    init = plt.plot(x_values, state_record[0], ls='--', color=str(light_grey), label="init")
+    init = plt.plot(x_values, state_record[0], ls='--', color=str(light_grey))
 
     for state_values, color in zip(state_record[1:-1],
                                     np.arange(light_grey, 0.0, -light_grey / (len(state_record) - 1))):
         plt.plot(x_values, state_values, ls='-', color=str(color))
 
-    rl = plt.plot(x_values, state_record[-1], ls='-', color="0.0", label="RL")
+    rl = plt.plot(x_values, state_record[-1], ls='-', color="0.0")
     #plt.plot(x_values[::5], final_solution[::5], ls='', marker='x', color='c', label="WENO")
 
     ax = plt.gca()
-    ax.legend([init[0], rl[0], weno[0]], ["init", "RL", "WENO"])
+    plots = [init[0], rl[0]]
+    labels = ["init", "RL"]
+    if final_solution is not None:
+        plots.append(weno[0])
+        labels.append("WENO")
+    ax.legend(plots, labels)
 
     ax.set_xmargin(0.0)
     ax.set_xlabel('x')
@@ -98,7 +103,10 @@ def do_test(env, agent, args):
             if not args.animate:
                 env.render(mode="file", **render_args)
             if args.evolution_plot:
-                state_record.append(np.array(env.grid.get_real()))
+                if args.agent == "none":
+                    state_record.append(np.array(env.solution.get_real()))
+                else:
+                    state_record.append(np.array(env.grid.get_real()))
 
         if args.animate:
             env.render(mode="file", **render_args)
@@ -133,9 +141,13 @@ def do_test(env, agent, args):
     if args.plot_actions:
         env.render(mode="actions")
     if args.evolution_plot:
-        state_record.append(np.array(env.grid.get_real()))
-        final_solution_state = np.array(env.solution.get_real())
-        save_evolution_plot(env.grid.x[env.ng:-env.ng], state_record, final_solution_state, args)
+        if args.agent == "none":
+            state_record.append(np.array(env.solution.get_real()))
+            save_evolution_plot(env.grid.x[env.ng:-env.ng], state_record, None, args)
+        else:
+            state_record.append(np.array(env.grid.get_real()))
+            final_solution_state = np.array(env.solution.get_real())
+            save_evolution_plot(env.grid.x[env.ng:-env.ng], state_record, final_solution_state, args)
 
     print("Test finished in " + str(end_time - start_time) + " seconds.")
     print("Reward: mean = {}, min = {} @ {}, max = {} @ {}".format(
@@ -154,7 +166,8 @@ def main():
     parser.add_argument('--help-env', default=False, action='store_true',
                         help="Do not test and show the environment parameters not listed here.")
     parser.add_argument('--agent', '-a', type=str, default="default",
-                        help="Agent to test. Either a file or a string for a standard agent. \"default\" uses standard weno coefficients.")
+                        help="Agent to test. Either a file or a string for a standard agent. \"default\" uses standard weno coefficients."
+                        "\"none\" doesn't use an agent at all and just plots the true solution (ONLY IMPLEMENTED FOR EVOLUTION PLOTS).")
     parser.add_argument('--algo', type=str, default="sac",
                         help="Algorithm used to create the agent. Unfortunately necessary to open a model file.")
     parser.add_argument('--env', type=str, default="weno_burgers",
@@ -202,6 +215,9 @@ def main():
     np.random.seed(args.seed)
     tf.set_random_seed(args.seed)
 
+    if args.memoize is None:
+        args.memoize = False
+
     if not args.convergence_plot:
         env = build_env(args.env, args)
     else:
@@ -247,7 +263,7 @@ def main():
     else:
         mode = "n/a"
 
-    if args.agent == "default":
+    if args.agent == "default" or args.agent == "none":
         agent = StandardWENOAgent(order=args.order, mode=mode)
     elif args.agent == "stationary":
         agent = StationaryAgent(order=args.order, mode=mode)
