@@ -157,7 +157,7 @@ class Grid1d(GridBase):
             if 'A' in params:
                 A = params['A']
             else:
-                A = 1.0 / (2.0 * np.pi * 0.1)
+                A = float(1.0 / (2.0 * np.pi * 0.1))
             self.init_params['A'] = A
             self.u = A*np.sin(2 * np.pi * self.x)
 
@@ -173,17 +173,17 @@ class Grid1d(GridBase):
                 k = params['k']
             else:
                 # Note that k must be even integer.
-                k = np.random.choice(np.arange(2, 10, 2))
+                k = int(np.random.choice(np.arange(2, 10, 2)))
             self.init_params['k'] = k
             if 'b' in params:
                 b = params['b']
             else:
-                b = np.random.uniform(-1.0, 1.0, 1)
+                b = float(np.random.uniform(-1.0, 1.0))
             self.init_params['b'] = b
             if 'a' in params:
                 a = params['a']
             else:
-                a = 3.5 - np.abs(b)
+                a = float(3.5 - np.abs(b))
             self.init_params['a'] = a
             self.u = a + b * np.sin(k * np.pi * self.x / (self.xmax - self.xmin))
 
@@ -199,7 +199,7 @@ class Grid1d(GridBase):
                 k = params['k']
             else:
                 #k = np.random.uniform(20, 100)
-                k = np.random.choice(np.arange(20, 100, 5))
+                k = int(np.random.choice(np.arange(20, 100, 5)))
             self.init_params['k'] = k
             self.u = A * np.tanh(k * (self.x - 0.5))
 
