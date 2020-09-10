@@ -96,7 +96,7 @@ def check_procs(procs, queues):
         ret_val = proc.poll()
         if ret_val is not None:
             if ret_val != 0:
-                print("Proc {} finished with nonzero return value: {}.".format(index, ret_val))
+                print("{}{}: Finished with nonzero return value: {}.{}".format(colors.FAIL, index, ret_val, colors.ENDC))
             del procs[index]
             del queues[index]
 
