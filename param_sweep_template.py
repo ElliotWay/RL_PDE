@@ -15,6 +15,11 @@ import argparse
 
 # And this SO answer for these colors. 
 # https://stackoverflow.com/a/287944/2860127
+# Use BrainSlugs83's comment on https://stackoverflow.com/a/16799175/2860127
+# to enable these colors on the Windows console:
+# In HKCU\Console create a DWORD named VirtualTerminalLevel and set it to 0x1;
+# then restart cmd.exe. You can test it with the following powershell:
+# "?[1;31mele ?[32mct ?[33mroni ?[35mX ?[36mtar ?[m".Replace('?', [char]27);
 class colors:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
