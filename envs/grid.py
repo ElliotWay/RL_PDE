@@ -207,6 +207,7 @@ class Grid1d(GridBase):
             if boundary is None:
                 self.boundary = "outflow"
             index = self.x > 0.25
+            #self.u = np.full_like(self.x, 3)
             self.u[:] = 3
             self.u[index] = 3 * (self.x[index] - 1)
 

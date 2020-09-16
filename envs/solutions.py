@@ -255,9 +255,9 @@ class MemoizedSolution(SolutionBase):
 
         self.master_state_dict = {}
         self.master_action_dict = {}
+        self.params_str = None
 
         self.isSavedSolution = False
-        self.state_history = []
         self.time_index = -1
 
         self.dt = None
@@ -271,50 +271,44 @@ class MemoizedSolution(SolutionBase):
             else:
                 assert self.dt == dt, "Memoized solutions were not designed to work with variable timesteps!"
             self.inner_solution.update(dt, time)
-            state = self.inner_solution.get_full()
-            self.state_history.append(state)
+            state = np.array(self.inner_solution.get_full())
+            self.master_state_dict[self.params_str].append(state)
             # Recording the action history is handled in PreciseWENO.
 
     # These functions only makes sense to call if the inner_solution handles recording the
     # action history.
     def get_action_history(self):
         if self.isSavedSolution:
-            return self.action_history[:self.time_index]
+            return self.master_action_dict[self.params_str][:self.time_index]
         else:
-            return self.action_history
+            return self.inner_solution.get_action_history()
     def is_recording_actions(self):
         return self.inner_solution.is_recording_actions
     def set_record_actions(self, record_mode):
         self.inner_solution.set_record_actions(record_mode)
     def get_action_history(self):
-        return self.action_history
+        return self.inner_solution.get_action_history()
 
     def get_full(self):
         if self.isSavedSolution:
-            return self.state_history[self.time_index]
+            return self.master_state_dict[self.params_str][self.time_index]
         else:
-            return self.state_history[-1]
+            return self.inner_solution.get_full()
 
     def get_real(self):
         return self.get_full()[self.ng:-self.ng]
 
     def reset(self, init_params):
         params_str = json.dumps(init_params, ensure_ascii=True, sort_keys=True)
+        self.params_str = params_str
         if params_str in self.master_state_dict:
             self.isSavedSolution = True
-            self.state_history = self.master_state_dict[params_str]
-            self.action_history = self.master_action_dict[params_str]
             self.time_index = 0
         else:
             self.isSavedSolution = False
             self.inner_solution.reset(init_params)
-            self.state_history = [self.inner_solution.get_full()]
-            self.master_state_dict[params_str] = self.state_history
-            # Do not assign to action_history after this, or action_history will not refer
-            # to the list in the master_action_dict.
-            # Unfortunately this makes some assumptions about how the inner_solution is implemented.
-            self.action_history = []
-            self.master_action_dict[params_str] = self.action_history
+            self.master_state_dict[params_str] = [np.array(self.inner_solution.get_full())]
+            self.master_action_dict[params_str] = self.inner_solution.action_history
             self.time_index = -1
 
 
