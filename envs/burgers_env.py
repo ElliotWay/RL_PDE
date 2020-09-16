@@ -503,8 +503,11 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         elif not self.analytical:
             self.solution.set_record_actions("weno")
 
-        #TODO make labels apply to other orders
-        self._action_labels = ["$w^+_1$", "$w^+_2$", "$w^-_1$", "$w^-_2$"]
+        self.k1 = self.k2 = self.k3 = self.u_start = self.dt = None
+        self.rk_state = 1
+
+        self._action_labels = ["$w^{}_{}$".format(sign, num) for sign in ['+', '-']
+                                    for num in range(1, self.weno_order+1)]
 
     def prep_state(self):
         """
@@ -568,6 +571,8 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         if self.weno_solution is not None:
             self.weno_solution.reset(self.grid.init_params)
 
+        self.rk_state = 1
+
         self.t = 0.0
         self.steps = 0
 
@@ -598,6 +603,65 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         return rhs
 
+    def rk4_step(self, action):
+        """
+        Perform one RK4 substep.
+
+        You should call this function 4 times in succession.
+        The 1st, 2nd, and 3rd calls will return the state in each substep.
+        The 4th call will return the state after the full RK4 step.
+        
+        Regardless of the internal state, the action should always be based on the previously returned state.
+
+        Returns
+        -------
+        state: np array
+          depends on which of the 4th calls this is
+        reward: np array
+          0 on first 3 calls, reward for each location on the 4th call
+        done: boolean
+          end of episode, guaranteed to be False on first 3 calls
+        """
+        if np.isnan(action).any():
+            raise Exception("NaN detected in action.")
+
+        if self.rk_state == 1:
+            self.u_start = np.array(self.grid.get_real())
+            self.dt = self.timestep()
+
+            self.k1 = self.dt * self.rk_substep_weno(action)
+            self.grid.update(self.u_start + self.k1/2)
+            state = self.prep_state()
+
+            self.rk_state = 2
+            return state, np.zeros_like(action), False
+        elif self.rk_state == 2:
+            self.k2 = self.dt * self.rk_substep_weno(action)
+            self.grid.update(self.u_start + self.k2/2)
+            state = self.prep_state()
+
+            self.rk_state = 3
+            return state, np.zeros_like(action), False
+        elif self.rk_state == 3:
+            self.k3 = self.dt * self.rk_substep_weno(action)
+            self.grid.update(self.u_start + self.k3)
+            state = self.prep_state()
+
+            self.rk_state = 4
+            return state, np.zeros_like(action), False
+        else:
+            assert self.rk_state == 4
+
+            k4 = self.dt * self.rk_substep_weno(action)
+            step = (self.k1 + 2*(self.k2 + self.k3) + k4) / 6
+
+            state, reward, done = self._finish_step(step, self.dt, prev=self.u_start)
+
+            self.rk_state = 1
+            self.k1 = self.k2 = self.k3 = self.u_start = self.dt = None
+            return state, reward, done
+
+
     def step(self, action):
         """
         Perform a single time step.
@@ -627,12 +691,11 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         # Should probably find a way to pass this to agent if dt varies.
         dt = self.timestep()
 
-        done = False
-        g = self.grid
-
-        u_start = np.array(g.get_real())
-
         step = dt * self.rk_substep_weno(action)
+
+        state, reward, done = self._finish_step(step, dt)
+
+        return state, reward, done, {}
 
         # Partial adjustment to allow for RK4.
         # Doesn't quite work yet (really we need an action for each substep).
@@ -654,6 +717,16 @@ class WENOBurgersEnv(AbstractBurgersEnv):
             #k4 = dt * self.rk_substep_weno(action)
             #step = (k1 + 2*(k2 + k3) + k4) / 6
 
+    def _finish_step(self, step, dt, prev=None):
+        """
+        Apply a physical step.
+
+        If prev is None, the step is applied to the current grid, otherwise
+        it is applied to prev, then saved to the grid.
+
+        Returns state, reward, done.
+        """
+
         if self.eps > 0.0:
             R = self.eps * self.lap()
             step += dt * R[g.ilo:g.ihi+1]
@@ -661,6 +734,10 @@ class WENOBurgersEnv(AbstractBurgersEnv):
             self.source.update(dt, self.t + dt)
             step += dt * self.source.get_real()
 
+        if prev is None:
+            u_start = self.grid.get_real()
+        else:
+            u_start = prev
         self.grid.update(u_start + step)
 
         self.t += dt
@@ -670,6 +747,8 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         self.steps += 1
         if self.steps >= self.episode_length:
             done = True
+        else:
+            done = False
 
         self.solution.update(dt, self.t)
         reward, force_done = self.calculate_reward()
@@ -683,7 +762,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         if np.isnan(reward).any():
             raise Exception("NaN detected in reward.")
 
-        return state, reward, done, {}
+        return state, reward, done
 
 
 class SplitFluxBurgersEnv(AbstractBurgersEnv):

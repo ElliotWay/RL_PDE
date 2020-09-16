@@ -111,10 +111,15 @@ def do_test(env, agent, args):
         if args.animate:
             env.render(mode="file", **render_args)
 
-        # The agent's policy function takes a batch of states and returns a batch of actions.
-        # However, we take that batch of actions and pass it to the environment like a single action.
-        actions, _ = agent.predict(state)
-        state, reward, done, info = env.step(actions)
+        if not args.rk4:
+            # The agent's policy function takes a batch of states and returns a batch of actions.
+            # However, we take that batch of actions and pass it to the environment like a single action.
+            actions, _ = agent.predict(state)
+            state, reward, done, _ = env.step(actions)
+        else:
+            for _ in range(4):
+                actions, _ = agent.predict(state)
+                state, reward, done = env.rk4_step(actions)
 
         if t >= update_step:
             next_update += 1
@@ -189,6 +194,9 @@ def main():
                         help="Do several runs with different grid sizes to create a convergence plot."
                         " Overrides the --nx argument with 64, 128, 256, and 512, successively."
                         " Sets the --analytical flag.")
+    parser.add_argument('--rk4', default=False, action='store_true',
+                        help="Use RK4 steps instead of Euler steps. Only available for testing,"
+                        + " since the reward during training doesn't make sense.")
     parser.add_argument('-y', default=False, action='store_true',
                         help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
     parser.add_argument('-n', default=False, action='store_true',
