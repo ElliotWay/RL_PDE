@@ -448,14 +448,18 @@ class AbstractBurgersEnv(gym.Env):
         #reward = np.max(np.abs(error))
         #reward = (error) ** 2
 
+        # Reward as average of error in two adjacent cells.
+        error = np.abs(error)
+        reward = (error[self.ng-1:-self.ng] + error[self.ng:-(self.ng-1)]) / 2
+
         # Reward as function of the errors in the stencil.
         # max error across stencil
-        stencil_indexes = create_stencil_indexes(
-                stencil_size=(self.weno_order * 2 - 1),
-                num_stencils=(self.nx + 1),
-                offset=(self.ng - self.weno_order))
-        error_stencils = error[stencil_indexes]
-        reward = np.amax(np.abs(error_stencils), axis=-1)
+        #stencil_indexes = create_stencil_indexes(
+                #stencil_size=(self.weno_order * 2 - 1),
+                #num_stencils=(self.nx + 1),
+                #offset=(self.ng - self.weno_order))
+        #error_stencils = error[stencil_indexes]
+        #reward = np.amax(np.abs(error_stencils), axis=-1)
         #reward = np.sqrt(np.sum(error_stencils**2, axis=-1))
 
         # Squash error.
