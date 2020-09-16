@@ -158,7 +158,7 @@ def do_test(env, agent, args):
     print("Reward: mean = {}, min = {} @ {}, max = {} @ {}".format(
         np.mean(total_reward), np.amin(total_reward), np.argmin(total_reward), np.amax(total_reward), np.argmax(total_reward)))
 
-    error = np.sqrt(np.sum(np.square(env.grid.get_real() - env.solution.get_real())))
+    error = np.sqrt(env.grid.dx * np.sum(np.square(env.grid.get_real() - env.solution.get_real())))
     print("Final error with solution was {}.".format(error))
 
     return error
