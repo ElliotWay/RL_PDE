@@ -3,6 +3,7 @@
 ##################################################################################################
 
 import os
+import signal
 import sys
 import subprocess
 import threading
@@ -16,8 +17,6 @@ os.system("")
 # Thanks to this SO answer for non-blocking queues.
 # https://stackoverflow.com/a/4896288/2860127
 
-# And this SO answer for these colors. 
-# https://stackoverflow.com/a/287944/2860127
 # Use BrainSlugs83's comment on https://stackoverflow.com/a/16799175/2860127
 # to enable these colors on the Windows console:
 # In HKCU\Console create a DWORD named VirtualTerminalLevel and set it to 0x1;
@@ -42,7 +41,6 @@ class colors:
             '\033[94m', #blue
             '\033[32m', #dark green
             ]
-
 
 
 ###########################################
@@ -118,7 +116,7 @@ def check_procs(procs, queues):
         if ret_val is not None:
             if ret_val != 0:
                 print("{}{}: {}Finished with nonzero return value: {}.{}".format(
-                    colors.SEQUENCE[index], colors.FAIL, index, ret_val, colors.ENDC))
+                    colors.SEQUENCE[index], index, colors.FAIL, ret_val, colors.ENDC))
             del procs[index]
             del queues[index]
 
@@ -149,39 +147,75 @@ def main():
         print(" {}{}{}".format(colors.SEQUENCE[i], i, colors.ENDC), end='')
     print()
 
-    for arg_list_index, arg_list in enumerate(arg_matrix):
-        while len(running_procs) >= MAX_PROCS:
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    try:
+        signal.signal(signal.SIGBREAK, signal.default_int_handler)
+    except:
+        # We're on a Unix machine that doesn't have SIGBREAK, that's fine.
+        pass
+
+    try:
+        for arg_list_index, arg_list in enumerate(arg_matrix):
+            while len(running_procs) >= MAX_PROCS:
+                time.sleep(SLEEP_TIME)
+                check_procs(running_procs, output_queues)
+
+            new_index = -1
+            for i in range(MAX_PROCS):
+                if i not in running_procs:
+                    new_index = i
+                    break
+            assert new_index >= 0, "No space for new proc?"
+
+            full_command = command_prefix + arg_list
+            command_string = " ".join(full_command)
+            print("{}{}: {}Starting new process ({}/{}):{}".format(
+                colors.SEQUENCE[new_index], new_index,
+                colors.OKGREEN, arg_list_index + 1, len(arg_matrix), colors.ENDC))
+            print("{}{}: {}{}{}".format(colors.SEQUENCE[new_index], new_index,
+                colors.OKGREEN, command_string, colors.ENDC))
+            if args.run:
+                if ON_POSIX:
+                    proc = subprocess.Popen(full_command,
+                                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                            bufsize=1, close_fds=True, start_new_session=True)
+                else:
+                    flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+                    proc = subprocess.Popen(full_command,
+                                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                            bufsize=1, close_fds=False, creation_flags=flags)
+
+                queue = Queue()
+                thread = threading.Thread(target=enqueue_output, args=(proc.stdout, queue))
+                thread.start()
+
+                running_procs[new_index] = proc
+                output_queues[new_index] = queue
+
+        while len(running_procs) > 0:
             time.sleep(SLEEP_TIME)
             check_procs(running_procs, output_queues)
+    except KeyboardInterrupt:
+        print(("{}Interrupt signal received. The current runs will run to completion, but no new"
+                + " runs will start. Send the interrupt signal again to stop current runs now.{}")
+                .format(colors.WARNING, colors.ENDC))
 
-        new_index = -1
-        for i in range(MAX_PROCS):
-            if i not in running_procs:
-                new_index = i
-                break
-        assert new_index >= 0, "No space for new proc?"
+        try:
+            while len(running_procs) > 0:
+                time.sleep(SLEEP_TIME)
+                check_procs(running_procs, output_queues)
+        except KeyboardInterrupt:
+            print(("{}2nd interrupt signal received. Forwarding interrupt to runs."
+                + " Sending an interrupt AGAIN will interrupt this process;"
+                + " the current runs might not be stopped.{}")
+                .format(colors.WARNING, colors.ENDC))
+            for index, proc in running_procs.items():
+                proc.send_signal(signal.SIGINT)
 
-        full_command = command_prefix + arg_list
-        command_string = " ".join(full_command)
-        print("{}{}: {}Starting new process ({}/{}):{}".format(
-            colors.SEQUENCE[new_index], new_index,
-            colors.OKGREEN, arg_list_index + 1, len(arg_matrix), colors.ENDC))
-        print("{}{}: {}{}{}".format(colors.SEQUENCE[new_index], new_index,
-            colors.OKGREEN, command_string, colors.ENDC))
-        if args.run:
-            proc = subprocess.Popen(full_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                    #text=True, 
-                                    bufsize=1, close_fds=ON_POSIX)
-            queue = Queue()
-            thread = threading.Thread(target=enqueue_output, args=(proc.stdout, queue))
-            thread.start()
+            while len(running_procs) > 0:
+                time.sleep(SLEEP_TIME)
+                check_procs(running_procs, output_queues)
 
-            running_procs[new_index] = proc
-            output_queues[new_index] = queue
-
-    while len(running_procs) > 0:
-        time.sleep(SLEEP_TIME)
-        check_procs(running_procs, output_queues)
 
 
 
