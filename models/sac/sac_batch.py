@@ -1,4 +1,5 @@
 import os
+import shutil
 import sys
 import time
 import warnings
@@ -408,7 +409,7 @@ class SACBatch(OffPolicyRLModel):
 
     def learn(self, total_timesteps, callback=None,
               log_interval=4, tb_log_name="SAC", reset_num_timesteps=True, replay_wrapper=None,
-              eval_episodes=1, render=None, render_every=None):
+              eval_episodes=1, render=None, render_every=None, n_best_models=5):
 
         new_tb_log = self._init_num_timesteps(reset_num_timesteps)
         callback = self._init_callback(callback)
@@ -441,6 +442,8 @@ class SACBatch(OffPolicyRLModel):
             callback.on_rollout_start()
 
             ep_steps = 0
+
+            best_models = []
 
             for step in range(total_timesteps):
 
@@ -569,6 +572,7 @@ class SACBatch(OffPolicyRLModel):
                             eval_obs = self.eval_env.reset()
                             eval_obs = self.obs_adjust(eval_obs)
                             eval_ep_steps = 0
+                            eval_ep_reward = 0
                             while not eval_done:
                                 eval_action = self.policy_tf.step(eval_obs, deterministic=True).flatten()
                                 eval_action = action.reshape((-1,) + (self.i_action_space.shape))
@@ -579,7 +583,8 @@ class SACBatch(OffPolicyRLModel):
                                 eval_obs = new_eval_obs
 
                                 eval_ep_steps += 1
-                                total_eval_reward += np.mean(eval_reward)
+                                eval_ep_reward += np.mean(eval_reward)
+                            total_eval_reward += eval_ep_reward / eval_ep_steps
 
                             if render is not None:
                                 if eval_episodes > 1:
@@ -596,10 +601,12 @@ class SACBatch(OffPolicyRLModel):
                         else:
                             mean_reward = round(float(np.mean(episode_rewards[-101:-1])), 1)
 
+                        num_episodes = len(episode_rewards)
+
                         # Display training infos
                         if self.verbose >= 1:
                             fps = int(step / (time.time() - start_time))
-                            logger.logkv("episodes", len(episode_rewards))
+                            logger.logkv("episodes", num_episodes)
                             logger.logkv("avg 100ep train reward", mean_reward)
                             logger.logkv("avg {}ep eval reward".format(eval_episodes), average_eval_reward)
                             if len(self.ep_info_buf) > 0 and len(self.ep_info_buf[0]) > 0:
@@ -622,9 +629,38 @@ class SACBatch(OffPolicyRLModel):
                         # PDE Save current model.
                         # TODO Also save model when an interrupt occurs. Needs signal catching around network updates. See https://stackoverflow.com/a/21919644/2860127
                         log_dir = logger.get_dir()
-                        model_file_name = os.path.join(log_dir, "model" + str(len(episode_rewards)))
+                        model_file_name = os.path.join(log_dir, "model" + str(num_episodes))
                         self.save(model_file_name)
+                        model_file_name = model_file_name + ".zip"
                         print("Saved model to " + model_file_name + ".")
+
+                        if n_best_models > 0:
+                            if len(best_models) < n_best_models or average_eval_reward > best_models[-1]["reward"]:
+                                print("New good model ({}).".format(average_eval_reward))
+                                new_index = -1
+                                for index, model in enumerate(best_models):
+                                    if average_eval_reward > model["reward"]:
+                                        new_index = index
+                                        break
+                                best_file_name = os.path.join(log_dir, "_best_model_" + str(num_episodes) + ".zip")
+                                shutil.copy(model_file_name, best_file_name)
+                                new_model = {"file_name": best_file_name, "episodes": num_episodes, "reward": average_eval_reward}
+
+                                if new_index < 0:
+                                    best_models.append(new_model)
+                                else:
+                                    best_models.insert(new_index, new_model)
+
+                                if len(best_models) > n_best_models:
+                                    old_model = best_models.pop()
+                                    os.remove(old_model["file_name"])
+
+            log_dir = logger.get_dir()
+            print("Best models:")
+            for index, model in enumerate(best_models):
+                new_file_name = os.path.join(log_dir, "best_{}_model_{}.zip".format(index+1, model["episodes"]))
+                shutil.move(model["file_name"], new_file_name)
+                print("{}: {} eps, {}, {}".format(index+1, model["episodes"], model["reward"], new_file_name))
                     
             callback.on_training_end()
             return self
