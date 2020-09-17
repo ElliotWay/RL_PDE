@@ -10,6 +10,9 @@ from queue import Queue, Empty
 import time
 import argparse
 
+# Sometimes this enables colors on Windows terminals.
+os.system("")
+
 # Thanks to this SO answer for non-blocking queues.
 # https://stackoverflow.com/a/4896288/2860127
 
@@ -29,6 +32,18 @@ class colors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
+    SEQUENCE = [
+            '\033[96m', #cyan
+            '\033[93m', #yellow
+            '\033[95m', #magenta
+            '\033[97m', #white
+            '\033[92m', #green
+            '\033[91m', #red
+            '\033[94m', #blue
+            '\033[32m', #dark green
+            ]
+
+
 
 ###########################################
 # Declare your available parameters here. #
@@ -36,7 +51,7 @@ class colors:
 # This isn't a dictionary so we can preserve order.
 values_table = []
 values_table.append(("--order", [2, 3]))
-values_table.append(("--init-type", ["sine", "smooth_sine", "random", "rarefaction", "smooth_rare", "accelshock"]))#, "schedule", "sample"]))
+values_table.append(("--init-type", ["smooth_sine", "smooth_rare", "accelshock"]))
 values_table.append(("--seed", [1, 2, 3]))
 
 ########################################################################
@@ -54,6 +69,7 @@ base_log_dir = "log/param_sweep"
 # Adjust the maximum number of simultaneous processes here. #
 #############################################################
 MAX_PROCS = 4
+assert MAX_PROCS <= len(colors.SEQUENCE)
 
 SLEEP_TIME = 0.25 # seconds
 
@@ -90,7 +106,7 @@ def check_procs(procs, queues):
         try:
             while True:
                 next_line = queue.get_nowait()
-                print("{}: {}".format(index, next_line), end='')
+                print("{}{}:{} {}".format(colors.SEQUENCE[index], index, colors.ENDC, next_line), end='')
         except Empty:
             # Expected
             pass
@@ -101,7 +117,8 @@ def check_procs(procs, queues):
         ret_val = proc.poll()
         if ret_val is not None:
             if ret_val != 0:
-                print("{}{}: Finished with nonzero return value: {}.{}".format(colors.FAIL, index, ret_val, colors.ENDC))
+                print("{}{}: {}Finished with nonzero return value: {}.{}".format(
+                    colors.SEQUENCE[index], colors.FAIL, index, ret_val, colors.ENDC))
             del procs[index]
             del queues[index]
 
@@ -127,6 +144,11 @@ def main():
     running_procs = {}
     output_queues = {}
 
+    print("Using {} processes:".format(MAX_PROCS), end='')
+    for i in range(MAX_PROCS):
+        print(" {}{}{}".format(colors.SEQUENCE[i], i, colors.ENDC), end='')
+    print()
+
     for arg_list_index, arg_list in enumerate(arg_matrix):
         while len(running_procs) >= MAX_PROCS:
             time.sleep(SLEEP_TIME)
@@ -141,9 +163,11 @@ def main():
 
         full_command = command_prefix + arg_list
         command_string = " ".join(full_command)
-        print("{}{}: Starting new process ({}/{}):{}".format(colors.OKGREEN,
-                new_index, arg_list_index + 1, len(arg_matrix), colors.ENDC))
-        print("{}{}: {}{}".format(colors.OKGREEN, new_index, command_string, colors.ENDC))
+        print("{}{}: {}Starting new process ({}/{}):{}".format(
+            colors.SEQUENCE[new_index], new_index,
+            colors.OKGREEN, arg_list_index + 1, len(arg_matrix), colors.ENDC))
+        print("{}{}: {}{}{}".format(colors.SEQUENCE[new_index], new_index,
+            colors.OKGREEN, command_string, colors.ENDC))
         if args.run:
             proc = subprocess.Popen(full_command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                     #text=True, 
