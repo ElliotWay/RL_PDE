@@ -147,13 +147,18 @@ class AbstractBurgersEnv(gym.Env):
         else:
             self.weno_solution = None
 
-        self.t = 0.0  # simulation time
         self.fixed_step = fixed_step
         self.C = C  # CFL number
         self.eps = eps
         self.episode_length = episode_length
+
+        self._step_precision = int(np.ceil(np.log(self.episode_length) / np.log(10)))
+        self._cell_index_precision = int(np.ceil(np.log(self.nx) / np.log(10)))
+
+        self.t = 0.0
         self.steps = 0
         self.action_history = []
+        self.state_history = []
 
         self._state_axes = None
         self._action_axes = None
@@ -204,7 +209,38 @@ class AbstractBurgersEnv(gym.Env):
         if "action" in mode:
             self.plot_action(**kwargs)
 
-    def plot_state(self, suffix=None, title=None, fixed_axes=False, no_x_borders=False, show_ghost=True):
+    def plot_state(self, timestep=None, location=None, suffix=None, title=None, fixed_axes=False, no_x_borders=False, show_ghost=True):
+        """
+        Plot environment state at either a timestep or a specific location.
+
+        Either the timestep parameter or the location parameter can be specified, but not both.
+        By default, the most recent timestep is used.
+
+        The default only requires self.grid to be updated. Specifying a time or location requires
+        the state to be recorded in self.state_history in the subclass's step function.
+
+        Parameters
+        ----------
+        timestep : int
+            Timestep at which to plot state. By default, use the most recent timestep.
+        location : int
+            Index of location at which to plot actions.
+        suffix : string
+            The plot will be saved to burgers{suffix}.png. By default, the timestep/location
+            is used for the suffix.
+        title : string
+            Title for the plot. By default, the title is based on the timestep/location.
+        fixed_axes : bool
+            If true, use the same axis limits on every plot. Useful for animation.
+        no_x_border : bool
+            If true, trim the plot to exactly the extent of the x coordinates. Useful for animation.
+        show_ghost : bool
+            Plot the ghost cells in addition to the "real" cells. The ghost cells are plotted
+            in a lighter color.
+        """
+
+        assert (timestep is None or location is None), "Can't plot state at both a timestep and a location."
+
         fig = plt.figure()
 
         full_x = self.grid.x
@@ -213,9 +249,56 @@ class AbstractBurgersEnv(gym.Env):
         full_true = self.solution.get_full()
         real_true = full_true[self.ng:-self.ng]
 
+        if location is None and timestep is None:
+            state_history = self.grid.get_full()
+            solution_state_history = self.solution.get_full()
+            if self.weno_solution is not None:
+                weno_state_history = self.weno_solution.get_full()
+            else:
+                weno_state_history = None
+
+            if title is None:
+                title = ("state at t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(self.t, self.steps)
+            if suffix is None:
+                suffix = ("_step{:0" + str(self._step_precision) + "}").format(self.steps)
+        else:
+            state_history = np.array(self.state_history)
+            solution_state_history = self.solution.get_state_history() \
+                    if self.solution.is_record_state() else None
+            weno_state_history = self.weno_solution.is_recording_state() \
+                    if self.weno_solution is not None and self.weno_solution.is_recording_state() else None
+
+            if location is not None:
+                location = self.ng + location
+                state_history = state_history[:,location]
+                if solution_state_history is not None:
+                    solution_state_history = solution_state_history[:, location]
+                if weno_state_history is not None:
+                    weno_state_history = weno_state_history[:, location]
+
+                actual_location = self.grid.x[location]
+                if title is None:
+                    title = "state at x = {:.4f} (i = {})".format(actual_location, location)
+                if suffix is None:
+                    suffix = ("_step{:0" + str(self._cell_index_precision) + "}").format(location)
+            else:
+                state_history = state_history[timestep, :]
+                if solution_state_history is not None:
+                    solution_state_history = solution_state_history[timestep, :]
+                if weno_state_history is not None:
+                    weno_state_history = weno_state_history[timestep, :]
+
+                if title is None:
+                    if self.C is None:
+                        actual_time = timestep * self.fixed_step
+                        title = ("state at t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(actual_time, timestep)
+                    else:
+                        # TODO get time with variable timesteps?
+                        title = "state at step {:0" + str(self._step_precision) + "d}".format(timestep)
+                if suffix is None:
+                    suffix = ("_step{:0" + str(self._step_precision) + "}").format(timestep)
+
         if self.weno_solution is not None:
-            full_weno = self.weno_solution.get_full()
-            real_weno = full_weno[self.ng:-self.ng]
             weno_color = "tab:blue"
             weno_ghost_color = "#75bdf0"
             true_color = "tab:pink"
@@ -223,62 +306,66 @@ class AbstractBurgersEnv(gym.Env):
         else:
             true_color = "tab:blue"
             true_ghost_color = "#75bdf0"
-
-        full_agent = self.grid.u
-        real_agent = full_agent[self.ng:-self.ng]
         agent_color = "tab:orange"
         agent_ghost_color =  "#ffad66"
-
         # ghost green: "#94d194"
 
-        # The ghost arrays slice off one real point so the line connects to the real points.
-        # Leave off labels for these lines so they don't show up in the legend.
-        num_ghost_points = self.ng + 1
-        if show_ghost:
-            ghost_x_left = full_x[:num_ghost_points]
-            ghost_x_right = full_x[-num_ghost_points:]
+        if timestep is None:
+            if show_ghost:
+                # The ghost arrays slice off one real point so the line connects to the real points.
+                num_ghost_points = self.ng + 1
 
-            ghost_true_left = full_true[:num_ghost_points]
-            ghost_true_right = full_true[-num_ghost_points:]
-            plt.plot(ghost_x_left, ghost_true_left, ls='-', color=true_ghost_color)
-            plt.plot(ghost_x_right, ghost_true_right, ls='-', color=true_ghost_color)
+                ghost_x_left = self.grid.x[:num_ghost_points]
+                ghost_x_right = self.grid.x[-num_ghost_points:]
 
-            if self.weno_solution is not None:
-                ghost_weno_left = full_weno[:num_ghost_points]
-                ghost_weno_right = full_weno[-num_ghost_points:]
-                plt.plot(ghost_x_left, ghost_weno_left, ls='-', color=weno_ghost_color)
-                plt.plot(ghost_x_right, ghost_weno_right, ls='-', color=weno_ghost_color)
+                ghost_true_left = full_true[:num_ghost_points]
+                ghost_true_right = full_true[-num_ghost_points:]
+                plt.plot(ghost_x_left, state_history[:num_ghost_points], ls='-', color=agent_ghost_color)
+                plt.plot(ghost_x_right, state_history[-num_ghost_points:], ls='-', color=agent_ghost_color)
 
-            ghost_agent_left = full_agent[:num_ghost_points]
-            ghost_agent_right = full_agent[-num_ghost_points:]
-            plt.plot(ghost_x_left, ghost_agent_left, ls='-', color=agent_ghost_color)
-            plt.plot(ghost_x_right, ghost_agent_right, ls='-', color=agent_ghost_color)
+                if solution_state_history is not None:
+                    plt.plot(ghost_x_left, solution_state_history[:num_ghost_points], ls='-', color=true_ghost_color)
+                    plt.plot(ghost_x_right, solution_state_history[-num_ghost_points:], ls='-', color=true_ghost_color)
+
+                if weno_state_history is not None:
+                    plt.plot(ghost_x_left, weno_state_history[:num_ghost_points], ls='-', color=weno_ghost_color)
+                    plt.plot(ghost_x_right, weno_state_history[-num_ghost_points:], ls='-', color=weno_ghost_color)
+
+            state_history = state_history[self.ng:-self.ng]
+            if solution_state_history is not None:
+                solution_state_history = solution_state_history[self.ng:-self.ng]
+            if weno_state_history is not None:
+                weno_state_history = weno_state_history[self.ng:-self.ng]
+
+        if timestep is None:
+            x_values = self.grid.x[self.ng:-self.ng]
+        else:
+            if self.C is None:
+                x_values = self.fixed_step * np.arange(len(state_history))
+            else:
+                # Need to record time values with variable timesteps.
+                x_values = np.arange(len(state_history))
 
         if self.analytical:
             true_label = "Analytical"
+            weno_label = "WENO"
         else:
             if self.weno_solution is not None:
                 true_label = "WENO (order={}, res={})".format(self.precise_weno_order, self.precise_nx)
+                weno_label = "WENO (order={}, res={})".format(self.weno_order, self.nx)
             else:
                 true_label = "WENO"
-        plt.plot(real_x, real_true, ls='-', color=true_color, label=true_label)
+        if solution_state_history is not None:
+            plt.plot(x_values, solution_state_history, ls='-', color=true_color, label=true_label)
+        if weno_state_history is not None:
+            plt.plot(x_values, weno_state_history, ls='-', color=weno_color, label=weno_label)
 
-        if self.weno_solution is not None:
-            weno_label = "WENO (order={}, res={})".format(self.weno_order, self.nx)
-            plt.plot(real_x, real_weno, ls='-', color=weno_color, label=weno_label)
-
+        # Plot this one last so it is on the top.
         agent_label = "RL"
-        plt.plot(real_x, real_agent, ls='-', color=agent_color, label=agent_label)
+        plt.plot(x_values, state_history, ls='-', color=agent_color, label=agent_label)
 
-        plt.legend()
+        plt.legend(loc="upper right")
         ax = plt.gca()
-
-        # Recalculate automatic axis scaling.
-        #ax.relim()
-        #ax.autoscale_view()
-
-        if title is None:
-            title = "t = {:.3f}s".format(self.t)
 
         ax.set_title(title)
 
@@ -294,11 +381,6 @@ class AbstractBurgersEnv(gym.Env):
                 ax.set_ylim(ylim)
 
         log_dir = logger.get_dir()
-        if suffix is None:
-            # Find number of digits in last step so files are sorted correctly.
-            # E.g., use 001 instead of 1.
-            step_precision = int(np.ceil(np.log(self.episode_length) / np.log(10)))
-            suffix = ("_step{:0" + str(step_precision) + "}").format(self.steps)
         filename = 'burgers' + suffix + '.png'
         filename = os.path.join(log_dir, filename)
         plt.savefig(filename)
@@ -313,7 +395,7 @@ class AbstractBurgersEnv(gym.Env):
         Either the timestep parameter or the location parameter can be specified, but not both.
         By default, the most recent timestep is used.
 
-        This requires actions to be recorded in self.action_history in the subclasses step function.
+        This requires actions to be recorded in self.action_history in the subclass's step function.
 
         Parameters
         ----------
@@ -364,7 +446,7 @@ class AbstractBurgersEnv(gym.Env):
             if weno_action_history is not None:
                 weno_action_history = weno_action_history[:, location, :].transpose()
 
-            actual_location = self.grid.x[location]
+            actual_location = self.grid.x[location] - self.dx/2
             if title is None:
                 fig.suptitle("actions at x = {:.4} (i = {} - 1/2)".format(actual_location, location))
             else:
@@ -416,11 +498,9 @@ class AbstractBurgersEnv(gym.Env):
         log_dir = logger.get_dir()
         if suffix is None:
             if location is not None:
-                location_precision = int(np.ceil(np.log(self.nx) / np.log(10)))
-                suffix = ("_step{:0" + str(location_precision) + "}").format(location)
+                suffix = ("_step{:0" + str(self._cell_index_precision) + "}").format(location)
             else:
-                step_precision = int(np.ceil(np.log(self.episode_length) / np.log(10)))
-                suffix = ("_step{:0" + str(step_precision) + "}").format(timestep)
+                suffix = ("_step{:0" + str(self._step_precision) + "}").format(timestep)
         filename = 'burgers_action' + suffix + '.png'
 
         filename = os.path.join(log_dir, filename)
@@ -691,13 +771,15 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         if np.isnan(action).any():
             raise Exception("NaN detected in action.")
 
-        self.action_history.append(action)
         # Should probably find a way to pass this to agent if dt varies.
         dt = self.timestep()
 
         step = dt * self.rk_substep_weno(action)
 
         state, reward, done = self._finish_step(step, dt)
+
+        self.action_history.append(action)
+        self.state_history.append(self.grid.get_full().copy())
 
         return state, reward, done, {}
 
