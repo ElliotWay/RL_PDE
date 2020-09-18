@@ -6,6 +6,19 @@ import sys
 import numpy as np
 
 class GridBase:
+    """
+    Abstract base class for Grids.
+
+    A Grid represents a quantity in a physical space that has been discretized
+    into cells. A Grid contains real cells, representing the values within the
+    physical space, and ghost cells, representing values just beyond the
+    boundary of the physical space necessary for computing convolutions over
+    the phyiscal space.
+
+    A grid can be reset to a state specified by a standard parameter dict,
+    and set using a list of real values (the ghost cells should be updated
+    using some other means).
+    """
 
     def __init__(self, nx, ng, xmin, xmax):
         self.xmin = xmin
@@ -21,7 +34,7 @@ class GridBase:
         # Physical coordinates: interfaces, left edges
         self.inter_x = xmin + (np.arange(nx + 2 * ng) - ng) * self.dx
     
-    def update(self, dt, time):
+    def set(self, real_values):
         raise NotImplementedError()
 
     def get_real(self):
@@ -30,7 +43,7 @@ class GridBase:
     def get_full(self):
         raise NotImplementedError()
 
-    def reset(self, **params):
+    def reset(self, params_dict):
         raise NotImplementedError()
 
     def scratch_array(self):
@@ -243,7 +256,7 @@ class Grid1d(GridBase):
         self.init_params['boundary'] = self.boundary
         self.update_boundary()
 
-    def update(self, new_values):
+    def set(self, new_values):
         """
         Update the grid with new values.
         The ghost cells are also updated.
@@ -258,6 +271,10 @@ class Grid1d(GridBase):
         self.update_boundary()
 
     def update_boundary(self):
+        """
+        Update the ghost cells based on the value of the Grid.boundary field.
+        You should not need to call this - Grid.set calls this method.
+        """
         if self.boundary == "periodic":
             self.u[0:self.ilo] = self.u[self.ihi - self.ng + 1:self.ihi + 1]
             self.u[self.ihi + 1:] = self.u[self.ilo:self.ilo + self.ng]

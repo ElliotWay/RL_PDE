@@ -7,10 +7,24 @@ from envs.grid import GridBase, Grid1d
 
 
 class SolutionBase(GridBase):
-    """ SolutionBase is the same as GridBase but indicates that subclasses are intended to be solutions. """
+    """
+    Base class for solutions.
+
+    A solution acts like a grid except that one can update to the next state
+    automatically given a time delta and target time.
+    """
+
+    def update(self, dt, time):
+        raise NotImplementedError()
+
     def is_recording_actions(self):
-        # Override this if you are indeed recording actions.
+        # Override this if you have get_action_history implemented.
         return False
+    def is_recording_state(self):
+        # Override this if you have get_state_history implemented.
+        return False
+    def set_record_state(self, record_state):
+        pass
 
 
 class PreciseWENOSolution(SolutionBase):
@@ -276,11 +290,10 @@ class MemoizedSolution(SolutionBase):
         self.dt = None
 
     # Forward method calls that aren't available here to inner solution.
+    # If you're not familiar, note that __getattr__ is only called when the
+    # attr wasn't found by usual means.
     def __getattr__(self, attr):
-        try:
-            return self.__dict__[attr]
-        except KeyError:
-            return self.inner_solution.__getattr(attr)
+        return getattr(self.inner_solution, attr)
 
     def update(self, dt, time):
         if self.isSavedSolution:
@@ -331,7 +344,7 @@ class MemoizedSolution(SolutionBase):
 
 
 available_analytical_solutions = ["smooth_sine", "smooth_rare", "accelshock"]
-#TODO make this inherit from Grid1d somehow, a lot of the reset code is the same.
+#TODO Make this have a Grid1d, the reset methods have so much overlap.
 #TODO account for xmin, xmax in case they're not 0 and 1.
 class AnalyticalSolution(SolutionBase):
     def __init__(self, nx, ng, xmin, xmax, init_type="schedule"):

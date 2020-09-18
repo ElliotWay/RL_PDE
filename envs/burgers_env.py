@@ -548,7 +548,6 @@ class AbstractBurgersEnv(gym.Env):
         #reward = -error
         #max_penalty = 1e7
 
-
         # Conservation-based reward.
         # reward = -np.log(np.sum(rhs[g.ilo:g.ihi+1]))
 
@@ -714,21 +713,21 @@ class WENOBurgersEnv(AbstractBurgersEnv):
             self.dt = self.timestep()
 
             self.k1 = self.dt * self.rk_substep_weno(action)
-            self.grid.update(self.u_start + self.k1/2)
+            self.grid.set(self.u_start + self.k1/2)
             state = self.prep_state()
 
             self.rk_state = 2
             return state, np.zeros_like(action), False
         elif self.rk_state == 2:
             self.k2 = self.dt * self.rk_substep_weno(action)
-            self.grid.update(self.u_start + self.k2/2)
+            self.grid.set(self.u_start + self.k2/2)
             state = self.prep_state()
 
             self.rk_state = 3
             return state, np.zeros_like(action), False
         elif self.rk_state == 3:
             self.k3 = self.dt * self.rk_substep_weno(action)
-            self.grid.update(self.u_start + self.k3)
+            self.grid.set(self.u_start + self.k3)
             state = self.prep_state()
 
             self.rk_state = 4
@@ -783,26 +782,6 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         return state, reward, done, {}
 
-        # Partial adjustment to allow for RK4.
-        # Doesn't quite work yet (really we need an action for each substep).
-        # Leaving it commented here in case we use this later.
-        #mode = "euler"
-        #mode = "rk4"
-        #if mode == "euler":
-            #step = dt * self.rk_substep_weno(action)
-        #elif mode == "rk4":
-            #k1 = dt * self.rk_substep_weno(action)
-            #self.grid.update(u_start + k1 / 2)
-            #self.prep_state()
-            #k2 = dt * self.rk_substep_weno(action)
-            #self.grid.update(u_start + k2 / 2)
-            #self.prep_state()
-            #k3 = dt * self.rk_substep_weno(action)
-            #self.grid.update(u_start + k3)
-            #self.prep_state()
-            #k4 = dt * self.rk_substep_weno(action)
-            #step = (k1 + 2*(k2 + k3) + k4) / 6
-
     def _finish_step(self, step, dt, prev=None):
         """
         Apply a physical step.
@@ -824,7 +803,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
             u_start = self.grid.get_real()
         else:
             u_start = prev
-        self.grid.update(u_start + step)
+        self.grid.set(u_start + step)
 
         self.t += dt
 
@@ -994,7 +973,7 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
             rhs += self.source.get_real()
 
         u_copy += dt * rhs
-        self.grid.update(u_copy)
+        self.grid.set(u_copy)
 
         self.t += dt
 
@@ -1137,7 +1116,7 @@ class FluxBurgersEnv(AbstractBurgersEnv):
             rhs += self.source.get_real()
 
         u_copy += dt * rhs
-        self.grid.update(u_copy)
+        self.grid.set(u_copy)
 
         # update the solution time
         self.t += dt
