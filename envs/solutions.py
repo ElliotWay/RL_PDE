@@ -8,23 +8,50 @@ from envs.grid import GridBase, Grid1d
 
 class SolutionBase(GridBase):
     """
-    Base class for solutions.
+    Base class for Solutions.
 
-    A solution acts like a grid except that one can update to the next state
+    A Solution acts like a grid except that one can update to the next state
     automatically given a time delta and target time.
+
+    A Solution can also optionally keep track of the state as it changes, updating
+    the state history on reset and update.
+
+    Subclasses should extend _update and _reset;
+    update and reset here are lightweight wrappers of _update and _reset
+    that record the state history.
     """
+    def __init__(self, record_state=False, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.record_state = False
+        self.state_history = []
 
     def update(self, dt, time):
+        self._update(dt, time)
+        if self.record_state:
+            self.state_history.append(self.get_full())
+
+    def reset(self, params):
+        self._reset(params)
+        if self.record_state:
+            self.state_history = [self.get_full().copy()]
+
+    def _reset(self, params):
         raise NotImplementedError()
+    def _update(self, dt, time):
+        raise NotImplementedError()
+
+    def is_recording_state(self):
+        return self.record_state
+    def set_record_state(self, record_state):
+        self.record_state = record_state
+        if not self.record_state:
+            self.state_history = []
+    def get_state_history(self):
+        return self.state_history
 
     def is_recording_actions(self):
         # Override this if you have get_action_history implemented.
         return False
-    def is_recording_state(self):
-        # Override this if you have get_state_history implemented.
-        return False
-    def set_record_state(self, record_state):
-        pass
 
 
 class PreciseWENOSolution(SolutionBase):
@@ -57,8 +84,6 @@ class PreciseWENOSolution(SolutionBase):
 
         self.record_action = record_actions
         self.action_history = []
-        self.record_state = record_state
-        self.state_history = []
 
     def is_recording_actions(self):
         return (self.record_actions is not None)
@@ -66,12 +91,6 @@ class PreciseWENOSolution(SolutionBase):
         self.record_actions = record_mode
     def get_action_history(self):
         return self.action_history
-    def is_recording_state(self):
-        return self.record_state
-    def set_record_state(self, record_state):
-        self.record_state = record_state
-    def get_state_history(self):
-        return self.state_history
 
     def weno_stencils(self, q):
         """
@@ -237,15 +256,13 @@ class PreciseWENOSolution(SolutionBase):
 
         return lapu
 
-    def update(self, dt, time):
+    def _update(self, dt, time):
         # Do Euler step, though rk_substep is separated so this can be converted to RK4.
         self.t = time
         euler_step = dt * self.rk_substep()
 
         self.precise_grid.u += euler_step
         self.precise_grid.update_boundary()
-
-        self.state_history.append(self.get_full().copy())
 
     def get_full(self):
         """ Downsample the precise solution to get coarse solution values. """
@@ -262,10 +279,9 @@ class PreciseWENOSolution(SolutionBase):
     def get_real(self):
         return self.get_full()[self.ng:-self.ng]
 
-    def reset(self, init_params):
+    def _reset(self, init_params):
         self.precise_grid.reset(init_params)
         self.action_history = []
-        self.state_history = [self.get_full().copy()]
 
 class MemoizedSolution(SolutionBase):
     """
@@ -295,7 +311,7 @@ class MemoizedSolution(SolutionBase):
     def __getattr__(self, attr):
         return getattr(self.inner_solution, attr)
 
-    def update(self, dt, time):
+    def _update(self, dt, time):
         if self.isSavedSolution:
             self.time_index += 1
         else:
@@ -329,7 +345,7 @@ class MemoizedSolution(SolutionBase):
     def get_real(self):
         return self.get_full()[self.ng:-self.ng]
 
-    def reset(self, init_params):
+    def _reset(self, init_params):
         params_str = json.dumps(init_params, ensure_ascii=True, sort_keys=True)
         self.params_str = params_str
         if params_str in self.master_state_dict:
@@ -359,7 +375,7 @@ class AnalyticalSolution(SolutionBase):
 
         self.init_params = None
 
-    def update(self, dt, time):
+    def _update(self, dt, time):
         params = self.init_params
         init_type = params['init_type']
         if init_type in ["smooth_sine", "smooth_rare"]:
@@ -384,7 +400,7 @@ class AnalyticalSolution(SolutionBase):
             new_u[index] = (u_R*(self.x[index] - 1)) / (1 + u_R*time)
             self.u = new_u
 
-    def reset(self, params):
+    def _reset(self, params):
         if self._fixed_init is not None:
             init_type = self._fixed_init
         else:
