@@ -292,9 +292,12 @@ class MemoizedSolution(SolutionBase):
     Wastes memory for solutions that change every episode.
     """
     def __init__(self, solution):
-        super().__init__(nx=solution.nx, ng=solution.ng, xmin=solution.xmin, xmax=solution.xmax)
+        super().__init__(nx=solution.nx, ng=solution.ng, xmin=solution.xmin, xmax=solution.xmax,
+                # The inner solution should record the state history, not this wrapper.
+                record_state=False)
 
         self.inner_solution = solution
+        self.inner_solution.set_record_state(True)
 
         self.master_state_dict = {}
         self.master_action_dict = {}
@@ -306,7 +309,7 @@ class MemoizedSolution(SolutionBase):
         self.dt = None
 
     # Forward method calls that aren't available here to inner solution.
-    # If you're not familiar, note that __getattr__ is only called when the
+    # If you're not familiar, __getattr__ is only called when the
     # attr wasn't found by usual means.
     def __getattr__(self, attr):
         return getattr(self.inner_solution, attr)
@@ -320,21 +323,22 @@ class MemoizedSolution(SolutionBase):
             else:
                 assert self.dt == dt, "Memoized solutions were not designed to work with variable timesteps!"
             self.inner_solution.update(dt, time)
-            state = np.array(self.inner_solution.get_full())
-            self.master_state_dict[self.params_str].append(state)
-            # Recording the action history is handled in PreciseWENO.
+
+    def set_record_state(self, record_state):
+        if not record_state:
+            raise Exception("Cannot stop recording state with MemoizedSolution.")
+
+    def get_state_history(self):
+        if self.isSavedSolution:
+            return self.master_state_dict[self.params_str][:self.time_index]
+        else:
+            return self.inner_solution.get_state_history()
 
     def get_action_history(self):
         if self.isSavedSolution:
             return self.master_action_dict[self.params_str][:self.time_index]
         else:
             return self.inner_solution.get_action_history()
-    #def is_recording_actions(self):
-        #return self.inner_solution.is_recording_actions
-    #def set_record_actions(self, record_mode):
-        #self.inner_solution.set_record_actions(record_mode)
-    #def get_action_history(self):
-        #return self.inner_solution.get_action_history()
 
     def get_full(self):
         if self.isSavedSolution:
@@ -346,6 +350,14 @@ class MemoizedSolution(SolutionBase):
         return self.get_full()[self.ng:-self.ng]
 
     def _reset(self, init_params):
+        # If time_index is -1, then this is the first call to reset,
+        # and we don't have a potential solution to save.
+        if not self.isSavedSolution and self.time_index != -1:
+            state_history = self.inner_solution.get_state_history().copy()
+            self.master_state_dict[self.params_str] = state_history
+            action_history = self.inner_solution.get_action_history().copy()
+            self.master_action_dict[self.params_str] = action_history
+
         params_str = json.dumps(init_params, ensure_ascii=True, sort_keys=True)
         self.params_str = params_str
         if params_str in self.master_state_dict:
@@ -354,8 +366,6 @@ class MemoizedSolution(SolutionBase):
         else:
             self.isSavedSolution = False
             self.inner_solution.reset(init_params)
-            self.master_state_dict[params_str] = [np.array(self.inner_solution.get_full())]
-            self.master_action_dict[params_str] = self.inner_solution.action_history
             self.time_index = -1
 
 
