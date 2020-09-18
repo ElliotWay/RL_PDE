@@ -19,7 +19,7 @@ class PreciseWENOSolution(SolutionBase):
     def __init__(self, nx, ng, xmin, xmax,
                  precise_order, precise_scale, init_type, boundary, flux_function,
                  eps=0.0, source=None,
-                 record_actions=None):
+                 record_state=False, record_actions=None):
         super().__init__(nx=nx, ng=ng, xmin=xmin, xmax=xmax)
 
         assert (precise_scale % 2 == 1), "Precise scale must be odd for easier downsampling."
@@ -43,6 +43,8 @@ class PreciseWENOSolution(SolutionBase):
 
         self.record_action = record_actions
         self.action_history = []
+        self.record_state = record_state
+        self.state_history = []
 
     def is_recording_actions(self):
         return (self.record_actions is not None)
@@ -50,6 +52,12 @@ class PreciseWENOSolution(SolutionBase):
         self.record_actions = record_mode
     def get_action_history(self):
         return self.action_history
+    def is_recording_state(self):
+        return self.record_state
+    def set_record_state(self, record_state):
+        self.record_state = record_state
+    def get_state_history(self):
+        return self.state_history
 
     def weno_stencils(self, q):
         """
@@ -178,6 +186,8 @@ class PreciseWENOSolution(SolutionBase):
                 for sub_stencil_index in range(order):
                     flux_weights[:, :, sub_stencil_index:sub_stencil_index + order] += combined_weights[:, :, sub_stencil_index, :]
                 self.action_history.append(flux_weights)
+            else:
+                raise Exception("Unrecognized action type: '{}'".format(self.record_actions))
 
         # compute flux from fpr and fml
         flux[1:-1] = fpr[1:-1] + fml[1:-1]
@@ -221,6 +231,8 @@ class PreciseWENOSolution(SolutionBase):
         self.precise_grid.u += euler_step
         self.precise_grid.update_boundary()
 
+        self.state_history.append(self.get_full().copy())
+
     def get_full(self):
         """ Downsample the precise solution to get coarse solution values. """
 
@@ -239,6 +251,7 @@ class PreciseWENOSolution(SolutionBase):
     def reset(self, init_params):
         self.precise_grid.reset(init_params)
         self.action_history = []
+        self.state_history = [self.get_full().copy()]
 
 class MemoizedSolution(SolutionBase):
     """
@@ -262,6 +275,13 @@ class MemoizedSolution(SolutionBase):
 
         self.dt = None
 
+    # Forward method calls that aren't available here to inner solution.
+    def __getattr__(self, attr):
+        try:
+            return self.__dict__[attr]
+        except KeyError:
+            return self.inner_solution.__getattr(attr)
+
     def update(self, dt, time):
         if self.isSavedSolution:
             self.time_index += 1
@@ -275,19 +295,17 @@ class MemoizedSolution(SolutionBase):
             self.master_state_dict[self.params_str].append(state)
             # Recording the action history is handled in PreciseWENO.
 
-    # These functions only makes sense to call if the inner_solution handles recording the
-    # action history.
     def get_action_history(self):
         if self.isSavedSolution:
             return self.master_action_dict[self.params_str][:self.time_index]
         else:
             return self.inner_solution.get_action_history()
-    def is_recording_actions(self):
-        return self.inner_solution.is_recording_actions
-    def set_record_actions(self, record_mode):
-        self.inner_solution.set_record_actions(record_mode)
-    def get_action_history(self):
-        return self.inner_solution.get_action_history()
+    #def is_recording_actions(self):
+        #return self.inner_solution.is_recording_actions
+    #def set_record_actions(self, record_mode):
+        #self.inner_solution.set_record_actions(record_mode)
+    #def get_action_history(self):
+        #return self.inner_solution.get_action_history()
 
     def get_full(self):
         if self.isSavedSolution:

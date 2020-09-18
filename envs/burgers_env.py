@@ -581,6 +581,9 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         self.observation_space = spaces.Box(low=-1e7, high=1e7,
                                             shape=(self.grid.real_length() + 1, 2, 2 * self.weno_order - 1),
                                             dtype=np.float64)
+        self.solution.set_record_state(True)
+        if self.weno_solution is not None:
+            self.weno_solution.set_record_state(True)
 
         if self.weno_solution is not None:
             self.weno_solution.set_record_actions("weno")
@@ -659,9 +662,6 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         self.t = 0.0
         self.steps = 0
-
-        self._all_learned_weights = []
-        self._all_weno_weights = []
 
         return self.prep_state()
 
