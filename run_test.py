@@ -22,40 +22,6 @@ from agents import StandardWENOAgent, StationaryAgent, EqualAgent, MiddleAgent, 
 from models.sac import SACBatch
 from util import metadata
 
-def save_evolution_plot(x_values, state_record, final_solution, args):
-    weno_color = "#ffaa00" #"c"
-    #agent_color_target = "#000000"
-
-    if final_solution is not None:
-        weno = plt.plot(x_values, final_solution, ls='-', linewidth=4, color=weno_color)
-
-    light_grey = 0.9
-    init = plt.plot(x_values, state_record[0], ls='--', color=str(light_grey))
-
-    for state_values, color in zip(state_record[1:-1],
-                                    np.arange(light_grey, 0.0, -light_grey / (len(state_record) - 1))):
-        plt.plot(x_values, state_values, ls='-', color=str(color))
-
-    rl = plt.plot(x_values, state_record[-1], ls='-', color="0.0")
-    #plt.plot(x_values[::5], final_solution[::5], ls='', marker='x', color='c', label="WENO")
-
-    ax = plt.gca()
-    plots = [init[0], rl[0]]
-    labels = ["init", "RL"]
-    if final_solution is not None:
-        plots.append(weno[0])
-        labels.append("WENO")
-    ax.legend(plots, labels)
-
-    ax.set_xmargin(0.0)
-    ax.set_xlabel('x')
-    ax.set_ylabel('u')
-
-    filename = os.path.join(args.log_dir, "evolution.png")
-    plt.savefig(filename)
-    print('Saved plot to ' + filename + '.')
-    plt.close()
-
 def save_convergence_plot(grid_sizes, error, args):
     plt.plot(grid_sizes, error, ls='-', color='k')
 
@@ -102,11 +68,11 @@ def do_test(env, agent, args):
             print("step = " + str(t))
             if not args.animate:
                 env.render(mode="file", **render_args)
-            if args.evolution_plot:
-                if args.agent == "none":
-                    state_record.append(np.array(env.solution.get_real()))
-                else:
-                    state_record.append(np.array(env.grid.get_real()))
+            #if args.evolution_plot:
+                #if args.agent == "none":
+                    #state_record.append(np.array(env.solution.get_real()))
+                #else:
+                    #state_record.append(np.array(env.grid.get_real()))
 
         if args.animate:
             env.render(mode="file", **render_args)
@@ -146,13 +112,14 @@ def do_test(env, agent, args):
     if args.plot_actions:
         env.render(mode="actions")
     if args.evolution_plot:
-        if args.agent == "none":
-            state_record.append(np.array(env.solution.get_real()))
-            save_evolution_plot(env.grid.x[env.ng:-env.ng], state_record, None, args)
-        else:
-            state_record.append(np.array(env.grid.get_real()))
-            final_solution_state = np.array(env.solution.get_real())
-            save_evolution_plot(env.grid.x[env.ng:-env.ng], state_record, final_solution_state, args)
+        #if args.agent == "none":
+            #state_record.append(np.array(env.solution.get_real()))
+            #save_evolution_plot(env.grid.x[env.ng:-env.ng], state_record, None, args)
+        #else:
+            #state_record.append(np.array(env.grid.get_real()))
+            #final_solution_state = np.array(env.solution.get_real())
+            #save_evolution_plot(env.grid.x[env.ng:-env.ng], state_record, final_solution_state, args)
+        env.plot_state_evolution(num_states=10, full_true=False, no_true=False)
 
     print("Test finished in " + str(end_time - start_time) + " seconds.")
     print("Reward: mean = {}, min = {} @ {}, max = {} @ {}".format(

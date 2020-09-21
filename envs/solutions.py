@@ -28,7 +28,7 @@ class SolutionBase(GridBase):
     def update(self, dt, time):
         self._update(dt, time)
         if self.record_state:
-            self.state_history.append(self.get_full())
+            self.state_history.append(self.get_full().copy())
 
     def reset(self, params):
         self._reset(params)

@@ -4,6 +4,7 @@ from datetime import datetime
 
 import gym
 import matplotlib.pyplot as plt
+import matplotlib
 import numpy as np
 from gym import spaces
 from stable_baselines import logger
@@ -164,6 +165,18 @@ class AbstractBurgersEnv(gym.Env):
         self._action_axes = None
         self._action_labels = None
 
+        if self.weno_solution is not None:
+            self.weno_color = "tab:blue"
+            self.weno_ghost_color = "#75bdf0"
+            self.true_color = "tab:pink"
+            self.true_ghost_color = "#f7e4ed"
+        else:
+            self.true_color = "tab:blue"
+            self.true_ghost_color = "#75bdf0"
+        self.agent_color = "tab:orange"
+        self.agent_ghost_color =  "#ffad66"
+        # ghost green: "#94d194"
+
     def step(self):
         raise NotImplementedError()
 
@@ -243,9 +256,6 @@ class AbstractBurgersEnv(gym.Env):
 
         fig = plt.figure()
 
-        full_x = self.grid.x
-        real_x = full_x[self.ng:-self.ng]
-
         full_true = self.solution.get_full()
         real_true = full_true[self.ng:-self.ng]
 
@@ -264,7 +274,7 @@ class AbstractBurgersEnv(gym.Env):
         else:
             state_history = np.array(self.state_history)
             solution_state_history = self.solution.get_state_history() \
-                    if self.solution.is_record_state() else None
+                    if self.solution.is_recording_state() else None
             weno_state_history = self.weno_solution.is_recording_state() \
                     if self.weno_solution is not None and self.weno_solution.is_recording_state() else None
 
@@ -298,18 +308,6 @@ class AbstractBurgersEnv(gym.Env):
                 if suffix is None:
                     suffix = ("_step{:0" + str(self._step_precision) + "}").format(timestep)
 
-        if self.weno_solution is not None:
-            weno_color = "tab:blue"
-            weno_ghost_color = "#75bdf0"
-            true_color = "tab:pink"
-            true_ghost_color = "#f7e4ed"
-        else:
-            true_color = "tab:blue"
-            true_ghost_color = "#75bdf0"
-        agent_color = "tab:orange"
-        agent_ghost_color =  "#ffad66"
-        # ghost green: "#94d194"
-
         if timestep is None:
             if show_ghost:
                 # The ghost arrays slice off one real point so the line connects to the real points.
@@ -320,16 +318,16 @@ class AbstractBurgersEnv(gym.Env):
 
                 ghost_true_left = full_true[:num_ghost_points]
                 ghost_true_right = full_true[-num_ghost_points:]
-                plt.plot(ghost_x_left, state_history[:num_ghost_points], ls='-', color=agent_ghost_color)
-                plt.plot(ghost_x_right, state_history[-num_ghost_points:], ls='-', color=agent_ghost_color)
+                plt.plot(ghost_x_left, state_history[:num_ghost_points], ls='-', color=self.agent_ghost_color)
+                plt.plot(ghost_x_right, state_history[-num_ghost_points:], ls='-', color=self.agent_ghost_color)
 
                 if solution_state_history is not None:
-                    plt.plot(ghost_x_left, solution_state_history[:num_ghost_points], ls='-', color=true_ghost_color)
-                    plt.plot(ghost_x_right, solution_state_history[-num_ghost_points:], ls='-', color=true_ghost_color)
+                    plt.plot(ghost_x_left, solution_state_history[:num_ghost_points], ls='-', color=self.true_ghost_color)
+                    plt.plot(ghost_x_right, solution_state_history[-num_ghost_points:], ls='-', color=self.true_ghost_color)
 
                 if weno_state_history is not None:
-                    plt.plot(ghost_x_left, weno_state_history[:num_ghost_points], ls='-', color=weno_ghost_color)
-                    plt.plot(ghost_x_right, weno_state_history[-num_ghost_points:], ls='-', color=weno_ghost_color)
+                    plt.plot(ghost_x_left, weno_state_history[:num_ghost_points], ls='-', color=self.weno_ghost_color)
+                    plt.plot(ghost_x_right, weno_state_history[-num_ghost_points:], ls='-', color=self.weno_ghost_color)
 
             state_history = state_history[self.ng:-self.ng]
             if solution_state_history is not None:
@@ -356,13 +354,13 @@ class AbstractBurgersEnv(gym.Env):
             else:
                 true_label = "WENO"
         if solution_state_history is not None:
-            plt.plot(x_values, solution_state_history, ls='-', color=true_color, label=true_label)
+            plt.plot(x_values, solution_state_history, ls='-', color=self.true_color, label=true_label)
         if weno_state_history is not None:
-            plt.plot(x_values, weno_state_history, ls='-', color=weno_color, label=weno_label)
+            plt.plot(x_values, weno_state_history, ls='-', color=self.weno_color, label=weno_label)
 
         # Plot this one last so it is on the top.
         agent_label = "RL"
-        plt.plot(x_values, state_history, ls='-', color=agent_color, label=agent_label)
+        plt.plot(x_values, state_history, ls='-', color=self.agent_color, label=agent_label)
 
         plt.legend(loc="upper right")
         ax = plt.gca()
@@ -388,7 +386,112 @@ class AbstractBurgersEnv(gym.Env):
 
         plt.close(fig)
 
-    def plot_action(self, timestep=None, location=None, suffix=None, title=None, fixed_axes=False, no_x_borders=False, **kwargs):
+    def plot_state_evolution(self, num_states=10, full_true=False, no_true=False, suffix=""):
+        """
+        Plot the evolution of the state over time on a single plot.
+        Ghost cells are not plotted.
+        Time delta is not indicated anywhere on the plot.
+
+        Parameters
+        ----------
+        num_states : int
+            Number of states to plot. Does not include the initial state
+            but does include the final state, so num_states=10 will have 11
+            lines.
+        full_true : bool
+            Set False by default, which will only plot the final state of the
+            true solution. Set True to plot the state of the true solution at
+            every the same number of timesteps as the RL solution. (This may
+            be confusing to interpret.)
+        no_true : bool
+            Set False by default, which plots the true solution. Set True to
+            ONLY plot the RL solution, if you don't care about the true solution.
+            Also useful to plot evolution of the true solution itself.
+        suffix : string
+            The plot will be saved to burgers_evolution{suffix}.png. There is
+            no suffix by default.
+        """
+
+        fig = plt.figure()
+
+        x_values = self.grid.x[self.ng:-self.ng]
+
+        state_history = np.array(self.state_history)[:, self.ng:-self.ng]
+
+        # Indexes into the state history. There are num_states+1 indices, where the first
+        # is always 0m the last is always len(state_history)-1, and the rest are evenly
+        # spaced between them.
+        slice_indexes = (np.arange(num_states+1)*(len(state_history)-1)/num_states).astype(int)
+
+        # Create a color sequence, in the same structure as the above slice indexes.
+        # The first is always start_vec, the last is always end_vec, and the rest
+        # are evenly spaced.
+        def color_sequence(start_vec, end_vec, n):
+            return list(zip(*[
+                start + np.arange(n+1)*((end-start)/n)
+                for start, end in zip(start_vec, end_vec)]))
+
+        start_rgb = (0.9, 0.9, 0.9) #light grey
+
+        # Plot the true solution first so it appears under the RL solution.
+        if self.solution.is_recording_state() and not no_true:
+            solution_state_history = np.array(self.solution.get_state_history())[:, self.ng:-self.ng]
+
+            assert len(state_history) == len(solution_state_history), "History mismatch."
+            
+            if full_true:
+                true_rgb = matplotlib.colors.to_rgb(self.true_color)
+                true_color_sequence = color_sequence(start_rgb, true_rgb, num_states)
+                sliced_solution_history = solution_state_history[slice_indexes]
+                
+                for state_values, color in zip(sliced_solution_history[1:-1], true_color_sequence[1:-1]):
+                    plt.plot(x_values, state_values, ls='-', linewidth=1, color=color)
+                true = plt.plot(x_values, solution_state_history[-1],
+                                ls='-', linewidth=1, color=true_rgb)
+            else:
+                true = plt.plot(x_values, solution_state_history[-1], 
+                                ls='-', linewidth=4, color=self.true_color)
+        else:
+            true = None
+
+        init = plt.plot(x_values, state_history[0], ls='--', color=start_rgb)
+
+        if full_true and not no_true:
+            agent_rgb = matplotlib.colors.to_rgb(self.agent_color)
+        else:
+            # Use black if the true state has only the one line.
+            agent_rgb = (0.0, 0.0, 0.0)
+        agent_color_sequence = color_sequence(start_rgb, agent_rgb, num_states)
+        sliced_history = state_history[slice_indexes]
+        for state_values, color in zip(sliced_history[1:-1], agent_color_sequence[1:-1]):
+            plt.plot(x_values, state_values, ls='-', color=color)
+        agent = plt.plot(x_values, state_history[-1], ls='-', color=agent_rgb)
+
+        ax = plt.gca()
+        plots = [init[0], agent[0]]
+        labels = ["init", "RL"]
+        if not no_true:
+            plots.append(true[0])
+            if self.analytical:
+                labels.append("Analytical")
+            else:
+                labels.append("WENO")
+        ax.legend(plots, labels)
+
+        ax.set_xmargin(0.0)
+        ax.set_xlabel('x')
+        ax.set_ylabel('u')
+
+        
+        log_dir = logger.get_dir()
+        filename = os.path.join(log_dir, "burgers_evolution{}.png".format(suffix))
+        plt.savefig(filename)
+        print('Saved plot to ' + filename + '.')
+        
+        plt.close(fig)
+
+    def plot_action(self, timestep=None, location=None, suffix=None, title=None,
+                    fixed_axes=False, no_x_borders=False, **kwargs):
         """
         Plot actions at either a timestep or a specific location.
 
@@ -404,7 +507,7 @@ class AbstractBurgersEnv(gym.Env):
         location : int
             Index of location at which to plot actions.
         suffix : string
-            The plot will be saved to burgers_action_{suffix}.png. By default, the timestep/location
+            The plot will be saved to burgers_action{suffix}.png. By default, the timestep/location
             is used for the suffix.
         title : string
             Title for the plot. By default, the title is based on the timestep/location.
@@ -427,9 +530,11 @@ class AbstractBurgersEnv(gym.Env):
 
         if self.solution.is_recording_actions():
             weno_action_history = np.array(self.solution.get_action_history())
+            weno_color = self.true_color
             assert(action_history.shape == weno_action_history.shape)
         elif self.weno_solution is not None and self.weno_solution.is_recording_actions():
             weno_action_history = np.array(self.weno_solution.get_action_history())
+            weno_color = self.weno_color
             assert(action_history.shape == weno_action_history.shape)
         else:
             weno_action_history = None
@@ -470,14 +575,12 @@ class AbstractBurgersEnv(gym.Env):
 
         real_x = self.grid.inter_x[self.ng:-(self.ng-1)]
 
-        agent_color = "tab:orange"
-        weno_color = "tab:blue"
         for dim in range(action_dimensions):
             ax = axes[dim]
 
             if weno_action_history is not None:
                 ax.plot(real_x, weno_action_history[dim, :], c=weno_color, linestyle='-', label="WENO")
-            ax.plot(real_x, action_history[dim, :], c=agent_color, linestyle='-', label="RL")
+            ax.plot(real_x, action_history[dim, :], c=self.agent_color, linestyle='-', label="RL")
 
             if no_x_borders:
                 ax.set_xmargin(0.0)
@@ -656,6 +759,8 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         self.solution.reset(self.grid.init_params)
         if self.weno_solution is not None:
             self.weno_solution.reset(self.grid.init_params)
+
+        self.state_history = [self.grid.get_full().copy()]
 
         self.rk_state = 1
 
