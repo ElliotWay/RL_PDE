@@ -324,6 +324,10 @@ class MemoizedSolution(SolutionBase):
                 assert self.dt == dt, "Memoized solutions were not designed to work with variable timesteps!"
             self.inner_solution.update(dt, time)
 
+    def is_recording_state(self):
+        assert self.inner_solution.is_recording_state()
+        return True
+
     def set_record_state(self, record_state):
         if not record_state:
             raise Exception("Cannot stop recording state with MemoizedSolution.")

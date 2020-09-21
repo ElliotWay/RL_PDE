@@ -386,7 +386,7 @@ class AbstractBurgersEnv(gym.Env):
 
         plt.close(fig)
 
-    def plot_state_evolution(self, num_states=10, full_true=False, no_true=False, suffix=""):
+    def plot_state_evolution(self, num_states=10, full_true=False, no_true=False, suffix="", title=None):
         """
         Plot the evolution of the state over time on a single plot.
         Ghost cells are not plotted.
@@ -410,6 +410,8 @@ class AbstractBurgersEnv(gym.Env):
         suffix : string
             The plot will be saved to burgers_evolution{suffix}.png. There is
             no suffix by default.
+        title : string
+            Title for the plot. There is no title by default.
         """
 
         fig = plt.figure()
@@ -470,7 +472,7 @@ class AbstractBurgersEnv(gym.Env):
         ax = plt.gca()
         plots = [init[0], agent[0]]
         labels = ["init", "RL"]
-        if not no_true:
+        if true is not None:
             plots.append(true[0])
             if self.analytical:
                 labels.append("Analytical")
@@ -478,10 +480,12 @@ class AbstractBurgersEnv(gym.Env):
                 labels.append("WENO")
         ax.legend(plots, labels)
 
+        if title is not None:
+            ax.set_title(title)
+
         ax.set_xmargin(0.0)
         ax.set_xlabel('x')
         ax.set_ylabel('u')
-
         
         log_dir = logger.get_dir()
         filename = os.path.join(log_dir, "burgers_evolution{}.png".format(suffix))
@@ -683,6 +687,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         self.observation_space = spaces.Box(low=-1e7, high=1e7,
                                             shape=(self.grid.real_length() + 1, 2, 2 * self.weno_order - 1),
                                             dtype=np.float64)
+        
         self.solution.set_record_state(True)
         if self.weno_solution is not None:
             self.weno_solution.set_record_state(True)

@@ -57,7 +57,7 @@ def main():
                         + " Explicitly passed parameters override parameters in the meta file."
                         + " Passing an explicit --log-dir is recommended.")
     parser.add_argument('--render', type=str, default="file",
-                        help="How to render output. Options are file, human, and none.")
+                        help="How to render output. Options are file and none.")
     parser.add_argument('--animate', type=int, default=None, 
                         help="Enable animation mode. Plot the state at every nth timestep, and keep the axes fixed across every plot."
                         + " This option also forces the same_eval_env option.")
