@@ -1,3 +1,21 @@
+V43, a963fc2, 9/21/20
+---------------------------------
+Reward change. Switched current reward to average of two adjacent cells. Intent is to maxmize stationarity; if that's not working, maybe we should change this back or to something else.
+
+Switch last state with evolution plot. SACBatch saves an evolution plot during evaluation instead of only the last state.
+
+Save best models. The SACBatch learn function now record the 5 models with the best average performance on the evaluation environment. These will appear in the log directory as best_1_model_{steps}.zip through best_5_model_{steps}.zip, or as _best_model{steps}.zip if the training loop does not end cleanly.
+
+Fixed convergence plots. The error was being calculated correctly which has now been fixed.
+
+RK4. Use RK4 instead of Euler steps. Only available on run_test.py using --rk4.
+
+Memoized solutions. Instead of using the same WENO weights or calculating the same analytical solution over and over, calculate them once and save them. Enabled by default on most solutions, but not on --schedule, --sample, or --random.Use --memo or --no-memo to override the defaults.
+
+The deploy_fixed branch has been pushed. This uses the fixed solution as a policy for advancing the state, and the training policy to collect samples that are reset.
+Grids and solutions have been refactored substantially.
+
+
 V42, 831fc29, 9/8/20
 ---------------------------------
 Version log moved into this text file instead of an email chain, because Outlook doesn't keep replies together unlike Gmail.
