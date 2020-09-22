@@ -560,6 +560,7 @@ class SACBatch(OffPolicyRLModel):
                     if log_interval is not None and len(episode_rewards) % log_interval == 0:
 
                         total_eval_reward = 0
+                        eval_plots = []
                         for eval_ep in range(eval_episodes):
                             if render_every is not None and ep_steps % render_every == 0:
                                 if eval_episodes > 1:
@@ -596,9 +597,11 @@ class SACBatch(OffPolicyRLModel):
                                 #self.eval_env.render(mode=render, fixed_axes=(render_every is not None), suffix=suffix,
                                                 #title="{:03d} training episodes, t = {:05.4f}".format(len(episode_rewards), self.eval_env.t))
                                 # Switched to evolution plot.
-                                self.eval_env.plot_state_evolution(num_states=10, full_true=True,
-                                        suffix=suffix, title="{:03d} training episodes, t = {:05.4f}"
+                                plot_file_name = self.eval_env.plot_state_evolution(
+                                        num_states=10, full_true=True, suffix=suffix,
+                                        title="{:03d} training episodes, t = {:05.4f}"
                                         .format(len(episode_rewards), self.eval_env.t))
+                                eval_plots.append(plot_file_name)
 
                         average_eval_reward = total_eval_reward / eval_episodes
 
@@ -650,7 +653,8 @@ class SACBatch(OffPolicyRLModel):
                                         break
                                 best_file_name = os.path.join(log_dir, "_best_model_" + str(num_episodes) + ".zip")
                                 shutil.copy(model_file_name, best_file_name)
-                                new_model = {"file_name": best_file_name, "episodes": num_episodes, "reward": average_eval_reward}
+                                new_model = {"file_name": best_file_name, "episodes": num_episodes,
+                                        "reward": average_eval_reward, "plots": eval_plots}
 
                                 if new_index < 0:
                                     best_models.append(new_model)
@@ -667,6 +671,14 @@ class SACBatch(OffPolicyRLModel):
                 new_file_name = os.path.join(log_dir, "best_{}_model_{}.zip".format(index+1, model["episodes"]))
                 shutil.move(model["file_name"], new_file_name)
                 print("{}: {} eps, {}, {}".format(index+1, model["episodes"], model["reward"], new_file_name))
+
+                print("(", end='')
+                for plot_index, plot_file_name in enumerate(model["plots"]):
+                    new_plot_name = os.path.join(log_dir, "best_{}_model_{}_{}.png".format(
+                        index+1, model["episodes"], plot_index+1))
+                    shutil.copy(plot_file_name, new_plot_name)
+                    print(new_plot_name + " ", end='')
+                print(")")
                     
             callback.on_training_end()
             return self

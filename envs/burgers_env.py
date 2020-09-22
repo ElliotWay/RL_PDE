@@ -218,9 +218,9 @@ class AbstractBurgersEnv(gym.Env):
         if mode is None:
             return
         if "file" in mode:
-            self.plot_state(**kwargs)
+            return self.plot_state(**kwargs)
         if "action" in mode:
-            self.plot_action(**kwargs)
+            return self.plot_action(**kwargs)
 
     def plot_state(self, timestep=None, location=None, suffix=None, title=None, fixed_axes=False, no_x_borders=False, show_ghost=True):
         """
@@ -385,6 +385,7 @@ class AbstractBurgersEnv(gym.Env):
         print('Saved plot to ' + filename + '.')
 
         plt.close(fig)
+        return filename
 
     def plot_state_evolution(self, num_states=10, full_true=False, no_true=False, suffix="", title=None):
         """
@@ -493,6 +494,7 @@ class AbstractBurgersEnv(gym.Env):
         print('Saved plot to ' + filename + '.')
         
         plt.close(fig)
+        return filename
 
     def plot_action(self, timestep=None, location=None, suffix=None, title=None,
                     fixed_axes=False, no_x_borders=False, **kwargs):
@@ -615,6 +617,7 @@ class AbstractBurgersEnv(gym.Env):
         print('Saved plot to ' + filename + '.')
 
         plt.close(fig)
+        return filename
 
     def calculate_reward(self):
         """ Optional reward calculation based on the error between grid and solution. """
