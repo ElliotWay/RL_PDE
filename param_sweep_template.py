@@ -5,6 +5,7 @@
 import os
 import signal
 import sys
+import shlex
 import subprocess
 import threading
 from queue import Queue, Empty
@@ -42,21 +43,24 @@ class colors:
             '\033[32m', #dark green
             ]
 
-
-###########################################
-# Declare your available parameters here. #
-###########################################
-# This isn't a dictionary so we can preserve order.
-values_table = []
-values_table.append(("--order", [2, 3]))
-values_table.append(("--init-type", ["smooth_sine", "smooth_rare", "accelshock"]))
-values_table.append(("--seed", [1, 2, 3]))
-
 ########################################################################
 # Declare the base command here.                                       #
 # Any parameters that should be the same for every run should go here. #
 ########################################################################
 base_command = "python run_train.py -n"
+
+###########################################
+# Declare your available parameters here. #
+###########################################
+# This isn't a dictionary so we can preserve order. (Though as of 3.6, order is guaranteed.)
+values_table = []
+values_table.append(("--order", [2, 3]))
+values_table.append(("--init-type", ["smooth_sine", "smooth_rare", "accelshock"]))
+values_table.append(("--seed", [1, 2, 3]))
+# You can declare parameters with dependent parameters.
+# This will add "--eval_env custom" to the parameters when we are also using
+# "--init-type schedule".
+#values_table.append(("--init-type", ["sine", ("schedule", "--eval_env custom")]))
 
 ########################################
 # Declare the base log directory here. #
@@ -82,8 +86,16 @@ def build_command_list(index, arg_list, log_dir):
         keyword, value_list = values_table[index]
         stripped_keyword = keyword.lstrip("-")
         for value in value_list:
+            try:
+                value, extra = value
+            except (TypeError, ValueError):
+                extra = None
+
             new_arg_list = list(arg_list)
             new_arg_list += [keyword, str(value)]
+            if extra is not None:
+                # shlex takes care of quoted strings with spaces.
+                new_arg_list += shlex.split(extra)
             ####################################################################
             # Some arguments, namely log_dir, need more careful manipulation.  #
             # Right now the log_dir creates subdirectories for each parameter. #
