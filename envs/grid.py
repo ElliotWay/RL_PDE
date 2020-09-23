@@ -147,7 +147,6 @@ class Grid1d(GridBase):
         The format of this dict is the same as the dict in init_params, which includes
         things like randomly generated numeric constants as well as the init_type.
         """
-        type_ = self.init_type
 
         if 'init_type' in params:
             self.init_type = params['init_type']
@@ -164,7 +163,14 @@ class Grid1d(GridBase):
 
         self.init_params = {'init_type': self.init_type}
 
-        if self.init_type == "smooth_sine":
+        if self.init_type == "custom" or type(self.init_type) is not str:
+            assert callable(self._init_type), "Custom init must have function provided as init type."
+            assert boundary is not None, "Cannot use default boundary with custom init type."
+            new_u, custom_params = self._init_type(params)
+            self.init_params.update(custom_params)
+            self.u[self.ng:-self.ng] = new_u
+
+        elif self.init_type == "smooth_sine":
             if boundary is None:
                 self.boundary = "periodic"
             if 'A' in params:
@@ -251,7 +257,7 @@ class Grid1d(GridBase):
             self.u[:] = 0
 
         else:
-            raise Exception("Initial condition type \"" + str(type_) + "\" not recognized.")
+            raise Exception("Initial condition type \"" + str(self.init_type) + "\" not recognized.")
 
         self.init_params['boundary'] = self.boundary
         self.update_boundary()

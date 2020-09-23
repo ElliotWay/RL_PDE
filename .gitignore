@@ -4,8 +4,7 @@ __pycache__/
 log/
 test/
 *.png
-!test_good.png
-!good_*.png
 last
 *sh
 !param_sweep_template.sh
+*.swp
