@@ -5,7 +5,7 @@ import sys
 import time
 import argparse
 
-from util/misc import get_git_commit_id, is_clean_git_repo
+from util.misc import get_git_commit_id, is_clean_git_repo
 
 META_FILE_NAME = "meta.txt"
 
@@ -40,7 +40,6 @@ def create_meta_file(log_dir, args):
             _ignore = input("Git couldn't find HEAD."
                             + " Hit <Enter> to continue without recording commit id, or Ctrl-C to stop.")
     else:
-        commit_id = git_head_proc.stdout.rstrip()
         if not re.match("^[0-9a-f]*$", commit_id):
             if not args.y:
                 print("Corrupted commit id: {}. Fix your git repo before continuing.".format(commit_id))
