@@ -43,6 +43,9 @@ def get_env_arg_parser():
                         help="By default the true solution is computed with the same precision as the agent sees."
                         + " Use this parameter to scale up the precision. Only odd numbered scales are accepted"
                         + " to make downsampling easier.")
+    parser.add_argument('--reward-adjustment', type=nonnegative_float, default=1000.0,
+                        help="Constant that affects the relative importance of small errors compared to big errors."
+                        + " Larger values mean that smaller errors are still important compared to big errors.")
     parser.add_argument('--memo', dest='memoize', action='store_true', default=None,
                         help="Use a memoized solution to save time. Enabled by default except with random, "
                         + " schedule, and sample initial conditions, and in run_test.py. See --no-memo.")
@@ -68,6 +71,7 @@ def build_env(env_name, args, test=False):
                              weno_order=args.order, eps=args.eps, episode_length=args.ep_length,
                              analytical=args.analytical,
                              precise_weno_order=args.precise_order, precise_scale=args.precise_scale,
+                             reward_adjustment=args.reward_adjustment,
                              memoize=args.memoize,
                              srca=args.srca,
                              test=test
@@ -79,6 +83,7 @@ def build_env(env_name, args, test=False):
                                   weno_order=args.order, eps=args.eps, episode_length=args.ep_length,
                                   analytical=args.analytical,
                                   precise_weno_order=args.precise_order, precise_scale=args.precise_scale,
+                                  reward_adjustment=reward_adjustment,
                                   memoize=args.memoize,
                                   srca=args.srca,
                                   test=test
@@ -90,6 +95,7 @@ def build_env(env_name, args, test=False):
                              weno_order=args.order, eps=args.eps, episode_length=args.ep_length,
                              analytical=args.analytical,
                              precise_weno_order=args.precise_order, precise_scale=args.precise_scale,
+                             reward_adjustment=reward_adjustment,
                              memoize=args.memoize,
                              srca=args.srca,
                              test=test

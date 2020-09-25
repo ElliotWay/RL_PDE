@@ -111,6 +111,7 @@ class AbstractBurgersEnv(gym.Env):
             fixed_step=0.0005, C=0.5,
             weno_order=3, eps=0.0, srca=0.0, episode_length=300,
             analytical=False, precise_weno_order=None, precise_scale=1,
+            reward_adjustment=1000,
             memoize=False,
             test=False):
 
@@ -157,6 +158,7 @@ class AbstractBurgersEnv(gym.Env):
         self.C = C  # CFL number
         self.eps = eps
         self.episode_length = episode_length
+        self.reward_adjustment = reward_adjustment
 
         self._step_precision = int(np.ceil(np.log(self.episode_length) / np.log(10)))
         self._cell_index_precision = int(np.ceil(np.log(self.nx) / np.log(10)))
@@ -660,12 +662,11 @@ class AbstractBurgersEnv(gym.Env):
         # Squash error.
         #reward = -np.arctan(reward)
 
-        # This constant controls the relative importance of small rewards compared to large rewards.
+        # The constant controls the relative importance of small rewards compared to large rewards.
         # Towards infinity, all rewards (or penalties) are equally important.
         # Towards 0, small rewards are increasingly less important.
         # An alternative to arctan(C*x) with this property would be x^(1/C).
-        small_error_importance_constant = 1000
-        reward = -np.arctan(small_error_importance_constant * reward)
+        reward = -np.arctan(self.reward_adjustment * reward)
 
         max_penalty = np.pi / 2
         #reward = -error
