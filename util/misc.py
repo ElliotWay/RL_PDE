@@ -1,5 +1,7 @@
-import numpy as np
+import os
 import argparse
+import subprocess
+import numpy as np
 
 
 # I've started using indexes instead of indices because it bothers me when people use "indice" as the singular.
@@ -64,3 +66,19 @@ def rescale(values, source, target):
     rescaled = (descaled * (target_high - target_low)) + target_low
 
     return rescaled
+
+def get_git_commit_id():
+    try:
+        git_head_proc = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=1.0)
+    except TimeoutError:
+        return -1, "timeout"
+
+    output_str = git_head_proc.stdout.strip()
+
+    return git_head_proc.returncode, output_str
+
+def is_clean_git_repo():
+    """ Returns True if in a clean git repo, False if in a dirty git repo OR an error occurred. """
+
+    return_code = os.system("git diff --quiet")
+    return (return_code == 0)

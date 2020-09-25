@@ -5,6 +5,8 @@ import sys
 import time
 import argparse
 
+from util/misc import get_git_commit_id, is_clean_git_repo
+
 META_FILE_NAME = "meta.txt"
 
 
@@ -30,9 +32,8 @@ def create_meta_file(log_dir, args):
     except ImportError:
         meta_file.write("initiated by user: UNKNOWN (run on Windows machine)\n")
 
-    # Get commit id of HEAD.
-    git_head_proc = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True)
-    if git_head_proc.returncode != 0:
+    return_code, commit_id = get_git_commit_id()
+    if return_code != 0:
         if args.n:
             raise Exception("Git couldn't find HEAD! Are we still in a git repo?")
         elif not args.y:
@@ -48,10 +49,10 @@ def create_meta_file(log_dir, args):
                 print("Commit id is corrupted: {}. Something is seriously wrong!".format(commit_id))
         meta_file.write("git commit id: {}\n".format(commit_id))
 
-        if os.system("git diff --quiet"):
-            meta_file.write("git status: uncommited changes\n")
-        else:
+        if is_clean_git_repo():
             meta_file.write("git status: clean\n")
+        else:
+            meta_file.write("git status: uncommited changes\n")
 
     pid = os.getpid()
     meta_file.write("pid: {}\n".format(pid))

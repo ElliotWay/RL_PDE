@@ -12,6 +12,8 @@ from queue import Queue, Empty
 import time
 import argparse
 
+from util.misc import get_git_commit_id, is_clean_git_repo
+
 # Sometimes this enables colors on Windows terminals.
 os.system("")
 
@@ -159,6 +161,19 @@ def main():
         print(" {}{}{}".format(colors.SEQUENCE[i], i, colors.ENDC), end='')
     print()
 
+    return_code, commit_id = get_git_commit_id()
+    if return_code != 0:
+        print("{}Not in a git repo. Are you sure that's a good idea?{}".format(colors.WARNING, colors.ENDC))
+        original_id = None
+    else:
+        original_id = commit_id
+        if not is_clean_git_repo():
+            print("{}git repo is not clean: commit before running.{}".format(colors.WARNING, colors.ENDC))
+            if args.run:
+                return 0
+
+    # TODO write custom interrupt handler. Currently a potential race condition exists if
+    # the interrupt happens to come when we're not in that time.sleep.
     signal.signal(signal.SIGINT, signal.default_int_handler)
     try:
         signal.signal(signal.SIGBREAK, signal.default_int_handler)
@@ -167,49 +182,93 @@ def main():
         pass
 
     try:
-        for arg_list_index, arg_list in enumerate(arg_matrix):
-            while len(running_procs) >= MAX_PROCS:
+        commands_started = 0
+        while len(running_procs) > 0 or commands_started < len(arg_matrix):
+            while len(running_procs) >= MAX_PROCS or commands_started == len(arg_matrix):
                 time.sleep(SLEEP_TIME)
                 check_procs(running_procs, output_queues)
 
-            new_index = -1
-            for i in range(MAX_PROCS):
-                if i not in running_procs:
-                    new_index = i
-                    break
-            assert new_index >= 0, "No space for new proc?"
+            if commands_started < len(arg_matrix):
+                # Check that git repo hasn't changed before starting a new proc.
+                return_code, current_id = get_git_commit_id()
+                dirty_repo = not is_clean_git_repo()
+                if (original_id is not None and args.run and
+                        (return_code != 0 or current_id != original_id or dirty_repo)):
+                    while True:
+                        if return_code != 0:
+                            print("{}A problem has been detected in the git repo!{}"
+                                    .format(colors.WARNING, colors.ENDC))
+                        elif current_id != original_id:
+                            print("{}The git repo has switched to a different commit! (Was {}, now {}){}"
+                                    .format(colors.WARNING, original_id, current_id, colors.ENDC))
+                        else:
+                            assert dirty_repo
+                            print("{}Code has been changed in the git repo!{}".format(colors.WARNING, colors.ENDC))
+                        print(("{}New runs cannot be started if the code has changed.\n"
+                            + "Completed runs are fine. Current runs are probably"
+                            + " fine, as CPython precompiles source files.\n"
+                            + "There could be an issue if you have a late import.{}")
+                            .format(colors.WARNING, colors.ENDC))
+                        if len(running_procs) >= 0:
+                            print(("{}Current runs will continue until finished.\n"
+                                + "If the git repo is fixed before the current"
+                                + " runs finish, this will be automatically"
+                                + " detected.{}")
+                                .format(colors.WARNING, colors.ENDC))
+                            current_num_procs = len(running_procs)
+                            while len(running_procs) == current_num_procs:
+                                time.sleep(SLEEP_TIME)
+                                check_procs(running_procs, output_queues)
+                        else:
+                            print(("{}There are no current runs, but some runs are"
+                                + " still enqueued. Hit Enter to continue once the"
+                                + " git repo has been fixed. (Or ctrl-C twice to stop.){}")
+                                .format(colors.WARNING, colors.ENDC))
 
-            full_command = command_prefix + arg_list
-            command_string = " ".join(full_command)
-            print("{}{}: {}Starting new process ({}/{}):{}".format(
-                colors.SEQUENCE[new_index], new_index,
-                colors.OKGREEN, arg_list_index + 1, len(arg_matrix), colors.ENDC))
-            print("{}{}: {}{}{}".format(colors.SEQUENCE[new_index], new_index,
-                colors.OKGREEN, command_string, colors.ENDC))
-            if args.run:
-                if ON_POSIX:
-                    proc = subprocess.Popen(full_command,
-                                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                            bufsize=1, close_fds=True, start_new_session=True)
-                else:
-                    flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
-                    proc = subprocess.Popen(full_command,
-                                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                            bufsize=1, close_fds=False, creation_flags=flags)
+                        return_code, current_id = get_git_commit_id()
+                        dirty_repo = not is_clean_git_repo()
 
-                queue = Queue()
-                thread = threading.Thread(target=enqueue_output, args=(proc.stdout, queue))
-                thread.start()
+                        if return_code == 0 and current_id == original_id and not dirty_repo:
+                            print("{}git repo fixed!{}".format(colors.OKGREEN, colors.ENDC))
+                            break
 
-                running_procs[new_index] = proc
-                output_queues[new_index] = queue
+                new_index = -1
+                for i in range(MAX_PROCS):
+                    if i not in running_procs:
+                        new_index = i
+                        break
+                assert new_index >= 0, "No space for new proc?"
 
-        while len(running_procs) > 0:
-            time.sleep(SLEEP_TIME)
-            check_procs(running_procs, output_queues)
+                arg_list = arg_matrix[commands_started]
+                full_command = command_prefix + arg_list
+                command_string = " ".join(full_command)
+                print("{}{}: {}Starting new process ({}/{}):{}".format(
+                    colors.SEQUENCE[new_index], new_index,
+                    colors.OKGREEN, commands_started + 1, len(arg_matrix), colors.ENDC))
+                print("{}{}: {}{}{}".format(colors.SEQUENCE[new_index], new_index,
+                    colors.OKGREEN, command_string, colors.ENDC))
+                if args.run:
+                    if ON_POSIX:
+                        proc = subprocess.Popen(full_command,
+                                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                                bufsize=1, close_fds=True, start_new_session=True)
+                    else:
+                        flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+                        proc = subprocess.Popen(full_command,
+                                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                                bufsize=1, close_fds=False, creation_flags=flags)
+
+                    queue = Queue()
+                    thread = threading.Thread(target=enqueue_output, args=(proc.stdout, queue))
+                    thread.start()
+
+                    running_procs[new_index] = proc
+                    output_queues[new_index] = queue
+                commands_started += 1
     except KeyboardInterrupt:
         print(("{}Interrupt signal received. The current runs will run to completion, but no new"
-                + " runs will start. Send the interrupt signal again to stop current runs now.{}")
+                + " runs will start.\n"
+                + "Send the interrupt signal again to stop current runs now.{}")
                 .format(colors.WARNING, colors.ENDC))
 
         try:
