@@ -653,14 +653,14 @@ class AbstractBurgersEnv(gym.Env):
         #reward = np.sqrt(np.sum(error_stencils**2, axis=-1))
 
         # Squash error.
-        reward = -np.arctan(reward)
+        #reward = -np.arctan(reward)
 
         # This constant controls the relative importance of small rewards compared to large rewards.
         # Towards infinity, all rewards (or penalties) are equally important.
         # Towards 0, small rewards are increasingly less important.
         # An alternative to arctan(C*x) with this property would be x^(1/C).
         small_error_importance_constant = 1000
-        #reward = -np.arctan(small_error_importance_constant * reward)
+        reward = -np.arctan(small_error_importance_constant * reward)
 
         max_penalty = np.pi / 2
         #reward = -error
