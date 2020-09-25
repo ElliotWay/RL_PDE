@@ -74,7 +74,7 @@ class Grid1d(GridBase):
     grid.x - The location values associated with each index in grid.u.
     """
 
-    def __init__(self, nx, ng, xmin=0.0, xmax=1.0, init_type="sine", boundary="outflow"):
+    def __init__(self, nx, ng, xmin=0.0, xmax=1.0, init_type="sine", boundary="outflow", deterministic_init=False):
         """
         Construct a 1D grid.
         
@@ -98,6 +98,11 @@ class Grid1d(GridBase):
         boundary : string
             Type of boundary condition, either "periodic", "outflow",
             or None to choose based on the initial condition.
+        deterministic_init : bool
+            If False, the exact shape of the initial condition may vary.
+            If True, it will always be exactly the same.
+            "sample" will still sample randomly, but the sample initial
+            condition will vary or be the same, depending on this param.
         """
 
         super().__init__(nx=nx, ng=ng, xmin=xmin, xmax=xmax)
@@ -108,6 +113,7 @@ class Grid1d(GridBase):
         self.init_type = init_type
         self._boundary = boundary
         self.boundary = boundary
+        self.deterministic_init = deterministic_init
         self._init_schedule_index = 0
         #self._init_schedule = ["smooth_rare", "smooth_sine", "random", "rarefaction", "accelshock"]
         self._init_schedule = ["smooth_sine", "smooth_rare", "accelshock"]
@@ -190,12 +196,16 @@ class Grid1d(GridBase):
                 self.boundary = "periodic"
             if 'k' in params:
                 k = params['k']
+            elif self.deterministic_init:
+                k = 4
             else:
                 # Note that k must be even integer.
                 k = int(np.random.choice(np.arange(2, 10, 2)))
             self.init_params['k'] = k
             if 'b' in params:
                 b = params['b']
+            elif self.deterministic_init:
+                b = 0.0
             else:
                 b = float(np.random.uniform(-1.0, 1.0))
             self.init_params['b'] = b
@@ -216,6 +226,8 @@ class Grid1d(GridBase):
             self.init_params['A'] = A
             if 'k' in params:
                 k = params['k']
+            elif self.deterministic_init:
+                k = 60
             else:
                 #k = np.random.uniform(20, 100)
                 k = int(np.random.choice(np.arange(20, 100, 5)))

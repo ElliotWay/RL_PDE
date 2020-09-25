@@ -111,12 +111,17 @@ class AbstractBurgersEnv(gym.Env):
             fixed_step=0.0005, C=0.5,
             weno_order=3, eps=0.0, srca=0.0, episode_length=300,
             analytical=False, precise_weno_order=None, precise_scale=1,
-            memoize=False):
+            memoize=False,
+            test=False):
+
+        self.test = test
 
         self.ng = weno_order+1
         self.nx = nx
         self.weno_order = weno_order
-        self.grid = Grid1d(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng, boundary=boundary, init_type=init_type)
+        self.grid = Grid1d(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng,
+                           boundary=boundary, init_type=init_type,
+                           deterministic_init=self.test)
         
         if srca > 0.0:
             self.source = RandomSource(grid=self.grid, amplitude=srca)

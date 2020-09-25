@@ -194,14 +194,14 @@ def main():
         args.memoize = False
 
     if not args.convergence_plot:
-        env = build_env(args.env, args)
+        env = build_env(args.env, args, test=True)
     else:
         args.analytical = True
         CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]
         envs = []
         for nx in CONVERGENCE_PLOT_GRID_RANGE:
             args.nx = nx
-            envs.append(build_env(args.env, args))
+            envs.append(build_env(args.env, args, test=True))
 
     # Set up logging.
     start_time = time.localtime()

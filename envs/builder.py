@@ -51,7 +51,7 @@ def get_env_arg_parser():
 
     return parser
 
-def build_env(env_name, args):
+def build_env(env_name, args, test=False):
     if args.fixed_timesteps:
         args.C = None
 
@@ -69,7 +69,8 @@ def build_env(env_name, args):
                              analytical=args.analytical,
                              precise_weno_order=args.precise_order, precise_scale=args.precise_scale,
                              memoize=args.memoize,
-                             srca=args.srca
+                             srca=args.srca,
+                             test=test
                              )
     elif env_name == "split_flux_burgers":
         env = SplitFluxBurgersEnv(xmin=args.xmin, xmax=args.xmax, nx=args.nx,
@@ -79,7 +80,8 @@ def build_env(env_name, args):
                                   analytical=args.analytical,
                                   precise_weno_order=args.precise_order, precise_scale=args.precise_scale,
                                   memoize=args.memoize,
-                                  srca=args.srca
+                                  srca=args.srca,
+                                  test=test
                                   )
     elif env_name == "flux_burgers":
         env = FluxBurgersEnv(xmin=args.xmin, xmax=args.xmax, nx=args.nx,
@@ -89,7 +91,8 @@ def build_env(env_name, args):
                              analytical=args.analytical,
                              precise_weno_order=args.precise_order, precise_scale=args.precise_scale,
                              memoize=args.memoize,
-                             srca=args.srca
+                             srca=args.srca,
+                             test=test
                              )
     else:
         print("Unrecognized environment type: \"" + str(env_name) + "\".")
