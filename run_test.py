@@ -238,6 +238,7 @@ def main():
     else:
         mode = "n/a"
 
+    # TODO: create standard agent lookup function in agents.py.
     if args.agent == "default" or args.agent == "none":
         agent = StandardWENOAgent(order=args.order, mode=mode)
     elif args.agent == "stationary":

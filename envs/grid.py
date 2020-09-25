@@ -287,5 +287,10 @@ class Grid1d(GridBase):
         elif self.boundary == "outflow":
             self.u[0:self.ilo] = self.u[self.ilo]
             self.u[self.ihi + 1:] = self.u[self.ihi]
+        elif self.boundary == "first":
+            left_d = self.u[self.ilo] - self.u[self.ilo+1]
+            self.u[0:self.ilo] = (self.u[self.ilo] + (1 + np.arange(self.ng))*left_d)[::-1]
+            right_d = self.u[self.ihi] - self.u[self.ihi-1]
+            self.u[self.ihi+1:] = (self.u[self.ihi] + (1 + np.arange(self.ng))*right_d)
         else:
             raise Exception("Boundary type \"" + str(self.boundary) + "\" not recognized.")
