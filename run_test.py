@@ -36,6 +36,28 @@ def save_convergence_plot(grid_sizes, error, args):
     print('Saved plot to ' + filename + '.')
     plt.close()
 
+def save_error_plot(x_vals, y_vals, labels, args):
+    for x, y, label in zip(x_vals, y_vals, labels):
+        plt.plot(x, y, ls='-', label=str(label))
+
+    ax = plt.gca()
+    ax.set_xlabel("x")
+    ax.set_ylabel("|error|")
+
+    ax.set_yscale('log')
+    ax.set_ymargin(0.0)
+    #extreme_cutoff = 3.0
+    #max_not_extreme = max([np.max(y[y < extreme_cutoff]) for y in y_vals])
+    #ymax = max_not_extreme*1.05 if max_not_extreme > 0.0 else 0.01
+    #ax.set_ylim((None, ymax))
+
+    plt.legend()
+
+    filename = os.path.join(args.log_dir, "convergence_over_x.png")
+    plt.savefig(filename)
+    print("Saved plot to " + filename + ".")
+    plt.close()
+
 def do_test(env, agent, args):
     state = env.reset()
 
@@ -111,14 +133,9 @@ def do_test(env, agent, args):
     if args.plot_actions:
         env.render(mode="actions", **render_args)
     if args.evolution_plot:
-        #if args.agent == "none":
-            #state_record.append(np.array(env.solution.get_real()))
-            #save_evolution_plot(env.grid.x[env.ng:-env.ng], state_record, None, args)
-        #else:
-            #state_record.append(np.array(env.grid.get_real()))
-            #final_solution_state = np.array(env.solution.get_real())
-            #save_evolution_plot(env.grid.x[env.ng:-env.ng], state_record, final_solution_state, args)
         env.plot_state_evolution(num_states=10, full_true=False, no_true=False)
+        if args.plot_error:
+            env.plot_state_evolution(num_states=10, plot_error=True)
 
     print("Test finished in " + str(end_time - start_time) + " seconds.")
     print("Reward: mean = {}, min = {} @ {}, max = {} @ {}".format(
@@ -276,6 +293,8 @@ def main():
             do_test(env, agent, args)
         else:
             error = []
+            x_vals = []
+            error_vals = []
             for nx, env in zip(CONVERGENCE_PLOT_GRID_RANGE, envs):
                 args.nx = nx
 
@@ -285,7 +304,11 @@ def main():
 
                 error.append(do_test(env, agent, args))
 
+                x_vals.append(env.grid.real_x)
+                error_vals.append(np.abs(env.grid.get_real() - env.solution.get_real()))
+
             save_convergence_plot(CONVERGENCE_PLOT_GRID_RANGE, error, args)
+            save_error_plot(x_vals, error_vals, CONVERGENCE_PLOT_GRID_RANGE, args)
     except KeyboardInterrupt:
         print("Test stopped by interrupt.")
         metadata.log_finish_time(args.log_dir, status="stopped by interrupt")

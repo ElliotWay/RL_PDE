@@ -30,6 +30,7 @@ class GridBase:
 
         # Physical coordinates: cell-centered, left and right edges
         self.x = xmin + (np.arange(nx + 2 * ng) - ng + 0.5) * self.dx
+        self.real_x = self.x[ng:-ng]
 
         # Physical coordinates: interfaces, left edges
         self.inter_x = xmin + (np.arange(nx + 2 * ng) - ng) * self.dx

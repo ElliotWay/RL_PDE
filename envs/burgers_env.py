@@ -411,7 +411,7 @@ class AbstractBurgersEnv(gym.Env):
         plt.close(fig)
         return filename
 
-    def plot_state_evolution(self, num_states=10, full_true=False, no_true=False, suffix="", title=None):
+    def plot_state_evolution(self, num_states=10, full_true=False, no_true=False, plot_error=False, suffix="", title=None):
         """
         Plot the evolution of the state over time on a single plot.
         Ghost cells are not plotted.
@@ -423,6 +423,9 @@ class AbstractBurgersEnv(gym.Env):
             Number of states to plot. Does not include the initial state
             but does include the final state, so num_states=10 will have 11
             lines.
+        plot_error : bool
+            Plot the evolution of the error of the state with the solution state
+            instead. Overrides full_true and no_true.
         full_true : bool
             Set False by default, which will only plot the final state of the
             true solution. Set True to plot the state of the true solution at
@@ -433,8 +436,9 @@ class AbstractBurgersEnv(gym.Env):
             ONLY plot the RL solution, if you don't care about the true solution.
             Also useful to plot evolution of the true solution itself.
         suffix : string
-            The plot will be saved to burgers_evolution{suffix}.png. There is
-            no suffix by default.
+            The plot will be saved to burgers_evolution_state{suffix}.png
+            (or burgers_evolution_error{suffix}.png). There is no suffix by
+            default.
         title : string
             Title for the plot. There is no title by default.
         """
@@ -461,7 +465,7 @@ class AbstractBurgersEnv(gym.Env):
         start_rgb = (0.9, 0.9, 0.9) #light grey
 
         # Plot the true solution first so it appears under the RL solution.
-        if self.solution.is_recording_state() and not no_true:
+        if not plot_error and not no_true and self.solution.is_recording_state():
             solution_state_history = np.array(self.solution.get_state_history())[:, self.ng:-self.ng]
 
             assert len(state_history) == len(solution_state_history), "History mismatch."
@@ -481,12 +485,19 @@ class AbstractBurgersEnv(gym.Env):
         else:
             true = None
 
-        init = plt.plot(x_values, state_history[0], ls='--', color=start_rgb)
+        if plot_error:
+            if not self.solution.is_recording_state():
+                raise Exception("Cannot plot evolution of error if solution state is not available.")
+            solution_state_history = np.array(self.solution.get_state_history())[:, self.ng:-self.ng]
+            state_history = np.abs(solution_state_history - state_history)
 
-        if full_true and not no_true:
+        if not plot_error:
+            init = plt.plot(x_values, state_history[0], ls='--', color=start_rgb)
+
+        if full_true and not plot_error and not no_true:
             agent_rgb = matplotlib.colors.to_rgb(self.agent_color)
         else:
-            # Use black if the true state has only the one line.
+            # Use black if no color contrast is needed.
             agent_rgb = (0.0, 0.0, 0.0)
         agent_color_sequence = color_sequence(start_rgb, agent_rgb, num_states)
         sliced_history = state_history[slice_indexes]
@@ -495,14 +506,18 @@ class AbstractBurgersEnv(gym.Env):
         agent = plt.plot(x_values, state_history[-1], ls='-', color=agent_rgb)
 
         ax = plt.gca()
-        plots = [init[0], agent[0]]
-        labels = ["init", "RL"]
-        if true is not None:
-            plots.append(true[0])
-            if self.analytical:
-                labels.append("Analytical")
-            else:
-                labels.append("WENO")
+        if plot_error:
+            plots = [agent[0]]
+            labels = ["|error|"]
+        else:
+            plots = [init[0], agent[0]]
+            labels = ["init", "RL"]
+            if true is not None:
+                plots.append(true[0])
+                if self.analytical:
+                    labels.append("Analytical")
+                else:
+                    labels.append("WENO")
         ax.legend(plots, labels)
 
         if title is not None:
@@ -513,7 +528,9 @@ class AbstractBurgersEnv(gym.Env):
         ax.set_ylabel('u')
         
         log_dir = logger.get_dir()
-        filename = os.path.join(log_dir, "burgers_evolution{}.png".format(suffix))
+        error_or_state = "error" if plot_error else "state"
+        filename = os.path.join(log_dir,
+                "burgers_evolution_{}{}.png".format(error_or_state, suffix))
         plt.savefig(filename)
         print('Saved plot to ' + filename + '.')
         
