@@ -229,7 +229,7 @@ class AbstractBurgersEnv(gym.Env):
         if "action" in mode:
             return self.plot_action(**kwargs)
 
-    def plot_state(self, timestep=None, location=None, suffix=None, title=None, fixed_axes=False, no_x_borders=False, show_ghost=True):
+    def plot_state(self, timestep=None, location=None, plot_error=False, suffix=None, title=None, fixed_axes=False, no_x_borders=False, show_ghost=True):
         """
         Plot environment state at either a timestep or a specific location.
 
@@ -245,9 +245,11 @@ class AbstractBurgersEnv(gym.Env):
             Timestep at which to plot state. By default, use the most recent timestep.
         location : int
             Index of location at which to plot actions.
+        plot_error : int
+            Plot the error of the state with the solution state instead.
         suffix : string
-            The plot will be saved to burgers{suffix}.png. By default, the timestep/location
-            is used for the suffix.
+            The plot will be saved to burgers_state_{suffix}.png (or burgers_error_{suffix}.png).
+            By default, the timestep/location is used for the suffix.
         title : string
             Title for the plot. By default, the title is based on the timestep/location.
         fixed_axes : bool
@@ -263,26 +265,25 @@ class AbstractBurgersEnv(gym.Env):
 
         fig = plt.figure()
 
-        full_true = self.solution.get_full()
-        real_true = full_true[self.ng:-self.ng]
+        error_or_state = "error" if plot_error else "state"
 
         if location is None and timestep is None:
-            state_history = self.grid.get_full()
-            solution_state_history = self.solution.get_full()
+            state_history = self.grid.get_full().copy()
+            solution_state_history = self.solution.get_full().copy()
             if self.weno_solution is not None:
-                weno_state_history = self.weno_solution.get_full()
+                weno_state_history = self.weno_solution.get_full().copy()
             else:
                 weno_state_history = None
 
             if title is None:
-                title = ("state at t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(self.t, self.steps)
+                title = ("{} at t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(error_or_state, self.t, self.steps)
             if suffix is None:
                 suffix = ("_step{:0" + str(self._step_precision) + "}").format(self.steps)
         else:
             state_history = np.array(self.state_history)
-            solution_state_history = self.solution.get_state_history() \
+            solution_state_history = self.solution.get_state_history().copy() \
                     if self.solution.is_recording_state() else None
-            weno_state_history = self.weno_solution.is_recording_state() \
+            weno_state_history = self.weno_solution.get_state_history().copy() \
                     if self.weno_solution is not None and self.weno_solution.is_recording_state() else None
 
             if location is not None:
@@ -295,7 +296,7 @@ class AbstractBurgersEnv(gym.Env):
 
                 actual_location = self.grid.x[location]
                 if title is None:
-                    title = "state at x = {:.4f} (i = {})".format(actual_location, location)
+                    title = "{} at x = {:.4f} (i = {})".format(error_or_state, actual_location, location)
                 if suffix is None:
                     suffix = ("_step{:0" + str(self._cell_index_precision) + "}").format(location)
             else:
@@ -308,12 +309,20 @@ class AbstractBurgersEnv(gym.Env):
                 if title is None:
                     if self.C is None:
                         actual_time = timestep * self.fixed_step
-                        title = ("state at t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(actual_time, timestep)
+                        title = ("{} at t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(error_or_state, actual_time, timestep)
                     else:
                         # TODO get time with variable timesteps?
-                        title = "state at step {:0" + str(self._step_precision) + "d}".format(timestep)
+                        title = "{} at step {:0" + str(self._step_precision) + "d}".format(error_or_state, timestep)
                 if suffix is None:
                     suffix = ("_step{:0" + str(self._step_precision) + "}").format(timestep)
+
+        if plot_error:
+            if solution_state_history is None:
+                raise Exception("Cannot plot error if solution state is not available.")
+
+            state_history = np.abs(solution_state_history - state_history)
+            solution_state_history = None
+            weno_state_history = None
 
         if timestep is None:
             if show_ghost:
@@ -323,8 +332,6 @@ class AbstractBurgersEnv(gym.Env):
                 ghost_x_left = self.grid.x[:num_ghost_points]
                 ghost_x_right = self.grid.x[-num_ghost_points:]
 
-                ghost_true_left = full_true[:num_ghost_points]
-                ghost_true_right = full_true[-num_ghost_points:]
                 plt.plot(ghost_x_left, state_history[:num_ghost_points], ls='-', color=self.agent_ghost_color)
                 plt.plot(ghost_x_right, state_history[-num_ghost_points:], ls='-', color=self.agent_ghost_color)
 
@@ -367,6 +374,8 @@ class AbstractBurgersEnv(gym.Env):
 
         # Plot this one last so it is on the top.
         agent_label = "RL"
+        if plot_error:
+            agent_label = "|error|"
         plt.plot(x_values, state_history, ls='-', color=self.agent_color, label=agent_label)
 
         plt.legend(loc="upper right")
@@ -377,6 +386,14 @@ class AbstractBurgersEnv(gym.Env):
         if no_x_borders:
             ax.set_xmargin(0.0)
 
+        # Restrict y-axis if plotting abs error.
+        # Can't have negative, cut off extreme errors.
+        if plot_error:
+            extreme_cutoff = 3.0
+            max_not_extreme = np.max(state_history[state_history < extreme_cutoff])
+            ymax = max_not_extreme*1.05 if max_not_extreme > 0.0 else 0.01
+            ax.set_ylim((0.0, ymax))
+
         if fixed_axes:
             if self._state_axes is None:
                 self._state_axes = (ax.get_xlim(), ax.get_ylim())
@@ -386,7 +403,7 @@ class AbstractBurgersEnv(gym.Env):
                 ax.set_ylim(ylim)
 
         log_dir = logger.get_dir()
-        filename = 'burgers' + suffix + '.png'
+        filename = "burgers_{}{}.png".format(error_or_state, suffix)
         filename = os.path.join(log_dir, filename)
         plt.savefig(filename)
         print('Saved plot to ' + filename + '.')

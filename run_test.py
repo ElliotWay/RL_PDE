@@ -68,11 +68,8 @@ def do_test(env, agent, args):
             print("step = " + str(t))
             if not args.animate:
                 env.render(mode="file", **render_args)
-            #if args.evolution_plot:
-                #if args.agent == "none":
-                    #state_record.append(np.array(env.solution.get_real()))
-                #else:
-                    #state_record.append(np.array(env.grid.get_real()))
+                if args.plot_error:
+                    env.plot_state(plot_error=True, **render_args)
 
         if args.animate:
             env.render(mode="file", **render_args)
@@ -108,9 +105,11 @@ def do_test(env, agent, args):
 
     print("step = {} (done)".format(t))
 
-    env.render(mode="file")
+    env.render(mode="file", **render_args)
+    if args.plot_error:
+        env.plot_state(plot_error=True, **render_args)
     if args.plot_actions:
-        env.render(mode="actions")
+        env.render(mode="actions", **render_args)
     if args.evolution_plot:
         #if args.agent == "none":
             #state_record.append(np.array(env.solution.get_real()))
@@ -154,6 +153,8 @@ def main():
                         help="Plot the actions in addition to the state.")
     parser.add_argument('--animate', default=False, action='store_true',
                         help="Enable animation mode. Plot the state at every timestep, and keep the axes fixed across every plot.")
+    parser.add_argument('--plot-error', '--plot_error', default=False, action='store_true',
+                        help="Plot the error between the agent and the solution. Combines with evolution-plot.")
     parser.add_argument('--evolution-plot', '--evolution_plot', default=False, action='store_true',
                         help="Instead of usual rendering create 'evolution plot' which plots several states on the"
                         + " same plot in increasingly dark color.")
