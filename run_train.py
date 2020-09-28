@@ -116,7 +116,7 @@ def main():
     tf.set_random_seed(args.seed)
 
     env = build_env(args.env, args)
-    eval_env = build_env(args.env, args) # Some algos like an extra env for evaluation.
+    eval_env = build_env(args.env, args, test=True) # Some algos like an extra env for evaluation.
     if args.eval_env is None:
         eval_episodes = 1
     else:
