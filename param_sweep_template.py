@@ -184,7 +184,8 @@ def main():
     try:
         commands_started = 0
         while len(running_procs) > 0 or commands_started < len(arg_matrix):
-            while len(running_procs) >= MAX_PROCS or commands_started == len(arg_matrix):
+            while (len(running_procs) >= MAX_PROCS 
+                    or (commands_started == len(arg_matrix) and len(running_procs) > 0)):
                 time.sleep(SLEEP_TIME)
                 check_procs(running_procs, output_queues)
 
@@ -209,7 +210,7 @@ def main():
                             + " fine, as CPython precompiles source files.\n"
                             + "There could be an issue if you have a late import.{}")
                             .format(colors.WARNING, colors.ENDC))
-                        if len(running_procs) >= 0:
+                        if len(running_procs) > 0:
                             print(("{}Current runs will continue until finished.\n"
                                 + "If the git repo is fixed before the current"
                                 + " runs finish, this will be automatically"
@@ -220,10 +221,11 @@ def main():
                                 time.sleep(SLEEP_TIME)
                                 check_procs(running_procs, output_queues)
                         else:
-                            print(("{}There are no current runs, but some runs are"
+                            _ = input(("{}There are no current runs, but some runs are"
                                 + " still enqueued. Hit Enter to continue once the"
                                 + " git repo has been fixed. (Or ctrl-C twice to stop.){}")
                                 .format(colors.WARNING, colors.ENDC))
+
 
                         return_code, current_id = get_git_commit_id()
                         dirty_repo = not is_clean_git_repo()
