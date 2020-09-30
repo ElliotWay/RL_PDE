@@ -1,3 +1,12 @@
+V44, ???, ???
+---------------------------------
+Version number doesn't mean anything anymore now that we're keeping things on a private Github repo, thank goodness.
+
+The reward is now squashed with -arctan(1000*error) instead of -arctan(error) as it was previously.
+
+param_sweep_template.py now refuses to start new runs when the github repo changes.
+(Running python procs use a cached version of the files, so it doesn't matter for them, but starting new procs like param_sweep_template.py does loads new files. I kept forgetting about this and then realizing that all but my initial runs were invalid. TODO: make everything fork from single Python proc.)
+
 V43, a963fc2, 9/21/20
 ---------------------------------
 Reward change. Switched current reward to average of two adjacent cells. Intent is to maxmize stationarity; if that's not working, maybe we should change this back or to something else.
