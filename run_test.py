@@ -21,6 +21,7 @@ from envs import get_env_arg_parser, build_env
 from agents import StandardWENOAgent, StationaryAgent, EqualAgent, MiddleAgent, LeftAgent, RightAgent, RandomAgent
 from models.sac import SACBatch
 from util import metadata
+from util.misc import set_global_seed
 
 def save_convergence_plot(grid_sizes, error, args):
     plt.plot(grid_sizes, error, ls='-', color='k')
@@ -205,8 +206,7 @@ def main():
         env_arg_parser.print_help()
         sys.exit(0)
 
-    np.random.seed(args.seed)
-    tf.set_random_seed(args.seed)
+    set_global_seed(args.seed)
 
     if args.memoize is None:
         args.memoize = False

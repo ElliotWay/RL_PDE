@@ -77,6 +77,8 @@ class SACBatch(OffPolicyRLModel):
                                        policy_base=SACPolicy, requires_vec_env=False, policy_kwargs=policy_kwargs,
                                        seed=seed, n_cpu_tf_sess=n_cpu_tf_sess)
 
+        #n_cpu_tf_sess = 1
+
         self.eval_env = eval_env
 
         self.buffer_size = buffer_size
@@ -301,11 +303,18 @@ class SACBatch(OffPolicyRLModel):
 
                     values_losses = qf1_loss + qf2_loss + value_loss
 
+                    determinism = False
+                    if determinism:
+                        gate_gradients = tf.compat.v1.train.Optimizer.GATE_GRAPH
+                    else:
+                        gate_gradients = None
+
                     # Policy train op
                     # (has to be separate from value train op, because min_qf_pi appears in policy_loss)
                     policy_optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate_ph)
                     policy_train_op = policy_optimizer.minimize(policy_loss,
-                                                                var_list=tf_util.get_trainable_vars('model/pi'))
+                                                                var_list=tf_util.get_trainable_vars('model/pi'),
+                                                                gate_gradients=gate_gradients)
 
                     # Value train op
                     value_optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate_ph)
@@ -328,7 +337,8 @@ class SACBatch(OffPolicyRLModel):
                     # Control flow is used because sess.run otherwise evaluates in nondeterministic order
                     # and we first need to compute the policy action before computing q values losses
                     with tf.control_dependencies([policy_train_op]):
-                        train_values_op = value_optimizer.minimize(values_losses, var_list=values_params)
+                        train_values_op = value_optimizer.minimize(values_losses, var_list=values_params,
+                                                                   gate_gradients=gate_gradients)
 
                         self.infos_names = ['policy_loss', 'qf1_loss', 'qf2_loss', 'value_loss', 'entropy']
                         # All ops to call during one training step
@@ -339,7 +349,8 @@ class SACBatch(OffPolicyRLModel):
                         # Add entropy coefficient optimization operation if needed
                         if ent_coef_loss is not None:
                             with tf.control_dependencies([train_values_op]):
-                                ent_coef_op = entropy_optimizer.minimize(ent_coef_loss, var_list=self.log_ent_coef)
+                                ent_coef_op = entropy_optimizer.minimize(ent_coef_loss, var_list=self.log_ent_coef,
+                                                                         gate_gradients=gate_gradients)
                                 self.infos_names += ['ent_coef_loss', 'ent_coef']
                                 self.step_ops += [ent_coef_op, ent_coef_loss, self.ent_coef]
 

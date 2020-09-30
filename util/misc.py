@@ -1,7 +1,9 @@
 import os
 import argparse
 import subprocess
+import random
 import numpy as np
+import tensorflow as tf
 
 
 # I've started using indexes instead of indices because it bothers me when people use "indice" as the singular.
@@ -82,3 +84,19 @@ def is_clean_git_repo():
 
     return_code = os.system("git diff --quiet")
     return (return_code == 0)
+
+def set_global_seed(seed):
+    # I still CANNOT get it to be deterministic.
+    # I don't understand what the problem is; it used to give the same results every time,
+    # but maybe it only seemed deterministic and was slightly different.
+    # Things I've tried to get determinism.
+    # * Set these 3 random seeds.
+    # * Set the PYTHONHASHSEED at the top of the script.
+    # * Restrict tf to 1 CPU thread. (intra and inter_op_parallelism set to 1,
+    # set by n_cpu_tf_sess in sac_batch).
+    # * Change gate_gradients in minimize functions.
+    # Setting the random seeds is still a good idea to get a similar environment,
+    # but it's never quite exactly the same.
+    np.random.seed(seed)
+    tf.set_random_seed(seed)
+    random.seed(seed)

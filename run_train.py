@@ -1,5 +1,6 @@
-import argparse
 import os
+os.environ['PYTHONHASHSEED'] = "42069"
+import argparse
 import shutil
 import signal
 import sys
@@ -24,7 +25,7 @@ from models.ddpg import DDPGBatch
 from models.sac import LnScaledMlpPolicy as SACPolicy
 from models.ddpg import LnMlpPolicy as DDPGPolicy
 from util import metadata
-from util.misc import rescale
+from util.misc import rescale, set_global_seed
 
 
 def main():
@@ -112,8 +113,7 @@ def main():
     if args.repeat is not None:
         metadata.load_to_namespace(args.repeat, args)
 
-    np.random.seed(args.seed)
-    tf.set_random_seed(args.seed)
+    set_global_seed(args.seed)
 
     env = build_env(args.env, args)
     eval_env = build_env(args.env, args, test=True) # Some algos like an extra env for evaluation.
