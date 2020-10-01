@@ -229,6 +229,47 @@ class AbstractBurgersEnv(gym.Env):
         if "action" in mode:
             return self.plot_action(**kwargs)
 
+    def get_state(self, timestep=None, location=None, full=True):
+        assert timestep is None or location is None
+
+        if timestep is None and location is None:
+            state = self.grid.get_full() if full else self.grid.get_real()
+        elif timestep is not None:
+            state = self.state_history[timestep, :]
+            if not full:
+                state = state[self.ng:-self.ng]
+        else:
+            state = self.state_history[:, location]
+        return state
+
+    def get_solution_state(self, timestep=None, location=None, full=True):
+        assert timestep is None or location is None
+
+        if timestep is None and location is None:
+            state = self.solution.get_full() if full else self.solution.get_real()
+        elif timestep is not None:
+            state = self.solution.get_state_history()[timestep, :]
+            if not full:
+                state = state[self.ng:-self.ng]
+        else:
+            state = self.solution.get_state_history()[:, location]
+        return state
+
+    def get_error(self, timestep=None, location=None, full=True):
+        return self.get_state(timestep, location, full) - self.get_solution_state(timestep_location, full)
+
+    def compute_l2_error(self, timestep=None):
+        if timestep == "all":
+            l2_errors = []
+            for step in range(len(self.state_history)):
+                l2_errors.append(self.compute_l2_error(step))
+            return l2_errors
+
+        else:
+            error = self.get_error(timestep=timestep, full=False)
+            l2_error = np.sqrt(env.grid.dx * np.sum(np.square(error)))
+            return l2_error
+
     def plot_state(self, timestep=None, location=None, plot_error=False, suffix=None, title=None, fixed_axes=False, no_x_borders=False, show_ghost=True):
         """
         Plot environment state at either a timestep or a specific location.
