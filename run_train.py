@@ -26,6 +26,7 @@ from models.sac import LnScaledMlpPolicy as SACPolicy
 from models.ddpg import LnMlpPolicy as DDPGPolicy
 from util import metadata
 from util.misc import rescale, set_global_seed
+from util import action_snapshot
 
 
 def main():
@@ -126,6 +127,8 @@ def main():
         eval_env.grid._init_schedule = ["smooth_sine", "smooth_rare", "accelshock"]
         eval_episodes = len(eval_env.grid._init_schedule)
         eval_env.episode_length = 500
+
+    action_snapshot.declare_standard_envs(args)
 
     # Things like this make me wish I was writing in a functional language.
     # I sure could go for some partial evaluation and some function composition.

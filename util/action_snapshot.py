@@ -13,7 +13,6 @@ from stable_baselines import logger
 
 from envs import get_env_arg_parser, build_env
 from agents import StandardWENOAgent, StationaryAgent, EqualAgent, MiddleAgent, LeftAgent, RightAgent, RandomAgent
-from models.sac import SACBatch
 
 standard_envs = None
 
@@ -28,7 +27,7 @@ def declare_standard_envs(args):
 
     standard_envs = []
 
-    flat_state = np.array([1,1,1,1,1,1])
+    flat_state = np.full(10, 1.0)
     def flat(params):
         return flat_state, {}
     args.init_type = flat
@@ -55,7 +54,8 @@ def declare_standard_envs(args):
     falling_env = build_env(args.env, args)
     standard_envs.append(falling_env)
 
-    shock_state = np.array([1,1,1,-1,-1,-1])
+    shock_state = np.full(10, 1.0)
+    shock_state[5:] = -1.0
     def shock(params):
         return shock_state, {}
     args.init_type = shock
@@ -64,7 +64,8 @@ def declare_standard_envs(args):
     shock_env = build_env(args.env, args)
     standard_envs.append(shock_env)
 
-    rare_state = np.array([-1,-1,-1,1,1,1])
+    rare_state = np.full(10, -1.0)
+    rare_state[5:] = 1.0
     def rare(params):
         return rare_state, {}
     args.init_type = rare
@@ -73,7 +74,7 @@ def declare_standard_envs(args):
     rare_env = build_env(args.env, args)
     standard_envs.append(rare_env)
 
-def save_action_snapshot(agent, suffix=""):
+def save_action_snapshot(agent, weno_agent=None, suffix=""):
     global standard_envs
 
     if standard_envs is None:
@@ -81,7 +82,10 @@ def save_action_snapshot(agent, suffix=""):
                 + " before saving an action snapshot.")
 
     action_dimensions = np.prod(list(standard_envs[0].action_space.shape)[1:])
-    fig, axes = plt.subplots(1 + action_dimensions, len(standard_envs), sharex='col', sharey='row')
+    fig, axes = plt.subplots(1 + action_dimensions, len(standard_envs), sharex='col', sharey='row', gridspec_kw={'wspace':0, 'hspace':0})
+
+    agent_color = "tab:orange"
+    weno_color = "tab:blue"
 
     for index, env in enumerate(standard_envs):
         state = env.reset()
@@ -89,25 +93,36 @@ def save_action_snapshot(agent, suffix=""):
         action, _ = agent.predict(state)
         action = action.reshape((-1, action_dimensions))
 
+        if weno_agent is not None:
+            weno_action, _ = weno_agent.predict(state)
+            weno_action = weno_action.reshape((-1, action_dimensions))
+            assert weno_action.shape == action.shape
+
         state_axis = axes[0, index]
         cell_x_values = env.grid.x
-        state_axis.plot(cell_x_values, grid_state, linestyle='-')
+        state_axis.plot(cell_x_values, grid_state, linestyle='-', color='black')
         state_axis.set_xmargin(0.0)
         state_axis.set_ylim((-2.0, 2.0))
 
         interface_x_values = env.grid.inter_x[env.ng:-(env.ng-1)]
         for dim in range(action_dimensions):
             action_axis = axes[1+dim, index]
-            action_axis.plot(interface_x_values, action[:, dim], linestyle='-')
+            if weno_agent is not None:
+                action_axis.plot(interface_x_values, weno_action[:, dim], linestyle='-', color=weno_color)
+            action_axis.plot(interface_x_values, action[:, dim], linestyle='-', color=agent_color)
+
             action_axis.set_xlim(state_axis.get_xlim())
             action_axis.set_ylim((0.0, 1.0))
+            if dim < action_dimensions - 1:
+                action_axis.yaxis.set_ticklabels([])
 
     log_dir = logger.get_dir()
     filename = "burgers_action_snap" + suffix + ".png"
     filename = os.path.join(log_dir, filename)
+    fig.tight_layout()
     plt.savefig(filename)
     print('Saved plot to ' + filename + '.')
-
+    
     plt.close(fig)
     return filename
 
@@ -218,7 +233,9 @@ def main():
     global standard_envs
     print("There are currently {} standard environment shapes.".format(len(standard_envs)))
 
-    save_action_snapshot(agent)
+    weno_agent = StandardWENOAgent(order=args.order, mode=mode)
+
+    save_action_snapshot(agent, weno_agent=weno_agent)
 
 if __name__ == "__main__":
     main()

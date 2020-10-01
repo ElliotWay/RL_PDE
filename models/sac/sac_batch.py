@@ -17,7 +17,8 @@ from stable_baselines.common.vec_env import VecEnv
 from stable_baselines.sac.policies import SACPolicy
 
 from util.misc import rescale
-
+from util.action_snapshot import save_action_snapshot
+from agents import StandardWENOAgent
 
 class SACBatch(OffPolicyRLModel):
     """
@@ -307,7 +308,7 @@ class SACBatch(OffPolicyRLModel):
                     if determinism:
                         gate_gradients = tf.compat.v1.train.Optimizer.GATE_GRAPH
                     else:
-                        gate_gradients = None
+                        gate_gradients = tf.compat.v1.train.Optimizer.GATE_OP
 
                     # Policy train op
                     # (has to be separate from value train op, because min_qf_pi appears in policy_loss)
@@ -455,6 +456,9 @@ class SACBatch(OffPolicyRLModel):
             ep_steps = 0
 
             best_models = []
+
+            #TODO get order and mode. Maybe just get this agent from caller.
+            weno_agent = StandardWENOAgent(order=2, mode="weno")
 
             for step in range(total_timesteps):
 
@@ -615,6 +619,8 @@ class SACBatch(OffPolicyRLModel):
                                 eval_plots.append(plot_file_name)
 
                         average_eval_reward = total_eval_reward / eval_episodes
+
+                        save_action_snapshot(agent=self, weno_agent=weno_agent, suffix="_ep_{:03d}".format(len(episode_rewards)))
 
                         if len(episode_rewards[-101:-1]) == 0:
                             mean_reward = -np.inf
