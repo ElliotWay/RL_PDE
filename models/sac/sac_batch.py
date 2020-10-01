@@ -604,14 +604,9 @@ class SACBatch(OffPolicyRLModel):
 
                             if render is not None:
                                 if eval_episodes > 1:
-                                    #suffix = "_ep_{:03d}_eval_{}_step_{:03d}".format(len(episode_rewards), eval_ep + 1, eval_ep_steps)
                                     suffix = "_ep_{:03d}_eval_{}".format(len(episode_rewards), eval_ep + 1)
                                 else:
-                                    #suffix = "_ep_{:03d}_step_{:03d}".format(len(episode_rewards), eval_ep_steps)
                                     suffix = "_ep_{:03d}".format(len(episode_rewards))
-                                #self.eval_env.render(mode=render, fixed_axes=(render_every is not None), suffix=suffix,
-                                                #title="{:03d} training episodes, t = {:05.4f}".format(len(episode_rewards), self.eval_env.t))
-                                # Switched to evolution plot.
                                 plot_file_name = self.eval_env.plot_state_evolution(
                                         num_states=10, full_true=True, suffix=suffix,
                                         title="{:03d} training episodes, t = {:05.4f}"
@@ -653,7 +648,6 @@ class SACBatch(OffPolicyRLModel):
                             infos_values = []
 
                         # PDE Save current model.
-                        # TODO Also save model when an interrupt occurs. Needs signal catching around network updates. See https://stackoverflow.com/a/21919644/2860127
                         log_dir = logger.get_dir()
                         model_file_name = os.path.join(log_dir, "model" + str(num_episodes))
                         self.save(model_file_name)
