@@ -256,7 +256,8 @@ class AbstractBurgersEnv(gym.Env):
         return state
 
     def get_error(self, timestep=None, location=None, full=True):
-        return self.get_state(timestep, location, full) - self.get_solution_state(timestep_location, full)
+        return (self.get_state(timestep, location, full) 
+                - self.get_solution_state(timestep, location, full))
 
     def compute_l2_error(self, timestep=None):
         if timestep == "all":
@@ -267,10 +268,11 @@ class AbstractBurgersEnv(gym.Env):
 
         else:
             error = self.get_error(timestep=timestep, full=False)
-            l2_error = np.sqrt(env.grid.dx * np.sum(np.square(error)))
+            l2_error = np.sqrt(self.grid.dx * np.sum(np.square(error)))
             return l2_error
 
-    def plot_state(self, timestep=None, location=None, plot_error=False, suffix=None, title=None, fixed_axes=False, no_x_borders=False, show_ghost=True):
+    def plot_state(self, timestep=None, location=None, plot_error=False,
+            suffix=None, title=None, fixed_axes=False, no_x_borders=False, show_ghost=True):
         """
         Plot environment state at either a timestep or a specific location.
 
