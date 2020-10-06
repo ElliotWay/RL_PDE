@@ -9,7 +9,31 @@ from stable_baselines import logger
 from agents import StandardWENOAgent
 from util import action_snapshot
 
-def rollout(env, policy, num_rollouts=1, deterministic=False):
+def rollout(env, policy, num_rollouts=1, rk4=False, deterministic=False, every_step_hook=None):
+    """
+    Collect a rollout.
+
+    Parameters
+    ----------
+    env : Gym environment
+        The environment to act in.
+    policy : policy with predict function
+        Policy to deploy in the environment.
+    num_rollouts : int
+        Number of rollouts to collect. 1 by default.
+    rk4 : bool
+        Use RK4 steps instead of regular steps. Requires the environment to have the rk4_step()
+        method.
+    deterministic : bool
+        Require a deterministic policy. Passed to policy.predict().
+    every_step_hook : func(t)
+        Function to run BEFORE every step, such as rendering the environment. The function should take
+        the timestep as an argument.
+
+    Returns
+    -------
+    (states, actions, rewards, dones, next_states)
+    """
     states = []
     actions = []
     rewards = []
@@ -20,12 +44,21 @@ def rollout(env, policy, num_rollouts=1, deterministic=False):
         done = False
         steps = 0
         while not done:
-            action, _ = policy.predict(state, deterministic=deterministic)
-            next_state, reward, done, _ = env.step(action)
+            if every_step_hook is not None:
+                every_step_hook(steps)
+
+            if not rk4:
+                action, _ = policy.predict(state, deterministic=deterministic)
+                next_state, reward, done, _ = env.step(action)
+            else:
+                for _ in range(4):
+                    action, _ = policy.predict(state)
+                    # Only the 4th reward and done are recorded.
+                    state, reward, done = env.rk4_step(actions)
 
             states.append(state)
             actions.append(action)
-            rewards.append(action)
+            rewards.append(reward)
             dones.append(done)
             next_states.append(next_state)
 
@@ -71,7 +104,7 @@ def train(env, eval_envs, algo, args):
             eval_l2 = []
             eval_plots = []
             for eval_index, eval_env in enumerate(eval_envs):
-                _, _, rewards, _, _ = rollout(eval_env, algo.get_policy(), deterministic=False)
+                _, _, rewards, _, _ = rollout(eval_env, algo.get_policy(), deterministic=True)
                 eval_rewards.append(np.mean(rewards))
                 eval_l2.append(eval_env.compute_l2_error())
 

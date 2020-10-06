@@ -1,17 +1,19 @@
 import argparse
-from argparse import Namespace
 import os
 import shutil
 import signal
 import sys
 import time
+from argparse import Namespace
 
 import matplotlib
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
+
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+
+matplotlib.use("Agg")
 
 from stable_baselines import logger
 
@@ -20,7 +22,6 @@ from agents import StandardWENOAgent, StationaryAgent, EqualAgent, MiddleAgent, 
 from models.sac import SACBatch
 from util import metadata
 from util.misc import set_global_seed
-from algos.run import rollout
 
 def save_convergence_plot(grid_sizes, error, args):
     plt.plot(grid_sizes, error, ls='-', color='k')
@@ -59,9 +60,16 @@ def save_error_plot(x_vals, y_vals, labels, args):
     plt.close()
 
 def do_test(env, agent, args):
-    NUM_UPDATES = 10
-    update_count = 0
+    state = env.reset()
+
+    done = False
+    t = 0
     next_update = 0
+    NUM_UPDATES = 10
+    update_step = 0
+
+    rewards = []
+    total_reward = 0
 
     render_args = {}
     if args.animate:
@@ -72,50 +80,70 @@ def do_test(env, agent, args):
         render_args["fixed_axes"] = False
 
     render_args["show_ghost"] = False
-
-    next_update = 0
-    def every_step(step):
-        # Write to variables in parent scope.
-        nonlocal next_update
-        nonlocal update_count
-        if args.animate or step == next_update:
-            if step == next_update:
-                print("step = {}".format(step))
-
-            env.plot_state(**render_args)
-            if args.plot_error:
-                env.plot_state(plot_error=True, **render_args)
-        if (args.animate or step == next_update + 1) and args.plot_actions:
-            env.plot_action(**render_args)
-        if step == next_update + 1:
-            update_count += 1
-            next_update = int(args.ep_length * (update_count / NUM_UPDATES))
+    if args.evolution_plot:
+        state_record = []
 
     start_time = time.time()
-    _, _, rewards, _, _ = rollout(env, agent,
-                  rk4=args.rk4, deterministic=True, every_step_hook=every_step)
+
+    while not done:
+ 
+        if t >= update_step:
+            print("step = " + str(t))
+            if not args.animate:
+                env.render(mode="file", **render_args)
+                if args.plot_error:
+                    env.plot_state(plot_error=True, **render_args)
+
+        if args.animate:
+            env.render(mode="file", **render_args)
+
+        if not args.rk4:
+            # The agent's policy function takes a batch of states and returns a batch of actions.
+            # However, we take that batch of actions and pass it to the environment like a single action.
+            actions, _ = agent.predict(state)
+            state, reward, done, _ = env.step(actions)
+        else:
+            for _ in range(4):
+                actions, _ = agent.predict(state)
+                state, reward, done = env.rk4_step(actions)
+
+        if t >= update_step:
+            next_update += 1
+            update_step = args.ep_length * (next_update / NUM_UPDATES)
+            if not args.animate and args.plot_actions:
+                env.render(mode="actions", **render_args)
+
+        if args.animate and args.plot_actions:
+            env.render(mode="actions", **render_args)
+
+        rewards.append(reward)
+        total_reward += reward
+
+        if args.animate:
+            env.render(**render_args)
+
+        t += 1
+
     end_time = time.time()
 
-    print("step = {} (done)".format(env.steps))
+    print("step = {} (done)".format(t))
 
-    env.plot_state(**render_args)
+    env.render(mode="file", **render_args)
     if args.plot_error:
         env.plot_state(plot_error=True, **render_args)
     if args.plot_actions:
-        env.plot_action(**render_args)
+        env.render(mode="actions", **render_args)
     if args.evolution_plot:
         env.plot_state_evolution(num_states=10, full_true=False, no_true=False)
         if args.plot_error:
             env.plot_state_evolution(num_states=10, plot_error=True)
 
     print("Test finished in " + str(end_time - start_time) + " seconds.")
-
-    total_reward = np.sum(rewards, axis=0)
     print("Reward: mean = {}, min = {} @ {}, max = {} @ {}".format(
         np.mean(total_reward), np.amin(total_reward), np.argmin(total_reward), np.amax(total_reward), np.argmax(total_reward)))
 
     error = np.sqrt(env.grid.dx * np.sum(np.square(env.grid.get_real() - env.solution.get_real())))
-    print("Final error with solution was {}.".format(env.compute_l2_error()))
+    print("Final error with solution was {}.".format(error))
 
     return error
 
@@ -128,10 +156,9 @@ def main():
                         help="Do not test and show the environment parameters not listed here.")
     parser.add_argument('--agent', '-a', type=str, default="default",
                         help="Agent to test. Either a file or a string for a standard agent. \"default\" uses standard weno coefficients."
-                        + "\"none\" doesn't use an agent at all and just plots the true solution (ONLY IMPLEMENTED FOR EVOLUTION PLOTS).")
+                        "\"none\" doesn't use an agent at all and just plots the true solution (ONLY IMPLEMENTED FOR EVOLUTION PLOTS).")
     parser.add_argument('--algo', type=str, default="sac",
-                        help="Algorithm used to create the agent. Unfortunately necessary to open"
-                        + " a model file. TODO: make unnecessary")
+                        help="Algorithm used to create the agent. Unfortunately necessary to open a model file.")
     parser.add_argument('--env', type=str, default="weno_burgers",
                         help="Name of the environment in which to deploy the agent.")
     parser.add_argument('--log-dir', type=str, default=None,
@@ -164,6 +191,7 @@ def main():
     main_args, rest = parser.parse_known_args()
 
     # TODO: add system to automatically read parameters from model's meta file.
+
 
     env_arg_parser = get_env_arg_parser()
     env_args, rest = env_arg_parser.parse_known_args(rest)

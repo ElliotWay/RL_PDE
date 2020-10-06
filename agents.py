@@ -2,13 +2,16 @@ import numpy as np
 
 import envs.weno_coefficients as weno_coefficients
 
+class Policy:
+    def predict(self, state, deterministic=False):
+        raise NotImplementedError
 
 class StandardWENOAgent():
     def __init__(self, order=3, mode="weno"):
         self.order = order
         self.mode = mode
 
-    def predict(self, state):
+    def predict(self, state, deterministic=False):
         weno_weights = self._weno_weights_batch(state)
 
         if self.mode == "weno":
@@ -104,7 +107,7 @@ class StationaryAgent():
         self.order = order
         self.mode = mode
 
-    def predict(self, state):
+    def predict(self, state, deterministic=False):
 
         if self.mode == "weno":
             state_shape = list(state.shape)
@@ -123,7 +126,7 @@ class EqualAgent():
         
         self.order = order
 
-    def predict(self, state):
+    def predict(self, state, deterministic=False):
 
         action_shape = list(state.shape)
         action_shape[-1] = self.order
@@ -139,7 +142,7 @@ class MiddleAgent():
         
         self.order = order
 
-    def predict(self, state):
+    def predict(self, state, deterministic=False):
 
         action_shape = list(state.shape)
         action_shape[-1] = self.order
@@ -160,7 +163,7 @@ class LeftAgent():
         
         self.order = order
 
-    def predict(self, state):
+    def predict(self, state, deterministic=False):
 
         action_shape = list(state.shape)
         action_shape[-1] = self.order
@@ -181,7 +184,7 @@ class RightAgent():
         
         self.order = order
 
-    def predict(self, state):
+    def predict(self, state, deterministic=False):
 
         action_shape = list(state.shape)
         action_shape[-1] = self.order
@@ -200,7 +203,9 @@ class RandomAgent():
         self.order = order
         self.mode = mode
 
-    def predict(self, state):
+    def predict(self, state, deterministic=False):
+        # deterministic argument is ignored - this class is meant to represent a random policy,
+        # not a policy with random actions.
 
         if self.mode == "weno":
             action_shape = list(state.shape)
