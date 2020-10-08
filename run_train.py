@@ -20,13 +20,10 @@ from stable_baselines import logger
 from stable_baselines.ddpg.noise import AdaptiveParamNoiseSpec, OrnsteinUhlenbeckActionNoise, NormalActionNoise
 
 from envs import get_env_arg_parser, build_env
-from models.sac import SACBatch
-from models.ddpg import DDPGBatch
-from models.sac import LnScaledMlpPolicy as SACPolicy
-from models.ddpg import LnMlpPolicy as DDPGPolicy
 from util import metadata
 from util.misc import rescale, set_global_seed
 from util import action_snapshot
+from rl_pde.emi import BatchEMI, StandardEMI, TestEMI
 
 
 def main():
@@ -35,8 +32,10 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--help-env', default=False, action='store_true',
                         help="Do not train and show the environment parameters not listed here.")
-    parser.add_argument('--help-algo', default=False, action='store_true',
-                        help="Do not train and show the algorithm parameters not listed here.")
+    parser.add_argument('--help-model', default=False, action='store_true',
+                        help="Do not train and show the model training parameters not listed here.")
+    parser.add_argument('--emi', type=str, default='batch',
+                        help="Environment-model interface. Options are 'batch' and 'std'.")
     parser.add_argument('--algo', '-a', type=str, default="sac",
                         help="Algorithm to train with. sac or ddpg, though ddpg hasn't been updated in a while.")
     parser.add_argument('--env', type=str, default="weno_burgers",
@@ -48,10 +47,12 @@ def main():
                         help="Directory to place log file and other results. Default is log/env/algo/timestamp.")
     parser.add_argument('--ep-length', '--ep_length', type=int, default=250,
                         help="Number of timesteps in an episode.")
-    parser.add_argument('--total-timesteps', '--total_timesteps', type=int, default=int(250000),
-                        help="Total number of timesteps to train.")
+    parser.add_argument('--total-episodes', '--total_episodes', type=int, default=1000,
+                        help="Total number of episodes to train.")
     parser.add_argument('--log-freq', '--log_freq', type=int, default=10,
                         help="Number of episodes to wait between logging information.")
+    parser.add_argument('--n-best-models', '--b_best_models', type=int, default=5,
+                        help="Number of best models so far to keep track of.")
     parser.add_argument('--seed', type=int, default=1,
                         help="Set random seed for reproducibility.")
     parser.add_argument('--repeat', type=str, default=None,
@@ -68,47 +69,60 @@ def main():
     parser.add_argument('-n', '--n', default=False, action='store_true',
                         help="Choose no for any questions, namely overwriting existing files. Useful for scripts. Overrides the -y option.")
 
-    # Do some hacks with argv to handle repeat argument.
-    #argv = metadata.override_argv()
-
     main_args, rest = parser.parse_known_args()
 
     env_arg_parser = get_env_arg_parser()
     env_args, rest = env_arg_parser.parse_known_args(rest)
 
-    algo_arg_parser = argparse.ArgumentParser(
+    model_arg_parser = argparse.ArgumentParser(
             add_help=False,
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    algo_arg_parser.add_argument('--layers', type=int, nargs='+', default=[32, 32],
+    model_arg_parser.add_argument('--layers', type=int, nargs='+', default=[32, 32],
             help="Size of network layers.")
-    algo_arg_parser.add_argument('--gamma', type=float, default=0.0,
+    model_arg_parser.add_argument('--layer-norm', '--layer_norm', default=False, action'store_true',
+            help="Use layer normalization between network layers.")
+    model_arg_parser.add_argument('--gamma', type=float, default=0.0,
             help="Discount factor on future rewards.")
-    algo_arg_parser.add_argument('--learning-rate', '--learning_rate', '--lr', type=float, default=3e-4,
-            help="Learning rate for SAC, which uses same rate for all networks.")
-    algo_arg_parser.add_argument('--actor-lr', '--actor_lr', type=float, default=1e-4,
-            help="Learning rate for actor network (pi).")
-    algo_arg_parser.add_argument('--critic-lr', '--critic_lr', type=float, default=1e-3,
-            help="Learning rate for critic network (Q).")
-    algo_arg_parser.add_argument('--buffer-size', '--buffer_size', type=int, default=50000,
+    model_arg_parser.add_argument('--learning-rate', '--learning_rate', '--lr', type=float, default=3e-4,
+            help="(some) Learning rate if the model uses only one for all networks.")
+    model_arg_parser.add_argument('--actor-lr', '--actor_lr', type=float, default=1e-4,
+            help="(some) Learning rate for actor network (pi).")
+    model_arg_parser.add_argument('--critic-lr', '--critic_lr', type=float, default=1e-3,
+            help="(some) Learning rate for critic network (Q).")
+    model_arg_parser.add_argument('--buffer-size', '--buffer_size', type=int, default=50000,
             help="Size of the replay buffer.")
-    algo_arg_parser.add_argument('--batch-size', '--batch_size', type=int, default=64,
+    model_arg_parser.add_argument('--batch-size', '--batch_size', type=int, default=64,
             help="Size of batch samples from replay buffer.")
-    algo_arg_parser.add_argument('--noise-type', '--noise_type', type=str, default='adaptive-param_0.2',
-            help="Noise used in DDPG.")
-    algo_args, rest = algo_arg_parser.parse_known_args(rest)
+    #model_arg_parser.add_argument('--noise-type', '--noise_type', type=str, default='adaptive-param_0.2',
+            #help="(DDPG) Noise added to actions.")
+    model_arg_parser.add_argument('--learning-starts', type=int, default=None,
+            help="(SAC) At what step the learning starts; before this, actions are take at"
+            + " random. Note: a full timestep actually contains dx steps. Default is one episode's"
+            + " worth.")
+    model_args, rest = model_arg_parser.parse_known_args(rest)
+     
+    if main_args.env.startswith("weno"):
+        mode = "weno"
+    elif main_args.env.startswith("split_flux"):
+        main_mode = "split_flux"
+    elif main_args.env.startswith("flux"):
+        mode = "flux"
+    else:
+        mode = "n/a"
+    # TODO internal args? Shouldn't such args be external? IE replace env arg with mode+problem?
+    internal_args = {'mode':mode}
 
-    args = Namespace(**vars(main_args), **vars(env_args), **vars(algo_args))
+    args = Namespace(**vars(main_args), **vars(env_args), **vars(model_args), **internal_args)
 
-    #rest = rest[:rest.index("$override_sentinel")]
     if len(rest) > 0:
         print("Unrecognized arguments: " + " ".join(rest))
         sys.exit(0)
 
-    if args.help_env or args.help_algo:
+    if args.help_env or args.help_model:
         if args.help_env:
             env_arg_parser.print_help()
         if args.help_algo:
-            algo_arg_parser.print_help()
+            model_arg_parser.print_help()
         sys.exit(0)
 
     if args.repeat is not None:
@@ -129,6 +143,13 @@ def main():
         eval_env.episode_length = 500
 
     action_snapshot.declare_standard_envs(args)
+
+    if args.emi == 'batch':
+        pass
+
+    #Replacing old run_train.
+    # Declare algo; pass model/model class to algo?
+    # Scaling/adjusting is related to mode, and is the responsibility of the algo.
 
     # Things like this make me wish I was writing in a functional language.
     # I sure could go for some partial evaluation and some function composition.
@@ -181,7 +202,7 @@ def main():
     else:
         raise Exception("Need to implement parameterized scaling for: \"{}\".".format(args.env))
 
-    policy_kwargs = {'layers':[32, 32], 'squash_function':squash_function}
+    policy_kwargs = {'layers':args.layers, 'squash_function':squash_function}
     if args.algo == "sac":
         policy_kwargs['squash_correction'] = squash_correction
 

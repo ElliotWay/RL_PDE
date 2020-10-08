@@ -67,7 +67,7 @@ def rollout(env, policy, num_rollouts=1, rk4=False, deterministic=False, every_s
 
     return states, actions, rewards, dones, next_states
 
-def train(env, eval_envs, algo, args):
+def train(env, eval_envs, emi, args):
 
     action_snapshot.declare_standard_envs(args)
 
@@ -86,7 +86,7 @@ def train(env, eval_envs, algo, args):
 
         # TODO wrap train step in signal catcher so we can save the model
         # when there is a SIGINT, but not in the middle of training.
-        train_info = algo.training_episode(env)
+        train_info = emi.training_episode(env)
 
         training_rewards.append(train_info['avg_reward'])
         training_l2.append(env.compute_l2_error())
@@ -96,7 +96,7 @@ def train(env, eval_envs, algo, args):
             ep_string = ("{:0" + str(ep_precision) + "}").format(ep)
 
             action_snapshot.save_action_snapshot(
-                    agent=algo.get_policy(), weno_agent=weno_agent,
+                    agent=emi.get_policy(), weno_agent=weno_agent,
                     suffix="_ep_" + ep_string)
 
             # Run eval episodes.
@@ -104,7 +104,7 @@ def train(env, eval_envs, algo, args):
             eval_l2 = []
             eval_plots = []
             for eval_index, eval_env in enumerate(eval_envs):
-                _, _, rewards, _, _ = rollout(eval_env, algo.get_policy(), deterministic=True)
+                _, _, rewards, _, _ = rollout(eval_env, emi.get_policy(), deterministic=True)
                 eval_rewards.append(np.mean(rewards))
                 eval_l2.append(eval_env.compute_l2_error())
 
@@ -134,8 +134,8 @@ def train(env, eval_envs, algo, args):
 
             # Save model.
             model_file_name = os.path.join(log_dir, "model" + str(args.total_episodes))
-            # Algo probably changes file name by adding e.g. ".zip".
-            model_file_name = algo.save_model(model_file_name)
+            # probably changes file name by adding e.g. ".zip".
+            model_file_name = emi.save_model(model_file_name)
             print("Saved model to " + model_file_name + ".")
 
             # Keep track of N best models.
