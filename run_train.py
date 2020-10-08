@@ -20,9 +20,8 @@ from rl_pde.run import train
 from rl_pde.emi import BatchEMI, StandardEMI, TestEMI
 from envs import get_env_arg_parser, build_env
 from models import SACModel, TestModel
-from util import metadata
+from util import metadata, action_snapshot
 from util.misc import rescale, set_global_seed
-from util import action_snapshot
 
 def main():
     parser = argparse.ArgumentParser(
@@ -97,7 +96,7 @@ def main():
     if main_args.env.startswith("weno"):
         mode = "weno"
     elif main_args.env.startswith("split_flux"):
-        main_mode = "split_flux"
+        mode = "split_flux"
     elif main_args.env.startswith("flux"):
         mode = "flux"
     else:
@@ -148,19 +147,8 @@ def main():
     elif args.model == 'test':
         model_cls = TestModel
     else:
-        raise Exception("Unrecognized model type: \"{}\"".format(args.model)
+        raise Exception("Unrecognized model type: \"{}\"".format(args.model))
 
-    if args.emi == 'batch':
-        emi = BatchEMI(env, model_cls, args)
-    elif args.emi == 'std' or args.emi == 'standard':
-        emi = BatchEMI(env, model_cls, args)
-    elif args.emi == 'test':
-        emi = TestEMI(env, model_cls, args)
-    else:
-        raise Exception("Unrecognized EMI: \"{}\"".format(args.emi))
-
-    # Parameterized action/state adjustments.
-    """
     # Things like this make me wish I was writing in a functional language.
     # I sure could go for some partial evaluation and some function composition.
     def flat_rescale_from_tanh(action):
@@ -171,14 +159,12 @@ def main():
         exp_actions = np.exp(action)
         return exp_actions / np.sum(exp_actions, axis=-1)[..., None]
 
-    def back_to_tanh(action):
-        return rescale(action, [0,1], [-1,1])
-
-    def identity_function(arg):
-        return arg
-
-    def identity_correction(squashed_policy, logp_pi):
-        return logp_pi
+    #def back_to_tanh(action):
+        #return rescale(action, [0,1], [-1,1])
+    #def identity_function(arg):
+        #return arg
+    #def identity_correction(squashed_policy, logp_pi):
+        #return logp_pi
 
     clip_obs = 5 # (in stddevs from the mean)
     epsilon = 1e-10
@@ -190,28 +176,26 @@ def main():
         z_score = (obs - obs.mean()) / (obs.std() + epsilon)
         return np.clip(z_score, -clip_obs, clip_obs)
 
-    # Need to handle different state and action spaces differently.
-    if args.env == "weno_burgers":
-        squash_function = None   # Use default tanh squash/correction.
-        squash_correction = None
+    action_adjust = None
+    obs_adjust = None
+    if args.mode == "weno":
         action_adjust = softmax
-        action_adjust_inverse = back_to_tanh
         obs_adjust = z_score_last_dim
-    elif args.env == "split_flux_burgers":
-        squash_function = identity_function
-        squash_correction = identity_correction
-        action_adjust = identity_function
-        action_adjust_inverse = identity_function
+    elif args.mode == "split_flux":
         obs_adjust = z_score_last_dim
-    elif args.env == "flux_burgers":
-        squash_function = identity_function
-        squash_correction = identity_correction
-        action_adjust = identity_function
-        action_adjust_inverse = identity_function
+    elif args.mode == "flux":
         obs_adjust = z_score_last_dim
     else:
-        raise Exception("Need to implement parameterized scaling for: \"{}\".".format(args.env))
-    """
+        print("No state/action normalization enabled for {}.".format(args.env))
+
+    if args.emi == 'batch':
+        emi = BatchEMI(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
+    elif args.emi == 'std' or args.emi == 'standard':
+        emi = StandardEMI(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
+    elif args.emi == 'test':
+        emi = TestEMI(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
+    else:
+        raise Exception("Unrecognized EMI: \"{}\"".format(args.emi))
 
     #DDPG stuff.
     """

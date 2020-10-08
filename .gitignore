@@ -4,7 +4,12 @@ __pycache__/
 log/
 test/
 *.png
+*.gif
 last
 *sh
 !param_sweep_template.sh
 *.swp
+*log.txt
+*meta.txt
+*progress.csv
+*.zip

@@ -4,6 +4,10 @@ import gym
 
 from rl_pde.run import rollout
 
+# We need refs to environments and models to define default interactions between them.
+#from models import SACModel
+#from envs.burgers_envs import WENOBurgersEnv, SplitFluxBurgersEnv, FluxBurgersEnv
+
 class EMI:
     """
     An EMI is an Environment Model Interface.
@@ -14,11 +18,17 @@ class EMI:
     and other changes. However, you can still get this behavior with StandardEMI, an entirely
     transparent interface.
 
+    An EMI also optionally exposes hooks around interactions with the policy, such as normalizing
+    the observation before feeding it to the model, or normalizing the action before feeding it
+    to the environment. Note that the model is typically aware of the environment and may do some
+    of its own adjustments; this is only necessary for adjustments that the model is not aware of
+    needing.
+
     This is an abstract class that defines the interface of an EMI, and provides simple default
     implementations of save_model and load_model.
     Subclasses must either declare self._model or override save_model and load_model.
     """
-    def __init__(self, env, model_cls, args):
+    def __init__(self, env, model_cls, args, action_adjust=None, obs_adjust=None):
         # Initialize the model in the subclass (or do something else).
         self._model = None
         raise NotImplementedError
@@ -58,7 +68,7 @@ class TestEMI(EMI):
     """
     Fake EMI for testing.
     """
-    def __init__(self, env, model_cls, args):
+    def __init__(self, env, model_cls, args, action_adjust=None, obs_adjust=None):
         self.action_shape = env.action_space.shape
     def training_episode(self, env):
         print("Test EMI is pretending to train.")
@@ -79,19 +89,45 @@ class TestEMI(EMI):
     def load_model(self, path):
         print("Test EMI is pretending to load from {}".format(path))
 
+class PolicyWrapper:
+    """
+    Wraps a model, providing only the predict() interface.
+
+    Controls state/action adjusment as necessary.
+    """
+    def __init__(self, model, action_adjust=None, obs_adjust=None):
+        self.model = model
+        self.action_adjust = action_adjust
+        self.obs_adjust = obs_adjust
+
+    def predict(self, obs, *args, **kwargs):
+        if self.obs_adjust is not None:
+            adjusted_obs = self.obs_adjust(obs)
+        else:
+            adjusted_obs = obs
+
+        action, info = self.model.predict(adjusted_obs, *args, **kwargs)
+
+        if self.action_adjust is not None:
+            adjusted_action = self.action_adjust(action)
+        else:
+            adjusted_action = action
+
+        return adjusted_action, info
+
 class StandardEMI(EMI):
     """
     EMI that simply takes samples from the environment and gives them to the model.
-    Not really intended for use in this project; this class is here for comparison.
     """
-    def __init__(env, model_cls, args):
+    def __init__(env, model_cls, args, action_adjust=None, obs_adjust=None):
         self._model = model_cls(env=env, args)
         self.original_env = env
+        self.policy = PolicyWrapper(self._model, action_adjust, obs_adjust)
 
     def training_episode(self, env):
         s, a, r, done, s2 = rollout(env, self.model)
 
-        extra_info = model.train(s, a, r, s2, done)
+        extra_info = self._model.train(s, a, r, s2, done)
 
         avg_reward = np.mean(r, axis=0)
         timesteps = len(s)
@@ -101,7 +137,7 @@ class StandardEMI(EMI):
         return info_dict
 
     def get_policy(self):
-        return self._model
+        return self.policy
 
 class UnbatchedEnvPL(gym.Env):
     """
@@ -176,11 +212,14 @@ class BatchEMI(EMI):
     EMI that takes samples from the environment and breaks them along the first dimension
     (the spatial dimension), then gives them to the model as separate samples.
     """
-    def __init__(env, model_cls, args):
+    def __init__(env, model_cls, args, action_adjust=None, obs_adjust=None):
         self.original_env = env
         self.unbatched_env = UnbatchedEnvPL(env)
         self._model = model_cls(env=self.unbatched_env, args)
-        self.policy = UnbatchedPolicy(self.original_env, self.unbatched_env, self._model)
+
+        # Oh yes, we've got TWO decorators for the policy here.
+        unbatched_policy = UnbatchedPolicy(self.original_env, self.unbatched_env, self._model)
+        self.policy = PolicyWrapper(unbatched_policy, action_adjust, obs_adjust)
 
     def training_episode(self, env):
         state, action, reward, done, new_state = rollout(env, self._model)
