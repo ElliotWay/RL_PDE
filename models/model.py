@@ -26,6 +26,26 @@ class Model:
         """ Load the model from path. """
         raise NotImplementedError
 
+class TestModel:
+    """ Fake model for testing. """
+    def __init__(self, env, args):
+        self.action_shape = env.action_space.shape
+    def train(s, a, r, s2, done):
+        print("Test model is pretending to train with {} samples.".format(len(s)))
+
+    def predict(state, deterministic=True):
+        full_shape = (len(state),) + self.action_shape
+        return np.random.random(full_shape), None
+    def save(self, path):
+        print("Test model is pretending to save to {}".format(path))
+        full_path = path + ".zip"
+        f = open(full_path, 'w')
+        f.write("Fake model from TestModel.\n")
+        f.close()
+        return full_path
+    def load(self, path):
+        print("Test model is pretending to load from {}".format(path))
+
 class BaselinesModel:
     """
     Model that wraps an existing model class using the Stable Baselines interface.

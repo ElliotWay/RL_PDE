@@ -9,22 +9,20 @@ from argparse import Namespace
 
 import numpy as np
 import tensorflow as tf
-
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
-
 import matplotlib
-
 matplotlib.use("Agg")
 
 from stable_baselines import logger
-from stable_baselines.ddpg.noise import AdaptiveParamNoiseSpec, OrnsteinUhlenbeckActionNoise, NormalActionNoise
+#from stable_baselines.ddpg.noise import AdaptiveParamNoiseSpec, OrnsteinUhlenbeckActionNoise, NormalActionNoise
 
+from rl_pde.run import train
+from rl_pde.emi import BatchEMI, StandardEMI, TestEMI
 from envs import get_env_arg_parser, build_env
+from models import SACModel, TestModel
 from util import metadata
 from util.misc import rescale, set_global_seed
 from util import action_snapshot
-from rl_pde.emi import BatchEMI, StandardEMI, TestEMI
-
 
 def main():
     parser = argparse.ArgumentParser(
@@ -34,12 +32,12 @@ def main():
                         help="Do not train and show the environment parameters not listed here.")
     parser.add_argument('--help-model', default=False, action='store_true',
                         help="Do not train and show the model training parameters not listed here.")
-    parser.add_argument('--emi', type=str, default='batch',
-                        help="Environment-model interface. Options are 'batch' and 'std'.")
-    parser.add_argument('--algo', '-a', type=str, default="sac",
-                        help="Algorithm to train with. sac or ddpg, though ddpg hasn't been updated in a while.")
+    parser.add_argument('--model', type=str, default='sac',
+                        help="Type of model to train. Options are 'sac' and nothing else.")
     parser.add_argument('--env', type=str, default="weno_burgers",
                         help="Name of the environment in which to train the agent.")
+    parser.add_argument('--emi', type=str, default='batch',
+                        help="Environment-model interface. Options are 'batch' and 'std'.")
     parser.add_argument('--eval-env', '--eval_env', default=None,
                         help="Evaluation env. Default is to use an identical environment to the training environment."
                         + " Pass 'custom' to use a representative sine/rarefaction/accelshock combination.")
@@ -59,11 +57,6 @@ def main():
                         help="Copy parameters from a meta.txt file to run a similar or identical experiment."
                         + " Explicitly passed parameters override parameters in the meta file."
                         + " Passing an explicit --log-dir is recommended.")
-    parser.add_argument('--render', type=str, default="file",
-                        help="How to render output. Options are file and none.")
-    parser.add_argument('--animate', type=int, default=None, 
-                        help="Enable animation mode. Plot the state at every nth timestep, and keep the axes fixed across every plot."
-                        + " This option also forces the same_eval_env option.")
     parser.add_argument('-y', '--y', default=False, action='store_true',
                         help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
     parser.add_argument('-n', '--n', default=False, action='store_true',
@@ -114,10 +107,6 @@ def main():
 
     args = Namespace(**vars(main_args), **vars(env_args), **vars(model_args), **internal_args)
 
-    if len(rest) > 0:
-        print("Unrecognized arguments: " + " ".join(rest))
-        sys.exit(0)
-
     if args.help_env or args.help_model:
         if args.help_env:
             env_arg_parser.print_help()
@@ -125,32 +114,53 @@ def main():
             model_arg_parser.print_help()
         sys.exit(0)
 
+    if len(rest) > 0:
+        raise Exception("Unrecognized arguments: " + " ".join(rest))
+
     if args.repeat is not None:
         metadata.load_to_namespace(args.repeat, args)
 
     set_global_seed(args.seed)
 
     env = build_env(args.env, args)
-    eval_env = build_env(args.env, args, test=True) # Some algos like an extra env for evaluation.
     if args.eval_env is None:
-        eval_episodes = 1
+        eval_envs = [build_env(args.env, args, test=True)]
     else:
         assert(args.eval_env == "custom")
-        #TODO fix this ugly hack and make these parameters.
-        eval_env.grid._init_type = "schedule"
-        eval_env.grid._init_schedule = ["smooth_sine", "smooth_rare", "accelshock"]
-        eval_episodes = len(eval_env.grid._init_schedule)
-        eval_env.episode_length = 500
+        eval_envs = []
+        smooth_sine_args = Namespace(**vars(args))
+        smooth_sine_args.init_type = "smooth_sine"
+        smooth_sine_args.ep_length = 500
+        eval_envs.append(build_env(args.env, smooth_sine_args, test=True))
+        smooth_rare_args = Namespace(**vars(args))
+        smooth_rare_args.init_type = "smooth_rare"
+        smooth_rare_args.ep_length = 500
+        eval_envs.append(build_env(args.env, smooth_rare_args, test=True))
+        accelshock_args = Namespace(**vars(args))
+        accelshock_args.init_type = "accelshock"
+        accelshock_args.ep_length = 500
+        eval_envs.append(build_env(args.env, accelshock_args, test=True))
 
     action_snapshot.declare_standard_envs(args)
 
+    if args.model == 'sac':
+        model_cls = SACModel
+    elif args.model == 'test':
+        model_cls = TestModel
+    else:
+        raise Exception("Unrecognized model type: \"{}\"".format(args.model)
+
     if args.emi == 'batch':
-        pass
+        emi = BatchEMI(env, model_cls, args)
+    elif args.emi == 'std' or args.emi == 'standard':
+        emi = BatchEMI(env, model_cls, args)
+    elif args.emi == 'test':
+        emi = TestEMI(env, model_cls, args)
+    else:
+        raise Exception("Unrecognized EMI: \"{}\"".format(args.emi))
 
-    #Replacing old run_train.
-    # Declare algo; pass model/model class to algo?
-    # Scaling/adjusting is related to mode, and is the responsibility of the algo.
-
+    # Parameterized action/state adjustments.
+    """
     # Things like this make me wish I was writing in a functional language.
     # I sure could go for some partial evaluation and some function composition.
     def flat_rescale_from_tanh(action):
@@ -201,19 +211,10 @@ def main():
         obs_adjust = z_score_last_dim
     else:
         raise Exception("Need to implement parameterized scaling for: \"{}\".".format(args.env))
+    """
 
-    policy_kwargs = {'layers':args.layers, 'squash_function':squash_function}
-    if args.algo == "sac":
-        policy_kwargs['squash_correction'] = squash_correction
-
-
-    if args.algo == "sac":
-        model = SACBatch(SACPolicy, env, eval_env=eval_env, gamma=args.gamma, policy_kwargs=policy_kwargs, learning_rate=args.learning_rate, buffer_size=args.buffer_size,
-                 learning_starts=100, batch_size=args.batch_size, verbose=1, tensorboard_log="./log/weno_burgers/tensorboard",
-                 action_adjust=action_adjust, action_adjust_inverse=action_adjust_inverse, obs_adjust=obs_adjust)
-    elif args.algo == "ddpg":
-        print("TODO: add parameterized squash function, action/state scaling to DDPG")
-        sys.exit(0)
+    #DDPG stuff.
+    """
         # Parse noise_type
         action_noise = None
         param_noise = None
@@ -224,7 +225,8 @@ def main():
                 pass
             elif 'adaptive-param' in current_noise_type:
                 _, stddev = current_noise_type.split('_')
-                param_noise = AdaptiveParamNoiseSpec(initial_stddev=float(stddev), desired_action_stddev=float(stddev))
+                param_noise = AdaptiveParamNoiseSpec(initial_stddev=float(stddev),
+                                                     desired_action_stddev=float(stddev))
             elif 'normal' in current_noise_type:
                 _, stddev = current_noise_type.split('_')
                 action_noise = NormalActionNoise(mean=np.zeros(nb_actions), sigma=float(stddev) * np.ones(nb_actions))
@@ -236,11 +238,11 @@ def main():
                 raise RuntimeError('unknown noise type "{}"'.format(current_noise_type))
 
         model = DDPGBatch(DDPGPolicy, env, eval_env=eval_env, gamma=args.gamma,
-                policy_kwargs=policy_kwargs, actor_lr=args.actor_lr, critic_lr=args.critic_lr, buffer_size=args.buffer_size,
+                policy_kwargs=policy_kwargs, actor_lr=args.actor_lr, critic_lr=args.critic_lr,
+                buffer_size=args.buffer_size,
                 batch_size=args.batch_size, action_noise=action_noise, param_noise=param_noise,
                 verbose=1)
-    else:
-        print("Algorithm type \"" + str(args.algo) + "\" not implemented.")
+    """
 
     if args.render == "none":
         args.render = None
@@ -275,13 +277,14 @@ def main():
     metadata.create_meta_file(args.log_dir, args)
 
     # Put stable-baselines logs in same directory.
+    #TODO Get rid of this dependency, only connect these logs when using an SB model wrapper.
     logger.configure(folder=args.log_dir, format_strs=['stdout', 'log', 'csv'])  # ,tensorboard'
     logger.set_level(logger.DEBUG)  # logger.INFO
 
-    # Call model.learn().
+    # Call train().
     signal.signal(signal.SIGINT, signal.default_int_handler)
     try:
-        model.learn(total_timesteps=args.total_timesteps, log_interval=args.log_freq, eval_episodes=eval_episodes, render=args.render, render_every=args.animate)
+        train(env, eval_envs, emi, args)
     except KeyboardInterrupt:
         print("Training stopped by interrupt.")
         metadata.log_finish_time(args.log_dir, status="stopped by interrupt")

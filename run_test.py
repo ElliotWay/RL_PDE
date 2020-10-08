@@ -20,7 +20,7 @@ from agents import StandardWENOAgent, StationaryAgent, EqualAgent, MiddleAgent, 
 from models.sac import SACBatch
 from util import metadata
 from util.misc import set_global_seed
-from algos.run import rollout
+from rl_pde.run import rollout
 
 def save_convergence_plot(grid_sizes, error, args):
     plt.plot(grid_sizes, error, ls='-', color='k')

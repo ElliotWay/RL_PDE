@@ -9,9 +9,10 @@ class EMI:
     An EMI is an Environment Model Interface.
 
     An EMI controls how information is passed between the environment
-    and the model. Traditionally in RL (StandardEMI) information is passed from the environment
+    and the model. Traditionally in RL information is passed from the environment
     directly to the model, but in this project we're treating the state as a batch of many states
-    and other changes.
+    and other changes. However, you can still get this behavior with StandardEMI, an entirely
+    transparent interface.
 
     This is an abstract class that defines the interface of an EMI, and provides simple default
     implementations of save_model and load_model.

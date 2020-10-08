@@ -24,7 +24,8 @@ class SACModel(BaselinesModel):
     Any bugs in SAC are probably in here too.
 
     Changing this class is not recommended. If you want a different RL algorithm, write that
-    directly, instead of tweaking a wrapper for SAC.
+    directly, instead of tweaking a wrapper for SAC. That might mean copying SAC and creating
+    another wrapper, though.
     """
     def __init__(self, env, args):
         self.total_timesteps = args.ep_length * args.total_episodes
@@ -44,6 +45,8 @@ class SACModel(BaselinesModel):
                        learning_starts=args.learning_starts,
                        batch_size=args.batch_size,
                        verbose=1,
+                       #TODO: should this be out of the actual log dir? I don't
+                       #actually use tensorboard, so I'm not sure.
                        tensorboard_log="./log/weno_burgers/tensorboard",
                        )
 
