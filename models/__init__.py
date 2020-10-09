@@ -1,2 +1,2 @@
-from model import Model, BaselinesModel
-from sac import SACModel
+from models.model import Model, BaselinesModel, TestModel
+from models.sac import SACModel

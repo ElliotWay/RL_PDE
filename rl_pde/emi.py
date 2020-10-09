@@ -65,18 +65,21 @@ class EMI:
         self._model.load(path)
 
 class TestEMI(EMI):
-    """
-    Fake EMI for testing.
-    """
+    """ Fake EMI for testing. """
     def __init__(self, env, model_cls, args, action_adjust=None, obs_adjust=None):
+        self.obs_shape = env.observation_space.shape
         self.action_shape = env.action_space.shape
     def training_episode(self, env):
         print("Test EMI is pretending to train.")
         fake_info = {'avg_reward': np.random.random()*2-1, 'timesteps':100}
         return fake_info
-    def predict(self, state, deterministic=False):
-        full_shape = (len(state),) + self.action_shape
-        return np.random.random(full_shape), None
+    def predict(self, obs, deterministic=False):
+        if obs.shape == self.obs_shape:
+            action_shape = self.action_shape
+        else:
+            assert obs.shape == (len(obs),) + self.obs_shape
+            action_shape = (len(obs),) + self.action_shape
+        return np.random.random(action_shape), None
     def get_policy(self):
         return self
     def save_model(self, path):
@@ -112,20 +115,19 @@ class PolicyWrapper:
             adjusted_action = self.action_adjust(action)
         else:
             adjusted_action = action
-
         return adjusted_action, info
 
 class StandardEMI(EMI):
     """
     EMI that simply takes samples from the environment and gives them to the model.
     """
-    def __init__(env, model_cls, args, action_adjust=None, obs_adjust=None):
-        self._model = model_cls(env=env, args)
+    def __init__(self, env, model_cls, args, action_adjust=None, obs_adjust=None):
+        self._model = model_cls(env, args)
         self.original_env = env
         self.policy = PolicyWrapper(self._model, action_adjust, obs_adjust)
 
     def training_episode(self, env):
-        s, a, r, done, s2 = rollout(env, self.model)
+        s, a, r, done, s2 = rollout(env, self.policy)
 
         extra_info = self._model.train(s, a, r, s2, done)
 
@@ -152,20 +154,23 @@ class UnbatchedEnvPL(gym.Env):
         real_obs_low = real_env.observation_space.low
         real_obs_high = real_env.observation_space.high
 
-        assert (real_action_low[0] == real_action_low[-1]
-                and real_action_high[0] == real_action_high[-1]
-                and real_obs_low[0] == real_obs_low[-1]
-                and real_obs_high[0] == real_obs_high[-1]), "Original env dim 1 was not spatial."
+        assert (np.all(real_action_low[0] == real_action_low[-1])
+                and np.all(real_action_high[0] == real_action_high[-1])
+                and np.all(real_obs_low[0] == real_obs_low[-1])
+                and np.all(real_obs_high[0] == real_obs_high[-1])), \
+                "Original env dim 1 was not spatial."
 
         new_action_low = real_action_low[0].flatten()
         new_action_high = real_action_high[0].flatten()
         new_obs_low = real_obs_low[0].flatten()
         new_obs_high = real_obs_high[0].flatten()
 
-        self.action_space = gym.spaces.Box(low=new_action_low, hgh=new_action_low,
-                                           dtype=real_env.action_space.dtype)
-        self.observation_space = gym.spaces.Box(low=new_obs_low, hgh=new_obs_low,
-                                                dtype=real_env.observation_space.dtype)
+        action_space_cls = type(real_env.action_space)
+        self.action_space = action_space_cls(low=new_action_low, high=new_action_low,
+                                             dtype=real_env.action_space.dtype)
+        obs_space_cls = type(real_env.observation_space)
+        self.observation_space = obs_space_cls(low=new_obs_low, high=new_obs_low,
+                                               dtype=real_env.observation_space.dtype)
 
     def step(self, action):
         raise Exception("This is a placeholder env - you can only access the spaces.")
@@ -187,7 +192,7 @@ class UnbatchedPolicy:
         self.original_obs_shape = original_env.observation_space.shape
         self.unbatched_obs_shape = unbatched_env.observation_space.shape
         self.original_action_shape = original_env.action_space.shape
-        self.unbatched_action_shape = unbatched_env_action_space.shape
+        self.unbatched_action_shape = unbatched_env.action_space.shape
         self._model = model
 
     def predict(self, obs, deterministic=False):
@@ -195,15 +200,17 @@ class UnbatchedPolicy:
         if obs.shape[1:] == self.original_obs_shape:
             vec_obs = True
         else:
-            assert obs.shape == self.original_obs_shape
+            assert obs.shape[1:] == self.original_obs_shape[1:], \
+                    ("original obs shape {} does not match new shape {}"
+                            .format(obs.shape, self.original_obs_shape))
             vec_obs = False
-        obs = obs.reshape((-1,) + self.unbatched_obs_shape)
+        obs = obs.reshape((len(obs),) + self.unbatched_obs_shape)
         actions, _ = self._model.predict(obs, deterministic=deterministic)
         
         if vec_obs:
             actions = actions.reshape((-1,) + self.original_action_shape)
         else:
-            actions = actions.reshape(self.original_action_shape)
+            actions = actions.reshape((len(obs),) + self.original_action_shape[1:])
 
         return actions, None
 
@@ -212,17 +219,17 @@ class BatchEMI(EMI):
     EMI that takes samples from the environment and breaks them along the first dimension
     (the spatial dimension), then gives them to the model as separate samples.
     """
-    def __init__(env, model_cls, args, action_adjust=None, obs_adjust=None):
+    def __init__(self, env, model_cls, args, action_adjust=None, obs_adjust=None):
         self.original_env = env
         self.unbatched_env = UnbatchedEnvPL(env)
-        self._model = model_cls(env=self.unbatched_env, args)
+        self._model = model_cls(self.unbatched_env, args)
 
         # Oh yes, we've got TWO decorators for the policy here.
         unbatched_policy = UnbatchedPolicy(self.original_env, self.unbatched_env, self._model)
         self.policy = PolicyWrapper(unbatched_policy, action_adjust, obs_adjust)
 
     def training_episode(self, env):
-        state, action, reward, done, new_state = rollout(env, self._model)
+        state, action, reward, done, new_state = rollout(env, self.policy)
 
         # Convert batched trajectory into list of samples containing consecutive trajectories.
         def unbatch(arr):

@@ -1,4 +1,5 @@
 import os
+import numpy as np
 
 class Model:
     """
@@ -7,35 +8,45 @@ class Model:
     def __init__(self, env, args):
         """ Create a model for the given env using the args namespace. """
         raise NotImplementedError
-    def train(s, a, r, s2, done):
+    def train(self, s, a, r, s2, done):
         """
         Train using samples.
         Should return a dict of information (may be empty dict).
         """
         raise NotImplementedError
-    def predict(state, deterministic=True):
+    def predict(self, state, deterministic=True):
         """
         Select actions given a batch of states.
         The model should NOT train inside this method.
         """
         raise NotImplementedError
-    def save(path):
+    def save(self, path):
         """ Save the model to path. """
         raise NotImplementedError
-    def load(path):
+    def load(self, path):
         """ Load the model from path. """
         raise NotImplementedError
 
 class TestModel:
     """ Fake model for testing. """
     def __init__(self, env, args):
+        self.obs_shape = env.observation_space.shape
         self.action_shape = env.action_space.shape
-    def train(s, a, r, s2, done):
-        print("Test model is pretending to train with {} samples.".format(len(s)))
 
-    def predict(state, deterministic=True):
-        full_shape = (len(state),) + self.action_shape
-        return np.random.random(full_shape), None
+    def train(self, s, a, r, s2, done):
+        print("Test model is pretending to train with {} samples.".format(len(s)))
+        return {}
+
+    def predict(self, obs, deterministic=True):
+        if obs.shape == self.obs_shape:
+            action_shape = self.action_shape
+        else:
+            assert obs.shape == (len(obs),) + self.obs_shape, \
+                    ("obs shape {} does not match expected shape {}"
+                            .format(obs.shape, self.obs_shape))
+            action_shape = (len(obs),) + self.action_shape
+        return np.random.random(action_shape), None
+
     def save(self, path):
         print("Test model is pretending to save to {}".format(path))
         full_path = path + ".zip"
@@ -43,6 +54,7 @@ class TestModel:
         f.write("Fake model from TestModel.\n")
         f.close()
         return full_path
+
     def load(self, path):
         print("Test model is pretending to load from {}".format(path))
 
@@ -58,9 +70,9 @@ class BaselinesModel:
         self._model = None
         raise NotImplementedError
 
-    def predict(state, deterministic=True):
+    def predict(self, state, deterministic=True):
         return self._model.predict(state, deterministic=deterministic)
-    def save(path):
+    def save(self, path):
         self._model.save(path)
         # SB adds a .zip by default, unless the path already has an extension.
         # (see stable-baselines/common/base_class.py:576)
@@ -68,5 +80,5 @@ class BaselinesModel:
         if ext == "":
             path += ".zip"
         return path
-    def load(path):
+    def load(self, path):
         self._model.load(path)

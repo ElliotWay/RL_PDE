@@ -15,12 +15,13 @@ tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 from stable_baselines import logger
 
+from rl_pde.run import rollout
+from rl_pde.emi import BatchEMI, StandardEMI, TestEMI
 from envs import get_env_arg_parser, build_env
 from agents import StandardWENOAgent, StationaryAgent, EqualAgent, MiddleAgent, LeftAgent, RightAgent, RandomAgent
-from models.sac import SACBatch
+from models import SACModel, TestModel
 from util import metadata
 from util.misc import set_global_seed
-from rl_pde.run import rollout
 
 def save_convergence_plot(grid_sizes, error, args):
     plt.plot(grid_sizes, error, ls='-', color='k')
@@ -127,13 +128,15 @@ def main():
     parser.add_argument('--help-env', default=False, action='store_true',
                         help="Do not test and show the environment parameters not listed here.")
     parser.add_argument('--agent', '-a', type=str, default="default",
-                        help="Agent to test. Either a file or a string for a standard agent. \"default\" uses standard weno coefficients."
-                        + "\"none\" doesn't use an agent at all and just plots the true solution (ONLY IMPLEMENTED FOR EVOLUTION PLOTS).")
-    parser.add_argument('--algo', type=str, default="sac",
-                        help="Algorithm used to create the agent. Unfortunately necessary to open"
-                        + " a model file. TODO: make unnecessary")
+                        help="Agent to test. Either a file or a string for a standard agent."
+                        + " 'default' uses standard weno coefficients. 'none' forces no agent and"
+                        + " only plots the true solution (ONLY IMPLEMENTED FOR EVOLUTION PLOTS).")
+    parser.add_argument('--model', type=str, default='sac',
+                        help="Type of model to train. Options are 'sac' and nothing else.")
     parser.add_argument('--env', type=str, default="weno_burgers",
                         help="Name of the environment in which to deploy the agent.")
+    parser.add_argument('--emi', type=str, default='batch',
+                        help="Environment-model interface. Options are 'batch' and 'std'.")
     parser.add_argument('--log-dir', type=str, default=None,
                         help="Directory to place log file and other results. Default is test/env/agent/timestamp.")
     parser.add_argument('--ep-length', type=int, default=500,
@@ -168,7 +171,17 @@ def main():
     env_arg_parser = get_env_arg_parser()
     env_args, rest = env_arg_parser.parse_known_args(rest)
 
-    args = Namespace(**vars(main_args), **vars(env_args))
+    if main_args.env.startswith("weno"):
+        mode = "weno"
+    elif main_args.env.startswith("split_flux"):
+        mode = "split_flux"
+    elif main_args.env.startswith("flux"):
+        mode = "flux"
+    else:
+        mode = "n/a"
+    internal_args = {'mode':mode}
+
+    args = Namespace(**vars(main_args), **vars(env_args), **internal_args)
 
     if len(rest) > 0:
         print("Unrecognized arguments: " + " ".join(rest))
@@ -219,15 +232,6 @@ def main():
     logger.configure(folder=args.log_dir, format_strs=['stdout'])  # ,tensorboard'
     logger.set_level(logger.DEBUG)  # logger.INFO
 
-    if args.env.startswith("weno"):
-        mode = "weno"
-    elif args.env.startswith("split_flux"):
-        mode = "split_flux"
-    elif args.env.startswith("flux"):
-        mode = "flux"
-    else:
-        mode = "n/a"
-
     # TODO: create standard agent lookup function in agents.py.
     if args.agent == "default" or args.agent == "none":
         agent = StandardWENOAgent(order=args.order, mode=mode)
@@ -244,10 +248,49 @@ def main():
     elif args.agent == "random":
         agent = RandomAgent(order=args.order, mode=mode)
     else:
-        if args.algo == "sac":
-            agent = SACBatch.load(args.agent)
+        # Reconstruct EMI to load model file.
+        # TODO: repeated code in train and test is bad. Options:
+        # - put things in common separate util file
+        # - allow loading from meta file for these parameters, no initialization here
+        # - probably some combination
+        def softmax(action):
+            exp_actions = np.exp(action)
+            return exp_actions / np.sum(exp_actions, axis=-1)[..., None]
+        clip_obs = 5 # (in stddevs from the mean)
+        epsilon = 1e-10
+        def z_score_last_dim(obs):
+            z_score = (obs - obs.mean(axis=-1)[..., None]) / (obs.std(axis=-1)[..., None] + epsilon)
+            return np.clip(z_score, -clip_obs, clip_obs)
+            action_adjust = None
+            obs_adjust = None
+        if args.mode == "weno":
+            action_adjust = softmax
+            obs_adjust = z_score_last_dim
+        elif args.mode == "split_flux":
+            obs_adjust = z_score_last_dim
+        elif args.mode == "flux":
+            obs_adjust = z_score_last_dim
         else:
-            print("Algorithm {} not recognized.".format(args.algo))
+            print("No state/action normalization enabled for {}.".format(args.env))
+
+        if args.model == 'sac':
+            model_cls = SACModel
+        elif args.model == 'test':
+            model_cls = TestModel
+        else:
+            raise Exception("Unrecognized model type: \"{}\"".format(args.model))
+
+        if args.emi == 'batch':
+            emi = BatchEMI(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
+        elif args.emi == 'std' or args.emi == 'standard':
+            emi = StandardEMI(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
+        elif args.emi == 'test':
+            emi = TestEMI(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
+        else:
+            raise Exception("Unrecognized EMI: \"{}\"".format(args.emi))
+
+        emi.load_model(args.agent)
+        agent = emi.get_policy()
  
     # Create symlink for convenience. (Do this after loading the agent in case we are loading from last.)
     try:

@@ -41,7 +41,8 @@ def main():
                         help="Evaluation env. Default is to use an identical environment to the training environment."
                         + " Pass 'custom' to use a representative sine/rarefaction/accelshock combination.")
     parser.add_argument('--log-dir', '--log_dir', type=str, default=None,
-                        help="Directory to place log file and other results. Default is log/env/algo/timestamp.")
+                        help="Directory to place log file and other results. Default is"
+                        + " log/env/model/timestamp.")
     parser.add_argument('--ep-length', '--ep_length', type=int, default=250,
                         help="Number of timesteps in an episode.")
     parser.add_argument('--total-episodes', '--total_episodes', type=int, default=1000,
@@ -71,7 +72,7 @@ def main():
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     model_arg_parser.add_argument('--layers', type=int, nargs='+', default=[32, 32],
             help="Size of network layers.")
-    model_arg_parser.add_argument('--layer-norm', '--layer_norm', default=False, action'store_true',
+    model_arg_parser.add_argument('--layer-norm', '--layer_norm', default=False, action='store_true',
             help="Use layer normalization between network layers.")
     model_arg_parser.add_argument('--gamma', type=float, default=0.0,
             help="Discount factor on future rewards.")
@@ -228,14 +229,11 @@ def main():
                 verbose=1)
     """
 
-    if args.render == "none":
-        args.render = None
-
     # Set up logging.
     start_time = time.localtime()
     if args.log_dir is None:
         timestamp = time.strftime("%y%m%d_%H%M%S")
-        default_log_dir = os.path.join("log", args.env, args.algo, timestamp)
+        default_log_dir = os.path.join("log", args.env, args.model, timestamp)
         args.log_dir = default_log_dir
         print("Using default log directory: {}".format(default_log_dir))
     try:
@@ -281,7 +279,7 @@ def main():
     metadata.log_finish_time(args.log_dir, status="finished cleanly")
 
     model_file_name = os.path.join(args.log_dir, "model_final")
-    model.save(model_file_name)
+    emi.save_model(model_file_name)
 
 
 if __name__ == "__main__":

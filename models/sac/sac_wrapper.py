@@ -33,7 +33,7 @@ class SACModel(BaselinesModel):
         policy_cls = LnMlpPolicy if args.layer_norm else MlpPolicy
 
         if args.learning_starts is None:
-            args.learning_starts = args.ep_length*args.dx
+            args.learning_starts = args.ep_length*args.nx
 
         policy_kwargs = {'layers':args.layers}
         self.sac = SAC(policy_cls,
@@ -62,7 +62,7 @@ class SACModel(BaselinesModel):
         self.n_updates = 0
         self.prev_target_update = 0
 
-    def predict(obs, deterministic=False):
+    def predict(self, obs, deterministic=False):
         # Treat "deterministic" as a training flag.
         sac = self.sac
 
@@ -95,7 +95,7 @@ class SACModel(BaselinesModel):
 
         return unscaled_action
 
-    def train(s, a, r, s2, done):
+    def train(self, s, a, r, s2, done):
         
         sac = self.sac
 

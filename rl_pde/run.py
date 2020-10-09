@@ -81,8 +81,10 @@ def train(env, eval_envs, emi, args):
     total_timesteps = 0
     best_models = []
 
+    #TODO run eval step before any training?
+
     start_time = time.time()
-    for ep in range(args.total_episodes):
+    for ep in np.arange(args.total_episodes)+1:
 
         # TODO wrap train step in signal catcher so we can save the model
         # when there is a SIGINT, but not in the middle of training.
@@ -95,9 +97,12 @@ def train(env, eval_envs, emi, args):
         if ep % args.log_freq == 0:
             ep_string = ("{:0" + str(ep_precision) + "}").format(ep)
 
-            action_snapshot.save_action_snapshot(
-                    agent=emi.get_policy(), weno_agent=weno_agent,
-                    suffix="_ep_" + ep_string)
+            if args.emi == "batch":
+                # The action snapshot doesn't make sense if EMI is not batched,
+                # because a standard EMI has a fixed input size.
+                action_snapshot.save_action_snapshot(
+                        agent=emi.get_policy(), weno_agent=weno_agent,
+                        suffix="_ep_" + ep_string)
 
             # Run eval episodes.
             eval_rewards = []
@@ -133,7 +138,7 @@ def train(env, eval_envs, emi, args):
             logger.dumpkvs()
 
             # Save model.
-            model_file_name = os.path.join(log_dir, "model" + str(args.total_episodes))
+            model_file_name = os.path.join(log_dir, "model" + ep_string)
             # probably changes file name by adding e.g. ".zip".
             model_file_name = emi.save_model(model_file_name)
             print("Saved model to " + model_file_name + ".")
@@ -146,8 +151,9 @@ def train(env, eval_envs, emi, args):
                     if average_eval_reward > model["reward"]:
                         new_index = index
                         break
-                best_file_name = os.path.join(log_dir, "_best_model_" + str(args.total_episodes) + ".zip")
+                best_file_name = os.path.join(log_dir, "_best_model_" + ep_string + ".zip")
                 shutil.copy(model_file_name, best_file_name)
+                print("Current model copied to {}".format(best_file_name))
                 new_model = {"file_name": best_file_name, "episodes": ep,
                         "reward": average_eval_reward, "plots": eval_plots}
 
@@ -159,6 +165,7 @@ def train(env, eval_envs, emi, args):
                 if len(best_models) > args.n_best_models:
                     old_model = best_models.pop()
                     os.remove(old_model["file_name"])
+                    print("{} removed.".format(old_model["file_name"]))
         #endif logging
     #endfor episodes
 
@@ -172,7 +179,8 @@ def train(env, eval_envs, emi, args):
         base_best_name = "best_{}_model_{}".format(index+1, model["episodes"])
         new_file_name = os.path.join(log_dir, base_best_name + ".zip")
         shutil.move(model["file_name"], new_file_name)
-        print("{}: {} eps, {}, {}_*".format(index+1, model["episodes"], model["reward"], base_best_name))
+        print("{}: {} eps, {}, {}".format(index+1, model["episodes"], model["reward"],
+            new_file_name))
         for plot_index, plot_file_name in enumerate(model["plots"]):
             new_plot_name = os.path.join(log_dir,
                                 base_best_name + "_{}.png".format(plot_index + 1))

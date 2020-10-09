@@ -97,7 +97,8 @@ def save_action_snapshot(agent, weno_agent=None, suffix=""):
             weno_action, _ = weno_agent.predict(state)
             weno_action = weno_action.reshape((-1, action_dimensions))
             assert weno_action.shape == action.shape, \
-                    "{} does not match {}".format(weno_action.shape, action.shape)
+                    ("weno shape {} does not match action shape {}"
+                            .format(weno_action.shape, action.shape))
 
         state_axis = axes[0, index]
         cell_x_values = env.grid.x
