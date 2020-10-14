@@ -231,15 +231,18 @@ class BatchEMI(EMI):
     def training_episode(self, env):
         state, action, reward, done, new_state = rollout(env, self.policy)
 
-        # Convert batched trajectory into list of samples containing consecutive trajectories.
+        # Convert batched trajectory into list of samples while preserving consecutive
+        # trajectories. Also flatten states and actions.
         def unbatch(arr):
             arr = np.array(arr)
             arr = np.swapaxes(arr, 0, 1)
-            arr = arr.reshape((-1,) + arr.shape[2:])
+            num_samples = arr.shape[0] * arr.shape[1]
+            flattened_shape = np.prod(arr.shape[2:])
+            arr = arr.reshape((num_samples, flattened_shape))
             return arr
         unbatched_state = unbatch(state)
         unbatched_action = unbatch(action)
-        unbatched_reward = unbatch(reward)
+        unbatched_reward = np.array(reward).transpose().flatten()
         unbatched_done = np.tile(done, len(state[0]))
         unbatched_new_state = unbatch(new_state)
         extra_info = self._model.train(unbatched_state, unbatched_action, unbatched_reward,

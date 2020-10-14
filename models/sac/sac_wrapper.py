@@ -48,6 +48,7 @@ class SACModel(BaselinesModel):
                        #actually use tensorboard, so I'm not sure.
                        tensorboard_log="./log/weno_burgers/tensorboard",
                        )
+        self._model = self.sac # Used by superclass.
 
         sac = self.sac
         sac._setup_learn()
@@ -140,7 +141,7 @@ class SACModel(BaselinesModel):
             else:
                 infos_values = []
 
-        info_dict = {'n_updates':n_updates, 'current_lr': current_lr} 
+        info_dict = {'n_updates':self.n_updates, 'current_lr': current_lr} 
         if len(infos_values) > 0:
             for (name, val) in zip(sac.infos_names, infos_values):
                 info_dict[name] = val
