@@ -125,6 +125,8 @@ def train(env, eval_envs, emi, args):
             # Log stats.
             average_train_reward = np.mean(training_rewards)
             average_train_l2 = np.mean(training_l2)
+            training_rewards = []
+            training_l2 = []
             average_eval_reward = np.mean(eval_rewards)
             average_eval_l2 = np.mean(eval_l2)
             #TODO calculate KL?

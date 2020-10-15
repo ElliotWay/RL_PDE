@@ -131,7 +131,7 @@ class StandardEMI(EMI):
 
         extra_info = self._model.train(s, a, r, s2, done)
 
-        avg_reward = np.mean(r, axis=0)
+        avg_reward = np.mean(r)
         timesteps = len(s)
 
         info_dict = {'avg_reward': avg_reward, 'timesteps':timesteps}
@@ -248,7 +248,7 @@ class BatchEMI(EMI):
         extra_info = self._model.train(unbatched_state, unbatched_action, unbatched_reward,
                 unbatched_new_state, unbatched_done)
 
-        avg_reward = np.mean(reward, axis=0)
+        avg_reward = np.mean(reward)
         timesteps = len(state)
         info_dict = {'avg_reward': avg_reward, 'timesteps':timesteps}
         info_dict.update(extra_info)
