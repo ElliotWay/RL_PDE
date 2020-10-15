@@ -90,7 +90,7 @@ def save_action_snapshot(agent, weno_agent=None, suffix=""):
     for index, env in enumerate(standard_envs):
         state = env.reset()
         grid_state = env.grid.get_full()
-        action, _ = agent.predict(state)
+        action, _ = agent.predict(state, deterministic=True)
         action = action.reshape((-1, action_dimensions))
 
         if weno_agent is not None:

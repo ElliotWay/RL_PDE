@@ -166,10 +166,10 @@ class UnbatchedEnvPL(gym.Env):
         new_obs_high = real_obs_high[0].flatten()
 
         action_space_cls = type(real_env.action_space)
-        self.action_space = action_space_cls(low=new_action_low, high=new_action_low,
+        self.action_space = action_space_cls(low=new_action_low, high=new_action_high,
                                              dtype=real_env.action_space.dtype)
         obs_space_cls = type(real_env.observation_space)
-        self.observation_space = obs_space_cls(low=new_obs_low, high=new_obs_low,
+        self.observation_space = obs_space_cls(low=new_obs_low, high=new_obs_high,
                                                dtype=real_env.observation_space.dtype)
 
     def step(self, action):
