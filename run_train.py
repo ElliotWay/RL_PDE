@@ -103,6 +103,7 @@ def main():
     else:
         mode = "n/a"
     # TODO internal args? Shouldn't such args be external? IE replace env arg with mode+problem?
+    # Reason not to is that it would hide the fact that different modes are really different envs.
     internal_args = {'mode':mode}
 
     args = Namespace(**vars(main_args), **vars(env_args), **vars(model_args), **internal_args)
@@ -110,7 +111,7 @@ def main():
     if args.help_env or args.help_model:
         if args.help_env:
             env_arg_parser.print_help()
-        if args.help_algo:
+        if args.help_model:
             model_arg_parser.print_help()
         sys.exit(0)
 
