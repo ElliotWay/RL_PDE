@@ -43,6 +43,7 @@ class SACModel(BaselinesModel):
                        buffer_size=args.buffer_size,
                        learning_starts=args.learning_starts,
                        batch_size=args.batch_size,
+                       train_freq=args.train_freq,
                        verbose=1,
                        #TODO: should this be out of the actual log dir? I don't
                        #actually use tensorboard, so I'm not sure.
@@ -122,7 +123,9 @@ class SACModel(BaselinesModel):
             # Compute current learning_rate
             frac = min(1.0, 1.0 - step / self.total_timesteps)
             current_lr = sac.learning_rate(frac)
-            for grad_step in range(sac.gradient_steps):
+            # SAC trains for gradient_steps every train_freq steps.
+            # We need to train the equivalent number of times here.
+            for grad_step in range(int(sac.gradient_steps * (len(s) / sac.train_freq))):
                 # Break if the warmup phase is not over
                 # or if there are not enough samples in the replay buffer
                 if not sac.replay_buffer.can_sample(sac.batch_size) \

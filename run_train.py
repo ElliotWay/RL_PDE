@@ -82,10 +82,15 @@ def main():
             help="(some) Learning rate for actor network (pi).")
     model_arg_parser.add_argument('--critic-lr', '--critic_lr', type=float, default=1e-3,
             help="(some) Learning rate for critic network (Q).")
-    model_arg_parser.add_argument('--buffer-size', '--buffer_size', type=int, default=50000,
-            help="Size of the replay buffer.")
+    model_arg_parser.add_argument('--buffer-size', '--buffer_size', type=int, default=None,
+            help="Size of the replay buffer. The default is 10000 for std EMI, and 500000"
+            + " otherwise.")
     model_arg_parser.add_argument('--batch-size', '--batch_size', type=int, default=64,
             help="Size of batch samples from replay buffer.")
+    model_arg_parser.add_argument('--train-freq', '--train_freq', type=int, default=None,
+            help="(SAC) Ratio between the number of steps and the number of times to train."
+            + " The default for std is 1, i.e. train every step. The default otherwise"
+            + " is nx+1, i.e. train every time step.")
     #model_arg_parser.add_argument('--noise-type', '--noise_type', type=str, default='adaptive-param_0.2',
             #help="(DDPG) Noise added to actions.")
     model_arg_parser.add_argument('--learning-starts', type=int, default=None,
@@ -143,6 +148,12 @@ def main():
         eval_envs.append(build_env(args.env, accelshock_args, test=True))
 
     action_snapshot.declare_standard_envs(args)
+
+    # Fill in default args that depend on other args.
+    if args.buffer_size is None:
+        args.buffer_size = 10000 if args.emi == "std" else 500000
+    if args.train_freq is None:
+        args.train_freq = 1 if args.emi == "std" else env.action_space.shape[0]
 
     if args.model == 'sac':
         model_cls = SACModel
