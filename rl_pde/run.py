@@ -73,7 +73,7 @@ def train(env, eval_envs, emi, args):
 
     weno_agent = StandardWENOAgent(order=args.order, mode=args.mode)
 
-    ep_precision = int(np.ceil(np.log(args.total_episodes) / np.log(10)))
+    ep_precision = int(np.ceil(np.log(1+args.total_episodes) / np.log(10)))
     log_dir = logger.get_dir()
 
     training_rewards = []

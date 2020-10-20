@@ -160,8 +160,8 @@ class AbstractBurgersEnv(gym.Env):
         self.episode_length = episode_length
         self.reward_adjustment = reward_adjustment
 
-        self._step_precision = int(np.ceil(np.log(self.episode_length) / np.log(10)))
-        self._cell_index_precision = int(np.ceil(np.log(self.nx) / np.log(10)))
+        self._step_precision = int(np.ceil(np.log(1+self.episode_length) / np.log(10)))
+        self._cell_index_precision = int(np.ceil(np.log(1+self.nx) / np.log(10)))
 
         self.t = 0.0
         self.steps = 0
