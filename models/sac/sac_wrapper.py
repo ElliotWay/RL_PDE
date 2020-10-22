@@ -65,7 +65,9 @@ class SACModel(BaselinesModel):
 
     def predict(self, obs, deterministic=False):
         # Treat "deterministic" as a training flag.
+
         sac = self.sac
+        assert obs.shape[1:] = sac.observation_space.shape
 
         vec_obs = sac._is_vectorized_observation(obs, sac.observation_space)
         if not deterministic and (self.steps_seen < sac.learning_starts 
@@ -81,18 +83,22 @@ class SACModel(BaselinesModel):
                 unscaled_action = sac.env.action_space.sample()
 
         else:
+            obs = obs.reshape((-1,) + sac.observation_space.shape)
             action, _ = sac.predict(obs, deterministic=deterministic)
+            action = sac.policy_tf.step(obs, deterministic=deterministic)
+            action = action.reshape((-1,) + sac.action_space.shape)
 
             # Add noise to the action (improve exploration,
             # not needed in general)
             if not deterministic and sac.action_noise is not None:
-                if vec_obs:
-                    noise = np.array([sac.action_noise() for _ in range(len(obs))])
-                    action = np.clip(action + noise, -1, 1)
-                else:
-                    action = np.clip(action + sac.action_noise(), -1, 1)
+                noise = np.array([sac.action_noise() for _ in range(len(obs))])
+                action = np.clip(action + noise, -1, 1)
+
             # inferred actions need to be transformed to environment action_space before stepping
             unscaled_action = unscale_action(sac.action_space, action)
+
+            if not vec_obs:
+                unscaled_action = unscaled_action[0]
 
         return unscaled_action, None
 

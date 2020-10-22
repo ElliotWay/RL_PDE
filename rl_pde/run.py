@@ -129,6 +129,9 @@ def train(env, eval_envs, emi, args):
             training_l2 = []
             average_eval_reward = np.mean(eval_rewards)
             average_eval_l2 = np.mean(eval_l2)
+            other_stats = dict(train_info)
+            del other_stats['avg_reward']
+            del other_stats['timesteps']
             #TODO calculate KL?
             logger.logkv("episodes", ep)
             logger.logkv("avg_train_reward", average_train_reward)
@@ -137,6 +140,8 @@ def train(env, eval_envs, emi, args):
             logger.logkv("avg_eval_end_l2", average_eval_l2)
             logger.logkv('time_elapsed', int(time.time() - start_time))
             logger.logkv("total_timesteps", total_timesteps)
+            for key, value in other_stats.items():
+                logger.logkv(key, value)
             logger.dumpkvs()
 
             # Save model.
