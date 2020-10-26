@@ -97,19 +97,40 @@ class PolicyWrapper:
     Wraps a model, providing only the predict() interface.
 
     Controls state/action adjusment as necessary.
+
+    Use save_model_samples() before training to record observations and actions from the
+    perspective of the model, i.e. after adjustments to the observation but before adjustments to
+    the action.
+    Use get_model_samples() to get the collected obs, actions. This also turns off sample recording;
+    use save_model_samples() again if you are going to continue training.
     """
     def __init__(self, model, action_adjust=None, obs_adjust=None):
         self.model = model
         self.action_adjust = action_adjust
         self.obs_adjust = obs_adjust
 
+        self.save_samples = False
+        self.model_obs = []
+        self.model_action = []
+
+    def save_model_samples(self):
+        self.save_samples = True
+
+    def get_model_samples(self):
+        self.save_samples = False
+        return self.model_obs, self.model_action
+
     def predict(self, obs, *args, **kwargs):
         if self.obs_adjust is not None:
             adjusted_obs = self.obs_adjust(obs)
         else:
             adjusted_obs = obs
+        if self.save_samples:
+            self.model_obs.append(adjusted_obs)
 
         action, info = self.model.predict(adjusted_obs, *args, **kwargs)
+        if self.save_samples:
+            self.model_action.append(action)
 
         if self.action_adjust is not None:
             adjusted_action = self.action_adjust(action)
@@ -127,7 +148,14 @@ class StandardEMI(EMI):
         self.policy = PolicyWrapper(self._model, action_adjust, obs_adjust)
 
     def training_episode(self, env):
-        s, a, r, done, s2 = rollout(env, self.policy)
+        self.policy.save_model_samples()
+        _, _, r, done, raw_s2 = rollout(env, self.policy)
+
+        # Training requires the state/actions from the perspective of the model, not the
+        # perspective of the environment.
+        s, a = self.policy.get_model_samples()
+        last_state = self.policy.obs_adjust(raw_s2[-1])
+        s2 = s[1:] + [last_state]
 
         extra_info = self._model.train(s, a, r, s2, done)
 
@@ -229,7 +257,14 @@ class BatchEMI(EMI):
         self.policy = PolicyWrapper(unbatched_policy, action_adjust, obs_adjust)
 
     def training_episode(self, env):
-        state, action, reward, done, new_state = rollout(env, self.policy)
+        self.policy.save_model_samples()
+        _, _, reward, done, raw_new_state = rollout(env, self.policy)
+    
+        # Training requires the state/actions from the perspective of the model, not the
+        # perspective of the environment.
+        state, action = self.policy.get_model_samples()
+        last_state = self.policy.obs_adjust(raw_new_state[-1])
+        new_state = state[1:] + [last_state]
 
         # Convert batched trajectory into list of samples while preserving consecutive
         # trajectories. Also flatten states and actions.

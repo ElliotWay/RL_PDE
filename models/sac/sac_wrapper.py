@@ -67,7 +67,7 @@ class SACModel(BaselinesModel):
         # Treat "deterministic" as a training flag.
 
         sac = self.sac
-        assert obs.shape[1:] = sac.observation_space.shape
+        assert obs.shape[1:] == sac.observation_space.shape
 
         vec_obs = sac._is_vectorized_observation(obs, sac.observation_space)
         if not deterministic and (self.steps_seen < sac.learning_starts 
@@ -103,7 +103,6 @@ class SACModel(BaselinesModel):
         return unscaled_action, None
 
     def train(self, s, a, r, s2, done):
-        
         sac = self.sac
 
         self.steps_seen += len(s)
@@ -140,6 +139,7 @@ class SACModel(BaselinesModel):
                 self.n_updates += 1
                 # Update policy and critics (q functions)
                 mb_infos_vals.append(sac._train_step(step, writer, current_lr))
+
             # Update target network
             if step - self.prev_target_update > sac.target_update_interval:
                 self.prev_target_update = step
