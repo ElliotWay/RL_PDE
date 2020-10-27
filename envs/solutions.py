@@ -307,6 +307,7 @@ class MemoizedSolution(SolutionBase):
         self.time_index = -1
 
         self.dt = None
+        self.MAX_MEMOS = 100
 
     # Forward method calls that aren't available here to inner solution.
     # If you're not familiar, __getattr__ is only called when the
@@ -357,10 +358,15 @@ class MemoizedSolution(SolutionBase):
         # If time_index is -1, then this is the first call to reset,
         # and we don't have a potential solution to save.
         if not self.isSavedSolution and self.time_index != -1:
-            state_history = self.inner_solution.get_state_history().copy()
-            self.master_state_dict[self.params_str] = state_history
-            action_history = self.inner_solution.get_action_history().copy()
-            self.master_action_dict[self.params_str] = action_history
+            if len(self.master_state_dict) < self.MAX_MEMOS:
+                state_history = self.inner_solution.get_state_history().copy()
+                self.master_state_dict[self.params_str] = state_history
+                action_history = self.inner_solution.get_action_history().copy()
+                self.master_action_dict[self.params_str] = action_history
+            else:
+                print(("MemoizedSolution: maximum number ({}) of saved solutions reached!"
+                        + " Check that no parameters come from a continuous range.")
+                        .format(self.MAX_MEMOS))
 
         params_str = json.dumps(init_params, ensure_ascii=True, sort_keys=True)
         self.params_str = params_str
