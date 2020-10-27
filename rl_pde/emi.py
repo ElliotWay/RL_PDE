@@ -114,6 +114,8 @@ class PolicyWrapper:
         self.model_action = []
 
     def save_model_samples(self):
+        self.model_obs = []
+        self.model_action = []
         self.save_samples = True
 
     def get_model_samples(self):
