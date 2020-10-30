@@ -22,6 +22,8 @@ def declare_standard_envs(args):
     args = Namespace(**vars(args))
     # No point memoizing any these environments.
     args.memoize = False
+    # These environments are not analytical, though they could be.
+    args.analytical = False
 
     global standard_envs
 
