@@ -154,13 +154,14 @@ class AbstractBurgersEnv(gym.Env):
         else:
             self.weno_solution = None
 
+        self.previous_error = np.zeros_like(self.grid.get_full())
+
         self.fixed_step = fixed_step
         self.C = C  # CFL number
         self.eps = eps
         self.episode_length = episode_length
         self.reward_adjustment = reward_adjustment
         self.reward_mode = self.fill_default_reward_mode(reward_mode)
-        print("reward mode:", self.reward_mode)
 
         self._step_precision = int(np.ceil(np.log(1+self.episode_length) / np.log(10)))
         self._cell_index_precision = int(np.ceil(np.log(1+self.nx) / np.log(10)))
@@ -707,6 +708,11 @@ class AbstractBurgersEnv(gym.Env):
 
     def fill_default_reward_mode(self, reward_mode_arg):
         reward_mode = "" if reward_mode_arg is None else reward_mode_arg
+
+        if (not "full" in reward_mode
+                and not "change" in reward_mode):
+            reward_mode += "_full"
+
         if (not "adjacent" in reward_mode
                 and not "stencil" in reward_mode):
             reward_mode += "_adjacent"
@@ -729,6 +735,16 @@ class AbstractBurgersEnv(gym.Env):
 
         # Error-based reward.
         error = self.solution.get_full() - self.grid.get_full()
+
+        if "full" in self.reward_mode:
+            pass
+        # Use the difference in error as a reward instead of the full reward with the solution.
+        elif "change" in self.reward_mode:
+            previous_error = self.previous_error
+            self.previous_error = error
+            error = (error - previous_error)
+        else:
+            raise Exception("AbstractBurgersEnv: reward_mode problem")
 
         error = np.abs(error)
 
@@ -915,6 +931,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         self.t = 0.0
         self.steps = 0
+        self.previous_error = np.zeros_like(self.grid.get_full())
 
         return self.prep_state()
 
@@ -1164,6 +1181,7 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
 
         self.t = 0.0
         self.steps = 0
+        self.previous_error = np.zeros_like(self.grid.get_full())
 
         return self.prep_state()
 
@@ -1316,6 +1334,7 @@ class FluxBurgersEnv(AbstractBurgersEnv):
 
         self.t = 0.0
         self.steps = 0
+        self.previous_error = np.zeros_like(self.grid.get_full())
 
         return self.prep_state()
 
