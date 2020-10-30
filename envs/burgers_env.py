@@ -111,7 +111,7 @@ class AbstractBurgersEnv(gym.Env):
             fixed_step=0.0005, C=0.5,
             weno_order=3, eps=0.0, srca=0.0, episode_length=300,
             analytical=False, precise_weno_order=None, precise_scale=1,
-            reward_adjustment=1000,
+            reward_adjustment=1000, reward_mode=None,
             memoize=False,
             test=False):
 
@@ -159,6 +159,8 @@ class AbstractBurgersEnv(gym.Env):
         self.eps = eps
         self.episode_length = episode_length
         self.reward_adjustment = reward_adjustment
+        self.reward_mode = self.fill_default_reward_mode(reward_mode)
+        print("reward mode:", self.reward_mode)
 
         self._step_precision = int(np.ceil(np.log(1+self.episode_length) / np.log(10)))
         self._cell_index_precision = int(np.ceil(np.log(1+self.nx) / np.log(10)))
@@ -703,57 +705,84 @@ class AbstractBurgersEnv(gym.Env):
         plt.close(fig)
         return filename
 
+    def fill_default_reward_mode(self, reward_mode_arg):
+        reward_mode = "" if reward_mode_arg is None else reward_mode_arg
+        if (not "adjacent" in reward_mode
+                and not "stencil" in reward_mode):
+            reward_mode += "_adjacent"
+
+        if (not "avg" in reward_mode
+                and not "max" in reward_mode
+                and not "L2dist" in reward_mode):
+            reward_mode += "_avg"
+
+        if (not "nosquash" in reward_mode
+                and not "arctansquash" in reward_mode):
+            reward_mode += "_arctansquash"
+
+        return reward_mode
+    
     def calculate_reward(self):
         """ Optional reward calculation based on the error between grid and solution. """
 
         done = False
 
         # Error-based reward.
-        reward = 0.0
         error = self.solution.get_full() - self.grid.get_full()
 
-        # Clip tiny errors.
-        #error[error < 0.001] = 0
-        # Enhance extreme errors.
-        #error[error > 0.1] *= 10
-
-        # error = error[self.ng:-self.ng]
-        # These give reward based on error in cell right of interface, so missing reward for rightmost interface.
-        #reward = np.max(np.abs(error))
-        #reward = (error) ** 2
-
-        # Reward as average of error in two adjacent cells.
         error = np.abs(error)
-        reward = (error[self.ng-1:-self.ng] + error[self.ng:-(self.ng-1)]) / 2
 
-        # Reward as function of the errors in the stencil.
-        # max error across stencil
-        #stencil_indexes = create_stencil_indexes(
-                #stencil_size=(self.weno_order * 2 - 1),
-                #num_stencils=(self.nx + 1),
-                #offset=(self.ng - self.weno_order))
-        #error_stencils = error[stencil_indexes]
-        #reward = np.amax(np.abs(error_stencils), axis=-1)
-        #reward = np.sqrt(np.sum(error_stencils**2, axis=-1))
+        # Clip tiny errors and enhance extreme errors.
+        if "clip" in self.reward_mode:
+            error[error < 0.001] = 0
+            error[error > 0.1] *= 10
 
-        # Squash error.
-        #reward = -np.arctan(reward)
+        # Average of error in two adjacent cells.
+        if "adjacent" in self.reward_mode and "avg" in self.reward_mode:
+            combined_error = (error[self.ng-1:-self.ng] + error[self.ng:-(self.ng-1)]) / 2
+        # Combine error across the stencil.
+        elif "stencil" in self.reward_mode:
+            stencil_indexes = create_stencil_indexes(
+                    stencil_size=(self.weno_order * 2 - 1),
+                    num_stencils=(self.nx + 1),
+                    offset=(self.ng - self.weno_order))
+            error_stencils = error[stencil_indexes]
+            if "max" in self.reward_mode:
+                combined_error = np.amax(error_stencils, axis=-1)
+            elif "avg" in self.reward_mode:
+                combined_error = np.mean(error_stencils, axis=-1)
+            elif "L2dist" in self.reward_mode:
+                combined_error = np.sqrt(np.sum(error_stencils**2, axis=-1))
+            else:
+                raise Exception("AbstractBurgersEnv: reward_mode problem")
+        else:
+            raise Exception("AbstractBurgersEnv: reward_mode problem")
 
-        # The constant controls the relative importance of small rewards compared to large rewards.
-        # Towards infinity, all rewards (or penalties) are equally important.
-        # Towards 0, small rewards are increasingly less important.
-        # An alternative to arctan(C*x) with this property would be x^(1/C).
-        reward = -np.arctan(self.reward_adjustment * reward)
+        # We want to penalize error, not reward it.
+        reward = -combined_error
 
-        max_penalty = np.pi / 2
-        #reward = -error
-        #max_penalty = 1e7
+        # Squash reward.
+        if "nosquash" in self.reward_mode:
+            max_penalty = 1e7
+        elif "arctansquash" in self.reward_mode:
+            max_penalty = np.pi / 2
+            if "noadjust" in self.reward_mode:
+                reward = -np.arctan(reward)
+            else:
+                # The constant controls the relative importance of small rewards compared to large rewards.
+                # Towards infinity, all rewards (or penalties) are equally important.
+                # Towards 0, small rewards are increasingly less important.
+                # An alternative to arctan(C*x) with this property would be x^(1/C).
+                reward = -np.arctan(self.reward_adjustment * reward)
+        else:
+            raise Exception("AbstractBurgersEnv: reward_mode problem")
 
         # Conservation-based reward.
+        # Doesn't work (always 0), but a good idea. We'll try this again eventually.
         # reward = -np.log(np.sum(rhs[g.ilo:g.ihi+1]))
 
         # Give a penalty and end the episode if we're way off.
-        #if np.max(state) > 1e7 or np.isnan(np.max(state)): state possibly made more sense here
+        #if np.max(state) > 1e7 or np.isnan(np.max(state)): state possibly made more sense here?
         if np.max(error) > 1e7 or np.isnan(np.max(error)):
             reward -= max_penalty * (self.episode_length - self.steps)
             done = True
