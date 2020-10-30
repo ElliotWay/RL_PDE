@@ -729,7 +729,7 @@ class AbstractBurgersEnv(gym.Env):
         return reward_mode
     
     def calculate_reward(self):
-        """ Optional reward calculation based on the error between grid and solution. """
+        """ Reward calculation based on the error between grid and solution. """
 
         done = False
 
@@ -783,13 +783,13 @@ class AbstractBurgersEnv(gym.Env):
         elif "arctansquash" in self.reward_mode:
             max_penalty = np.pi / 2
             if "noadjust" in self.reward_mode:
-                reward = -np.arctan(reward)
+                reward = np.arctan(reward)
             else:
                 # The constant controls the relative importance of small rewards compared to large rewards.
                 # Towards infinity, all rewards (or penalties) are equally important.
                 # Towards 0, small rewards are increasingly less important.
                 # An alternative to arctan(C*x) with this property would be x^(1/C).
-                reward = -np.arctan(self.reward_adjustment * reward)
+                reward = np.arctan(self.reward_adjustment * reward)
         else:
             raise Exception("AbstractBurgersEnv: reward_mode problem")
 
