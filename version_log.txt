@@ -1,3 +1,14 @@
+V45, 0d1b326, 10/30/20
+---------------------------------
+Major Update: The framework has been restructured. The system now consists of an Env, a Model, and an EMI (environment model interface) that controls interactions between them.
+This removes the functionality written directly into the SAC code. New models can more easily be integrated into the framework.
+Old models can still be used with v1_run_train.py and v1_run_test.py.
+
+run_train.py now requires different arguments, namely --model (the default is sac) and --emi (the default is batch).
+The default is still to use SAC; this version connects directly to unmodifed Stable Baselines code.
+
+The size of the replay buffer has been increased. The default size for SAC was too small considering the huge number of samples we collect in a single episode.
+
 V44, ???, ???
 ---------------------------------
 Version number doesn't mean anything anymore now that we're keeping things on a private Github repo, thank goodness.
