@@ -20,6 +20,7 @@ from rl_pde.run import train
 from rl_pde.emi import BatchEMI, StandardEMI, TestEMI
 from envs import get_env_arg_parser, build_env
 from models import SACModel, TestModel
+from models.fixed import FixedOneStepModel
 from util import metadata, action_snapshot
 from util.misc import rescale, set_global_seed
 
@@ -159,6 +160,8 @@ def main():
         model_cls = SACModel
     elif args.model == 'test':
         model_cls = TestModel
+    elif args.model == "fixed-1step":
+        model_cls = FixedOneStepModel
     else:
         raise Exception("Unrecognized model type: \"{}\"".format(args.model))
 
