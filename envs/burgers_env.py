@@ -1100,6 +1100,40 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         return state, reward, done
 
+class DiscreteWENOBurgersEnv(WENOBurgersEnv):
+    def __init__(self, actions_per_dim, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        action_list = []
+        action_list.append(np.zeros(self.weno_order, dtype=np.int32))
+
+        for dim in range(self.weno_order-1):
+            new_actions = []
+            for old_action in action_list:
+                sum_so_far = np.sum(old_action)
+                for i in range(actions_per_dim - sum_so_far):
+                    new_action = old_action.copy()
+                    new_action[dim] = i
+                    new_actions.append(new_action)
+            action_list = new_actions
+            print(action_list)
+
+        for action in action_list:
+            remaining = actions_per_dim - 1 - np.sum(action)
+            action[-1] = remaining
+
+        self.action_list = [action / (actions_per_dim - 1) for action in action_list]
+
+        self.action_space = spaces.MultiDiscrete(
+                    [len(action_list)] * ((self.grid.real_length() + 1) * 2))
+
+        # The observation space is declared in WENOBurgersEnv.
+
+    def reset(self, action):
+        pass
+
+    def step(self, action):
+        pass
 
 class SplitFluxBurgersEnv(AbstractBurgersEnv):
 
