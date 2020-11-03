@@ -160,7 +160,7 @@ def main():
         model_cls = SACModel
     elif args.model == 'test':
         model_cls = TestModel
-    elif args.model == "fixed-1step":
+    elif args.model == "fixed-1step" or args.model == "fixed":
         model_cls = FixedOneStepModel
     else:
         raise Exception("Unrecognized model type: \"{}\"".format(args.model))
