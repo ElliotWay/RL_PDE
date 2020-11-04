@@ -82,7 +82,7 @@ class PreciseWENOSolution(SolutionBase):
         self.order = precise_order
         self.source = source
 
-        self.record_action = record_actions
+        self.record_actions = record_actions
         self.action_history = []
 
     def is_recording_actions(self):
@@ -328,6 +328,9 @@ class MemoizedSolution(SolutionBase):
     def is_recording_state(self):
         assert self.inner_solution.is_recording_state()
         return True
+
+    def is_recording_actions(self):
+        return self.inner_solution.is_recording_actions()
 
     def set_record_state(self, record_state):
         if not record_state:
