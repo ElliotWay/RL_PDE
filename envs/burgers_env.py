@@ -719,7 +719,7 @@ class AbstractBurgersEnv(gym.Env):
 
         if (not "avg" in reward_mode
                 and not "max" in reward_mode
-                and not "L2dist" in reward_mode):
+                and not "L2" in reward_mode):
             reward_mode += "_avg"
 
         if (not "nosquash" in reward_mode
@@ -733,7 +733,29 @@ class AbstractBurgersEnv(gym.Env):
 
         done = False
 
-        # Error-based reward.
+        # Use difference with WENO actions instead. (Might be useful for testing.)
+        if "wenodiff" in self.reward_mode:
+            last_action = self.action_history[-1].copy()
+            if self.weno_solution is not None:
+                assert self.weno_solution.is_recording_actions()
+                weno_action = self.weno_solution.get_action_history()[-1].copy()
+            else:
+                assert self.solution.is_recording_actions()
+                weno_action = self.solution.get_action_history()[-1].copy()
+            action_diff = weno_action - last_action
+            action_diff = action_diff.reshape((len(action_diff), -1))
+            if "L1" in self.reward_mode:
+                error = np.sum(np.abs(action_diff), axis=-1)
+            elif "L2" in self.reward_mode:
+                error = np.sqrt(np.sum(action_diff**2, axis=-1))
+            else:
+                raise Exception("AbstractBurgersEnv: reward_mode problem")
+
+            return -error, done
+
+
+
+        # Use error with the "true" solution as the reward.
         error = self.solution.get_full() - self.grid.get_full()
 
         if "full" in self.reward_mode:
@@ -767,7 +789,7 @@ class AbstractBurgersEnv(gym.Env):
                 combined_error = np.amax(error_stencils, axis=-1)
             elif "avg" in self.reward_mode:
                 combined_error = np.mean(error_stencils, axis=-1)
-            elif "L2dist" in self.reward_mode:
+            elif "L2" in self.reward_mode:
                 combined_error = np.sqrt(np.sum(error_stencils**2, axis=-1))
             else:
                 raise Exception("AbstractBurgersEnv: reward_mode problem")
@@ -847,7 +869,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         self.observation_space = spaces.Box(low=-1e7, high=1e7,
                                             shape=(self.grid.real_length() + 1, 2, 2 * self.weno_order - 1),
                                             dtype=np.float64)
-        
+       
         self.solution.set_record_state(True)
         if self.weno_solution is not None:
             self.weno_solution.set_record_state(True)
@@ -1041,14 +1063,15 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         if np.isnan(action).any():
             raise Exception("NaN detected in action.")
 
-        # Should probably find a way to pass this to agent if dt varies.
+        self.action_history.append(action)
+
+        # Find a way to pass this to agent if dt varies.
         dt = self.timestep()
 
         step = dt * self.rk_substep_weno(action)
 
         state, reward, done = self._finish_step(step, dt)
 
-        self.action_history.append(action)
         self.state_history.append(self.grid.get_full().copy())
 
         return state, reward, done, {}
