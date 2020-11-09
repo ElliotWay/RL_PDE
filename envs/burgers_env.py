@@ -1123,6 +1123,53 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         return state, reward, done
 
+class DiscreteWENOBurgersEnv(WENOBurgersEnv):
+    def __init__(self, actions_per_dim=2, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        action_list = []
+        action_list.append(np.zeros(self.weno_order, dtype=np.int32))
+
+        # Enumerate combinations of integers that add up to actions_per_dim.
+        # e.g. [0,1,2], [1,1,1], [3,0,0] for 3 actions per dimension.
+        for dim in range(self.weno_order-1):
+            new_actions = []
+            for old_action in action_list:
+                sum_so_far = np.sum(old_action)
+                for i in range(actions_per_dim - sum_so_far):
+                    new_action = old_action.copy()
+                    new_action[dim] = i
+                    new_actions.append(new_action)
+            action_list = new_actions
+
+        # Set the last action so that the action adds up to actions_per_dim.
+        for action in action_list:
+            remaining = actions_per_dim - 1 - np.sum(action)
+            action[-1] = remaining
+
+        # Normalize so the actions add up to 1 instead.
+        self.action_list = np.array(action_list) / (actions_per_dim - 1)
+
+        # At each interface, there are N^2 possible actions, because the + and -
+        # directions have the same N options available, and we should accept any
+        # combination.
+        self.action_space = spaces.MultiDiscrete(
+                    [len(action_list)**2] * ((self.grid.real_length() + 1)))
+
+        # The observation space is declared in WENOBurgersEnv.
+
+    def reset(self):
+        return super().reset()
+
+    def step(self, action):
+        plus_actions = action // len(self.action_list)
+        minus_actions = action % len(self.action_list)
+
+        combined_actions = np.vstack((plus_actions, minus_actions)).transpose()
+
+        selected_actions = self.action_list[combined_actions]
+
+        return super().step(selected_actions)
 
 class SplitFluxBurgersEnv(AbstractBurgersEnv):
 
