@@ -283,6 +283,10 @@ class PreciseWENOSolution(SolutionBase):
         self.precise_grid.reset(init_params)
         self.action_history = []
 
+    def set(self, real_values):
+        """ Force set the current grid. Will make the state/action history confusing. """
+        self.precise_grid.set(real_values)
+
 class MemoizedSolution(SolutionBase):
     """
     Decorator on solutions that memoizes their state to save computation.
@@ -292,6 +296,9 @@ class MemoizedSolution(SolutionBase):
     Wastes memory for solutions that change every episode.
     """
     def __init__(self, solution):
+        assert not isinstance(solution, OneStepSolution), ("Memoized solutions are not compatible"
+        + " with one-step solutions. (Memoized solutions stay the same whereas one-step solutions"
+        + " always change).")
         super().__init__(nx=solution.nx, ng=solution.ng, xmin=solution.xmin, xmax=solution.xmax,
                 # The inner solution should record the state history, not this wrapper.
                 record_state=False)
@@ -381,6 +388,37 @@ class MemoizedSolution(SolutionBase):
             self.inner_solution.reset(init_params)
             self.time_index = -1
 
+class OneStepSolution(SolutionBase):
+    def __init__(self, solution, current_grid):
+        assert not isinstance(solution, MemoizedSolution), ("Memoized solutions are not compatible"
+        + " with one-step solutions. (Memoized solutions stay the same whereas one-step solutions"
+        + " always change).")
+        assert not isinstance(solution, AnalyticalSolution), ("One-step solutions are not compatible"
+        + " with analytical solutions. (Analytical solutions stay the same whereas one-step solutions"
+        + " always change).")
+        super().__init__(nx=solution.nx, ng=solution.ng, xmin=solution.xmin, xmax=solution.xmax,
+                record_state=False)
+        self.inner_solution = solution
+        self.current_grid = current_grid
+
+    def _reset(self, params):
+        self.inner_solution.reset(params)
+
+    def _update(self, dt, time):
+        current_state = self.current_grid.get_real()
+        self.inner_solution.set(current_state)
+        self.inner_solution.update(dt, time)
+
+    def get_real(self):
+        return self.inner_solution.get_real()
+    def get_full(self):
+        return self.inner_solution.get_full()
+
+    # Forward method calls that aren't available here to inner solution.
+    # If you're not familiar, __getattr__ is only called when the
+    # attr wasn't found by usual means.
+    def __getattr__(self, attr):
+        return getattr(self.inner_solution, attr)
 
 available_analytical_solutions = ["smooth_sine", "smooth_rare", "accelshock"]
 #TODO Make this have a Grid1d, the reset methods have so much overlap.
@@ -472,3 +510,6 @@ class AnalyticalSolution(SolutionBase):
         return self.u
     def get_real(self):
         return self.u[self.ng:-self.ng]
+
+    def set(self, real_values):
+        raise Exception("An analytical solution cannot be set.")

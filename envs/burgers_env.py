@@ -11,7 +11,8 @@ from stable_baselines import logger
 
 from envs.grid import Grid1d
 from envs.source import RandomSource
-from envs.solutions import PreciseWENOSolution, AnalyticalSolution, MemoizedSolution
+from envs.solutions import PreciseWENOSolution, AnalyticalSolution
+from envs.solutions import MemoizedSolution, OneStepSolution
 import envs.weno_coefficients as weno_coefficients
 from util.softmax_box import SoftmaxBox
 from util.misc import create_stencil_indexes
@@ -116,6 +117,7 @@ class AbstractBurgersEnv(gym.Env):
             test=False):
 
         self.test = test
+        self.reward_mode = self.fill_default_reward_mode(reward_mode)
 
         self.ng = weno_order+1
         self.nx = nx
@@ -145,12 +147,17 @@ class AbstractBurgersEnv(gym.Env):
         if memoize:
             self.solution = MemoizedSolution(self.solution)
 
-        # Disable this for now. The original idea was that you could compare both WENO and the learned RL solution to the analytical solution.
-        if False: #self.analytical or self.precise_weno_order != self.weno_order or self.precise_nx != self.nx:
+        if "one-step" in self.reward_mode:
+            self.solution = OneStepSolution(self.solution, self.grid)
+
+        show_separate_weno = False #self.analytical or self.precise_weno_order != self.weno_order or self.precise_nx != self.nx:
+        if show_separate_weno:
             self.weno_solution = PreciseWENOSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng,
                                                      precise_scale=1, precise_order=weno_order,
                                                      boundary=boundary, init_type=init_type, flux_function=flux,
                                                      source=self.source, eps=eps)
+            if memoize:
+                self.weno_solution = MemoizedSolution(self.weno_solution)
         else:
             self.weno_solution = None
 
@@ -161,7 +168,6 @@ class AbstractBurgersEnv(gym.Env):
         self.eps = eps
         self.episode_length = episode_length
         self.reward_adjustment = reward_adjustment
-        self.reward_mode = self.fill_default_reward_mode(reward_mode)
 
         self._step_precision = int(np.ceil(np.log(1+self.episode_length) / np.log(10)))
         self._cell_index_precision = int(np.ceil(np.log(1+self.nx) / np.log(10)))
@@ -1085,6 +1091,11 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         Returns state, reward, done.
         """
+        # Update solution first, in case it depends on our current state.
+        self.solution.update(dt, self.t)
+
+        if self.weno_solution is not None:
+            self.weno_solution.update(dt, self.t)
 
         if self.eps > 0.0:
             R = self.eps * self.lap()
@@ -1109,12 +1120,8 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         else:
             done = False
 
-        self.solution.update(dt, self.t)
         reward, force_done = self.calculate_reward()
         done = done or force_done
-
-        if self.weno_solution is not None:
-            self.weno_solution.update(dt, self.t)
 
         if np.isnan(state).any():
             raise Exception("NaN detected in state.")
@@ -1314,6 +1321,11 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
             self.source.update(dt, self.t + dt)
             rhs += self.source.get_real()
 
+        self.solution.update(dt, self.t)
+
+        if self.weno_solution is not None:
+            self.weno_solution.update(dt, self.t)
+
         u_copy += dt * rhs
         self.grid.set(u_copy)
 
@@ -1325,12 +1337,8 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
         if self.steps >= self.episode_length:
             done = True
 
-        self.solution.update(dt, self.t)
         reward, force_done = self.calculate_reward()
         done = done or force_done
-
-        if self.weno_solution is not None:
-            self.weno_solution.update(dt, self.t)
 
         if np.isnan(state).any():
             raise Exception("NaN detected in state.")
@@ -1458,6 +1466,10 @@ class FluxBurgersEnv(AbstractBurgersEnv):
             self.source.update(dt, self.t + dt)
             rhs += self.source.get_real()
 
+        self.solution.update(dt, self.t)
+        if self.weno_solution is not None:
+            self.weno_solution.update(dt, self.t)
+
         u_copy += dt * rhs
         self.grid.set(u_copy)
 
@@ -1471,12 +1483,9 @@ class FluxBurgersEnv(AbstractBurgersEnv):
         if self.steps >= self.episode_length:
             done = True
 
-        self.solution.update(dt, self.t)
         reward, force_done = self.calculate_reward()
         done = done or force_done
 
-        if self.weno_solution is not None:
-            self.weno_solution.update(dt, self.t)
 
         if np.isnan(state).any():
             raise Exception("NaN detected in state.")
