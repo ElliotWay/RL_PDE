@@ -144,13 +144,18 @@ class AbstractBurgersEnv(gym.Env):
                     precise_scale=precise_scale, precise_order=precise_weno_order,
                     boundary=boundary, init_type=init_type, flux_function=flux, source=self.source,
                     eps=eps)
-        if memoize:
-            self.solution = MemoizedSolution(self.solution)
 
         if "one-step" in self.reward_mode:
             self.solution = OneStepSolution(self.solution, self.grid)
+            if memoize:
+                print("Note: can't memoize solution when using one-step reward.")
+        elif memoize:
+            self.solution = MemoizedSolution(self.solution)
 
-        show_separate_weno = False #self.analytical or self.precise_weno_order != self.weno_order or self.precise_nx != self.nx:
+        show_separate_weno = (self.analytical
+                              or self.precise_weno_order != self.weno_order
+                              or self.precise_nx != self.nx
+                              or isinstance(self.solution, OneStepSolution))
         if show_separate_weno:
             self.weno_solution = PreciseWENOSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng,
                                                      precise_scale=1, precise_order=weno_order,
@@ -517,23 +522,31 @@ class AbstractBurgersEnv(gym.Env):
         start_rgb = (0.9, 0.9, 0.9) #light grey
 
         # Plot the true solution first so it appears under the RL solution.
-        if not plot_error and not no_true and self.solution.is_recording_state():
-            solution_state_history = np.array(self.solution.get_state_history())[:, self.ng:-self.ng]
-
-            assert len(state_history) == len(solution_state_history), "History mismatch."
-            
-            if full_true:
-                true_rgb = matplotlib.colors.to_rgb(self.true_color)
-                true_color_sequence = color_sequence(start_rgb, true_rgb, num_states)
-                sliced_solution_history = solution_state_history[slice_indexes]
-                
-                for state_values, color in zip(sliced_solution_history[1:-1], true_color_sequence[1:-1]):
-                    plt.plot(x_values, state_values, ls='-', linewidth=1, color=color)
-                true = plt.plot(x_values, solution_state_history[-1],
-                                ls='-', linewidth=1, color=true_rgb)
+        if not plot_error and not no_true:
+            if not isinstance(self.solution, OneStepSolution) and self.solution.is_recording_state():
+                solution_state_history = np.array(self.solution.get_state_history())[:, self.ng:-self.ng]
+            elif self.weno_solution is not None and self.weno_solution.is_recording_state():
+                solution_state_history = np.array(self.weno_solution.get_state_history())[:, self.ng:-self.ng]
             else:
-                true = plt.plot(x_values, solution_state_history[-1], 
-                                ls='-', linewidth=4, color=self.true_color)
+                solution_state_history = None
+
+            if solution_state_history is not None:
+                assert len(state_history) == len(solution_state_history), "History mismatch."
+                
+                if full_true:
+                    true_rgb = matplotlib.colors.to_rgb(self.true_color)
+                    true_color_sequence = color_sequence(start_rgb, true_rgb, num_states)
+                    sliced_solution_history = solution_state_history[slice_indexes]
+                    
+                    for state_values, color in zip(sliced_solution_history[1:-1], true_color_sequence[1:-1]):
+                        plt.plot(x_values, state_values, ls='-', linewidth=1, color=color)
+                    true = plt.plot(x_values, solution_state_history[-1],
+                                    ls='-', linewidth=1, color=true_rgb)
+                else:
+                    true = plt.plot(x_values, solution_state_history[-1], 
+                                    ls='-', linewidth=4, color=self.true_color)
+            else:
+                true = None
         else:
             true = None
 
