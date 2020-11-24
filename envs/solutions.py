@@ -405,7 +405,7 @@ class OneStepSolution(SolutionBase):
         self.inner_solution.reset(params)
 
     def _update(self, dt, time):
-        current_state = self.current_grid.get_real()
+        current_state = self.current_grid.get_real().copy()
         self.inner_solution.set(current_state)
         self.inner_solution.update(dt, time)
 
@@ -413,6 +413,9 @@ class OneStepSolution(SolutionBase):
         return self.inner_solution.get_real()
     def get_full(self):
         return self.inner_solution.get_full()
+
+    def is_recording_actions(self):
+        return self.inner_solution.is_recording_actions()
 
     # Forward method calls that aren't available here to inner solution.
     # If you're not familiar, __getattr__ is only called when the

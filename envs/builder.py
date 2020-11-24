@@ -59,6 +59,10 @@ def get_env_arg_parser():
                         + " schedule, and sample initial conditions, and in run_test.py. See --no-memo.")
     parser.add_argument('--no-memo', dest='memoize', action='store_false', default=None,
                         help="Do not use a memoized solution.")
+    parser.add_argument('--follow-solution', default=False, action='store_true',
+                        help="Force the environment to follow the solution. This means that"
+                        + " actions produce the corresponding reward, but not the "
+                        + " corresponding change in state.")
 
     return parser
 
@@ -93,7 +97,7 @@ def build_env(env_name, args, test=False):
                 }
 
     if env_name == "weno_burgers":
-        env = WENOBurgersEnv(**kwargs)
+        env = WENOBurgersEnv(follow_solution=args.follow_solution, **kwargs)
     elif env_name == "split_flux_burgers":
         env = SplitFluxBurgersEnv(**kwargs)
     elif env_name == "flux_burgers":

@@ -524,6 +524,7 @@ class AbstractBurgersEnv(gym.Env):
         # Plot the true solution first so it appears under the RL solution.
         if not plot_error and not no_true:
             if not isinstance(self.solution, OneStepSolution) and self.solution.is_recording_state():
+            #if isinstance(self.solution, OneStepSolution):
                 solution_state_history = np.array(self.solution.get_state_history())[:, self.ng:-self.ng]
             elif self.weno_solution is not None and self.weno_solution.is_recording_state():
                 solution_state_history = np.array(self.weno_solution.get_state_history())[:, self.ng:-self.ng]
@@ -755,12 +756,14 @@ class AbstractBurgersEnv(gym.Env):
         # Use difference with WENO actions instead. (Might be useful for testing.)
         if "wenodiff" in self.reward_mode:
             last_action = self.action_history[-1].copy()
-            if self.weno_solution is not None:
+
+            if self.solution.is_recording_actions():
+                weno_action = self.solution.get_action_history()[-1].copy()
+            elif self.weno_solution is not None:
                 assert self.weno_solution.is_recording_actions()
                 weno_action = self.weno_solution.get_action_history()[-1].copy()
             else:
-                assert self.solution.is_recording_actions()
-                weno_action = self.solution.get_action_history()[-1].copy()
+                raise Exception("AbstractBurgersEnv: reward_mode problem")
             action_diff = weno_action - last_action
             action_diff = action_diff.reshape((len(action_diff), -1))
             if "L1" in self.reward_mode:
@@ -844,6 +847,8 @@ class AbstractBurgersEnv(gym.Env):
             reward -= max_penalty * (self.episode_length - self.steps)
             done = True
 
+        #print("reward:", reward)
+
         return reward, done
 
     def close(self):
@@ -879,8 +884,10 @@ class AbstractBurgersEnv(gym.Env):
 
 class WENOBurgersEnv(AbstractBurgersEnv):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, follow_solution=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        self.follow_solution = follow_solution
 
         self.action_space = SoftmaxBox(low=0.0, high=1.0, 
                                        shape=(self.grid.real_length() + 1, 2, self.weno_order),
@@ -1125,8 +1132,6 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         self.t += dt
 
-        state = self.prep_state()
-
         self.steps += 1
         if self.steps >= self.episode_length:
             done = True
@@ -1135,6 +1140,13 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         reward, force_done = self.calculate_reward()
         done = done or force_done
+
+        # Set the state to the solution after calculating
+        # the reward. Useful for testing?
+        if self.follow_solution:
+            self.grid.set(self.solution.get_real())
+
+        state = self.prep_state()
 
         if np.isnan(state).any():
             raise Exception("NaN detected in state.")
