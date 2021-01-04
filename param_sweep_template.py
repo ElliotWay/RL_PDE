@@ -98,9 +98,11 @@ def build_command_list(index, arg_list, log_dir):
                 extra = None
 
             new_arg_list = list(arg_list)
-            new_arg_list += [keyword, str(value)]
+            # shlex.split is like the usual .split method on string except
+            # it does not split on spaces contained inside quotes.
+            new_arg_list += [keyword]
+            new_arg_list += shlex.split(str(value))
             if extra is not None:
-                # shlex takes care of quoted strings with spaces.
                 new_arg_list += shlex.split(extra)
             ####################################################################
             # Some arguments, namely log_dir, need more careful manipulation.  #
@@ -153,7 +155,7 @@ def main():
     build_command_list(0, "", base_log_dir)
 
     command_prefix = base_command
-    command_prefix = command_prefix.split()
+    command_prefix = shlex.split(command_prefix)
 
     # Dictionaries instead of lists because procs should have the same index
     # when other procs finish and are removed.
@@ -247,6 +249,10 @@ def main():
 
                 arg_list = arg_matrix[commands_started]
                 full_command = command_prefix + arg_list
+                #TODO: Some arguments in the full command have spaces.
+                #These are being passed correctly to Popen, but will
+                #look wrong here.
+                #Add quotes to arguments with spaces.
                 command_string = " ".join(full_command)
                 print("{}{}: {}Starting new process ({}/{}):{}".format(
                     colors.SEQUENCE[new_index], new_index,
