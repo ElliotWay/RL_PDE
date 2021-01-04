@@ -389,6 +389,15 @@ class MemoizedSolution(SolutionBase):
             self.time_index = -1
 
 class OneStepSolution(SolutionBase):
+    """
+    A OneStepSolution is only one step different from a different grid.
+
+    It keeps a reference to another grid, then, when updating first sets the
+    grid to the same state as that other grid.
+
+    Using a solution like this can be used for a more reliable comparison,
+    as there is only one step's worth of different actions.
+    """
     def __init__(self, solution, current_grid):
         assert not isinstance(solution, MemoizedSolution), ("Memoized solutions are not compatible"
         + " with one-step solutions. (Memoized solutions stay the same whereas one-step solutions"

@@ -730,7 +730,8 @@ class AbstractBurgersEnv(gym.Env):
         reward_mode = "" if reward_mode_arg is None else reward_mode_arg
 
         if (not "full" in reward_mode
-                and not "change" in reward_mode):
+                and not "change" in reward_mode
+                and not "one-step" in reward_mode):
             reward_mode += "_full"
 
         if (not "adjacent" in reward_mode

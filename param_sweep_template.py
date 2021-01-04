@@ -88,9 +88,13 @@ def build_command_list(index, arg_list, log_dir):
         keyword, value_list = values_table[index]
         stripped_keyword = keyword.lstrip("-")
         for value in value_list:
-            try:
+            #try:
+                #value, extra = value
+            #except (TypeError, ValueError):
+                #extra = None
+            if isinstance(value, tuple):
                 value, extra = value
-            except (TypeError, ValueError):
+            else:
                 extra = None
 
             new_arg_list = list(arg_list)
