@@ -101,20 +101,23 @@ def main():
     set_global_seed(args.seed)
 
     env = build_env(args.env, args)
+
+    eval_env_args = Namespace(**vars(args))
+    eval_env_args.follow_solution = False
     if args.eval_env is None:
-        eval_envs = [build_env(args.env, args, test=True)]
+        eval_envs = [build_env(args.env, eval_env_args, test=True)]
     else:
         assert(args.eval_env == "custom")
         eval_envs = []
-        smooth_sine_args = Namespace(**vars(args))
+        smooth_sine_args = Namespace(**vars(eval_env_args))
         smooth_sine_args.init_type = "smooth_sine"
         smooth_sine_args.ep_length = 500
         eval_envs.append(build_env(args.env, smooth_sine_args, test=True))
-        smooth_rare_args = Namespace(**vars(args))
+        smooth_rare_args = Namespace(**vars(eval_env_args))
         smooth_rare_args.init_type = "smooth_rare"
         smooth_rare_args.ep_length = 500
         eval_envs.append(build_env(args.env, smooth_rare_args, test=True))
-        accelshock_args = Namespace(**vars(args))
+        accelshock_args = Namespace(**vars(eval_env_args))
         accelshock_args.init_type = "accelshock"
         accelshock_args.ep_length = 500
         eval_envs.append(build_env(args.env, accelshock_args, test=True))

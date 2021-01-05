@@ -62,7 +62,7 @@ def get_env_arg_parser():
     parser.add_argument('--follow-solution', default=False, action='store_true',
                         help="Force the environment to follow the solution. This means that"
                         + " actions produce the corresponding reward, but not the "
-                        + " corresponding change in state.")
+                        + " corresponding change in state. Only used for training environment.")
 
     return parser
 
