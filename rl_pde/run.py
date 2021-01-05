@@ -8,6 +8,7 @@ from stable_baselines import logger
 
 from agents import StandardWENOAgent
 from util import action_snapshot
+from util.misc import human_readable_time_delta
 
 def rollout(env, policy, num_rollouts=1, rk4=False, deterministic=False, every_step_hook=None):
     """
@@ -177,8 +178,8 @@ def train(env, eval_envs, emi, args):
     #endfor episodes
 
     print("Training complete!")
-    print("Training took {:0.1f} seconds, and {} timesteps.".format(
-        (time.time() - start_time), total_timesteps))
+    print("Training took {}, and {} timesteps.".format(
+        human_readable_time_delta(time.time() - start_time), total_timesteps))
 
     # Rename best models based on their final rank.
     print("Best models:")

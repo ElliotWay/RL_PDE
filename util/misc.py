@@ -113,4 +113,38 @@ def deserialize_ndarray(serialized_array):
     array = np.load(byte_file)
     return array
 
+def human_readable_time_delta(time_delta, sig_units=0):
+    """
+    Convert a difference in time from seconds as a floating point to a
+    human-readable string, given as a decimal of the most significant unit
+    of time. So 4200 will be converted to "1.10hr."
 
+    Useful for when the amount of time has a wide range of magnitudes.
+    Inspired by the -h flag for du (the Unix disk usage utility).
+    """
+    seconds = time_delta
+    if seconds < 1:
+        millis = seconds * 1000
+        return "{:.2f}ms".format(millis)
+
+    minutes = seconds / 60
+    if minutes < 1:
+        return "{:.2f}s".format(seconds)
+
+    hours = minutes / 60
+    if hours < 1:
+        return "{:.2f}min".format(minutes)
+
+    days = hours / 24
+    if days < 1:
+        return "{:.2f}hr".format(hours)
+
+    weeks = days / 7
+    if weeks < 1:
+        return "{:.2f}d".format(days)
+
+    years = days / 365
+    if years < 1:
+        return "{:.2f}wk".format(weeks)
+
+    return "{:.2f}yr".format(years)

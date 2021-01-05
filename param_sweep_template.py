@@ -13,6 +13,7 @@ import time
 import argparse
 
 from util.misc import get_git_commit_id, is_clean_git_repo
+from util.misc import human_readable_time_delta
 
 # Sometimes this enables colors on Windows terminals.
 os.system("")
@@ -79,6 +80,7 @@ SLEEP_TIME = 0.25 # seconds
 
 ON_POSIX = 'posix' in sys.builtin_module_names
 
+num_errors = 0
 arg_matrix = []
 def build_command_list(index, arg_list, log_dir):
     if index == len(values_table):
@@ -137,6 +139,7 @@ def check_procs(procs, queues):
             if ret_val != 0:
                 print("{}{}: {}Finished with nonzero return value: {}.{}".format(
                     colors.SEQUENCE[index], index, colors.FAIL, ret_val, colors.ENDC))
+                num_errors += 1
             del procs[index]
             del queues[index]
 
@@ -186,6 +189,8 @@ def main():
     except:
         # We're on a Unix machine that doesn't have SIGBREAK, that's fine.
         pass
+
+    start_time = time.time()
 
     try:
         commands_started = 0
@@ -299,7 +304,17 @@ def main():
                 time.sleep(SLEEP_TIME)
                 check_procs(running_procs, output_queues)
 
-
+    print("{}Done! {}/{} processes finished in {}.{}".format(
+        colors.OKGREEN, commands_started, len(arg_matrix),
+        human_readable_time_delta(time.time() - start_time),
+        colors.ENDC))
+    if commands_started < len(arg_matrix):
+        print("{}{}/{} processes were never started.{}".format(
+            colors.WARNING, len(arg_matrix) - commands_started, len(arg_matrix),
+            colors.ENDC))
+    if num_errors > 0:
+        print("{}{}/{} processes had nonzero return values.".format(
+            colors.FAIL, num_errors, len(arg_matrix), colors.ENDC))
 
 
 if __name__ == "__main__":
