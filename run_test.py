@@ -19,6 +19,7 @@ from rl_pde.run import rollout
 from rl_pde.emi import BatchEMI, StandardEMI, TestEMI
 from envs import get_env_arg_parser, build_env
 from agents import StandardWENOAgent, StationaryAgent, EqualAgent, MiddleAgent, LeftAgent, RightAgent, RandomAgent
+from models import get_model_arg_parser
 from models import SACModel, TestModel
 from util import metadata
 from util.misc import set_global_seed
@@ -113,7 +114,9 @@ def do_test(env, agent, args):
 
     total_reward = np.sum(rewards, axis=0)
     print("Reward: mean = {}, min = {} @ {}, max = {} @ {}".format(
-        np.mean(total_reward), np.amin(total_reward), np.argmin(total_reward), np.amax(total_reward), np.argmax(total_reward)))
+            np.mean(total_reward),
+            np.amin(total_reward), np.argmin(total_reward),
+            np.amax(total_reward), np.argmax(total_reward)))
 
     error = np.sqrt(env.grid.dx * np.sum(np.square(env.grid.get_real() - env.solution.get_real())))
     print("Final error with solution was {}.".format(env.compute_l2_error()))
@@ -129,14 +132,16 @@ def main():
                         help="Do not test and show the environment parameters not listed here.")
     parser.add_argument('--agent', '-a', type=str, default="default",
                         help="Agent to test. Either a file or a string for a standard agent."
+                        + " Parameters are loaded from 'meta.txt' in the same directory as the"
+                        + " agent file, but can be overriden."
                         + " 'default' uses standard weno coefficients. 'none' forces no agent and"
                         + " only plots the true solution (ONLY IMPLEMENTED FOR EVOLUTION PLOTS).")
-    parser.add_argument('--model', type=str, default='sac',
-                        help="Type of model to train. Options are 'sac' and nothing else.")
     parser.add_argument('--env', type=str, default="weno_burgers",
                         help="Name of the environment in which to deploy the agent.")
+    parser.add_argument('--model', type=str, default='sac',
+                        help="Type of model to be loaded. (Overrides the meta file.)")
     parser.add_argument('--emi', type=str, default='batch',
-                        help="Environment-model interface. Options are 'batch' and 'std'.")
+                        help="Environment-model interface. (Overrides the meta file.)")
     parser.add_argument('--log-dir', type=str, default=None,
                         help="Directory to place log file and other results. Default is test/env/agent/timestamp.")
     parser.add_argument('--ep-length', type=int, default=500,
@@ -166,10 +171,16 @@ def main():
 
     main_args, rest = parser.parse_known_args()
 
-    # TODO: add system to automatically read parameters from model's meta file.
-
     env_arg_parser = get_env_arg_parser()
     env_args, rest = env_arg_parser.parse_known_args(rest)
+
+    # run_test.py has model arguments that can be overidden, if desired,
+    # but are intended to be loaded from a meta file.
+    model_arg_parser = get_model_arg_parser()
+    model_args, rest = model_arg_parser.parse_known_args(rest)
+
+    internal_args = {}
+    internal_args['total_episodes'] = 1000
 
     if main_args.env.startswith("weno"):
         mode = "weno"
@@ -179,9 +190,9 @@ def main():
         mode = "flux"
     else:
         mode = "n/a"
-    internal_args = {'mode':mode}
+    internal_args['mode'] = mode
 
-    args = Namespace(**vars(main_args), **vars(env_args), **internal_args)
+    args = Namespace(**vars(main_args), **vars(env_args), **vars(model_args), **internal_args)
 
     if len(rest) > 0:
         print("Unrecognized arguments: " + " ".join(rest))
@@ -206,32 +217,6 @@ def main():
             args.nx = nx
             envs.append(build_env(args.env, args, test=True))
 
-    # Set up logging.
-    start_time = time.localtime()
-    if args.log_dir is None:
-        timestamp = time.strftime("%y%m%d_%H%M%S")
-        default_log_dir = os.path.join("test", args.env, args.agent, timestamp)
-        args.log_dir = default_log_dir
-        print("Using default log directory: {}".format(default_log_dir))
-    try:
-        os.makedirs(args.log_dir)
-    except FileExistsError:
-        if args.n:
-            raise Exception("Logging directory \"{}\" already exists!.".format(args.log_dir))
-        elif args.y:
-            print("\"{}\" already exists, overwriting...".format(args.log_dir))
-        else:
-            _ignore = input(("\"{}\" already exists! Hit <Enter> to overwrite and"
-                             + " continue, Ctrl-C to stop.").format(args.log_dir))
-        shutil.rmtree(args.log_dir)
-        os.makedirs(args.log_dir)
-
-    metadata.create_meta_file(args.log_dir, args)
-
-    # Put stable-baselines logs in same directory.
-    logger.configure(folder=args.log_dir, format_strs=['stdout'])  # ,tensorboard'
-    logger.set_level(logger.DEBUG)  # logger.INFO
-
     # TODO: create standard agent lookup function in agents.py.
     if args.agent == "default" or args.agent == "none":
         agent = StandardWENOAgent(order=args.order, mode=mode)
@@ -248,11 +233,18 @@ def main():
     elif args.agent == "random":
         agent = RandomAgent(order=args.order, mode=mode)
     else:
-        # Reconstruct EMI to load model file.
-        # TODO: repeated code in train and test is bad. Options:
-        # - put things in common separate util file
-        # - allow loading from meta file for these parameters, no initialization here
-        # - probably some combination
+        # Load model params from meta file.
+        # TODO: find more reliable way of doing this so
+        # we are more robust to argument changes
+        model_file = os.path.abspath(args.agent)
+        model_directory = os.path.dirname(model_file)
+        meta_file = os.path.join(model_directory, "meta.txt")
+        if not os.path.isfile(meta_file):
+            raise Exception("Meta file \"{}\" for model not found.")
+
+        metadata.load_to_namespace(meta_file, args)
+
+        # TODO: repeated code in train and test is bad. Move stuff into util file.
         def softmax(action):
             exp_actions = np.exp(action)
             return exp_actions / np.sum(exp_actions, axis=-1)[..., None]
@@ -292,6 +284,32 @@ def main():
         emi.load_model(args.agent)
         agent = emi.get_policy()
  
+    # Set up logging.
+    start_time = time.localtime()
+    if args.log_dir is None:
+        timestamp = time.strftime("%y%m%d_%H%M%S")
+        default_log_dir = os.path.join("test", args.env, args.agent, timestamp)
+        args.log_dir = default_log_dir
+        print("Using default log directory: {}".format(default_log_dir))
+    try:
+        os.makedirs(args.log_dir)
+    except FileExistsError:
+        if args.n:
+            raise Exception("Logging directory \"{}\" already exists!.".format(args.log_dir))
+        elif args.y:
+            print("\"{}\" already exists, overwriting...".format(args.log_dir))
+        else:
+            _ignore = input(("\"{}\" already exists! Hit <Enter> to overwrite and"
+                             + " continue, Ctrl-C to stop.").format(args.log_dir))
+        shutil.rmtree(args.log_dir)
+        os.makedirs(args.log_dir)
+
+    metadata.create_meta_file(args.log_dir, args)
+
+    # Put stable-baselines logs in same directory.
+    logger.configure(folder=args.log_dir, format_strs=['stdout'])  # ,tensorboard'
+    logger.set_level(logger.DEBUG)  # logger.INFO
+
     # Create symlink for convenience. (Do this after loading the agent in case we are loading from last.)
     try:
         log_link_name = "last"

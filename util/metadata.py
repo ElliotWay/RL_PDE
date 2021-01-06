@@ -137,8 +137,8 @@ def destring_value(string):
     except Exception:
         return string
 
-def load_to_namespace(meta_filename, args_ns, arg_list=None):
-    " arg_list defaults to the command line arguments. Doesn't work if dest arg was used for parser. Assumes bools are default-false flags. "
+def load_to_namespace(meta_filename, args_ns, override_args=None):
+    " override_args defaults to the command line arguments. Doesn't work if dest arg was used for parser. Assumes bools are default-false flags. "
     # TODO find a way to get around some of this stuff? Might not be possible.
 
     print("M Loading from meta file: {}".format(meta_filename))
@@ -159,7 +159,8 @@ def load_to_namespace(meta_filename, args_ns, arg_list=None):
         else:
             no_default_parser.add_argument(*arg_names)
 
-    explicit_args, other = no_default_parser.parse_known_args(arg_list)
+    # Defaults to argv if override_args is None.
+    explicit_args, other = no_default_parser.parse_known_args(override_args)
     if len(other) > 0:
         raise Exception("Loading meta file had issues. Couldn't understand these arguments: {}"
                 .format(" ".join(other)))

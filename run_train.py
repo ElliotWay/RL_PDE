@@ -19,6 +19,7 @@ from stable_baselines import logger
 from rl_pde.run import train
 from rl_pde.emi import BatchEMI, StandardEMI, TestEMI
 from envs import get_env_arg_parser, build_env
+from models import get_model_arg_parser
 from models import SACModel, TestModel
 from models.fixed import FixedOneStepModel
 from util import metadata, action_snapshot
@@ -68,36 +69,7 @@ def main():
     env_arg_parser = get_env_arg_parser()
     env_args, rest = env_arg_parser.parse_known_args(rest)
 
-    model_arg_parser = argparse.ArgumentParser(
-            add_help=False,
-            formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    model_arg_parser.add_argument('--layers', type=int, nargs='+', default=[32, 32],
-            help="Size of network layers.")
-    model_arg_parser.add_argument('--layer-norm', '--layer_norm', default=False, action='store_true',
-            help="Use layer normalization between network layers.")
-    model_arg_parser.add_argument('--gamma', type=float, default=0.0,
-            help="Discount factor on future rewards.")
-    model_arg_parser.add_argument('--learning-rate', '--learning_rate', '--lr', type=float, default=3e-4,
-            help="(some) Learning rate if the model uses only one for all networks.")
-    model_arg_parser.add_argument('--actor-lr', '--actor_lr', type=float, default=1e-4,
-            help="(some) Learning rate for actor network (pi).")
-    model_arg_parser.add_argument('--critic-lr', '--critic_lr', type=float, default=1e-3,
-            help="(some) Learning rate for critic network (Q).")
-    model_arg_parser.add_argument('--buffer-size', '--buffer_size', type=int, default=None,
-            help="Size of the replay buffer. The default is 10000 for std EMI, and 500000"
-            + " otherwise.")
-    model_arg_parser.add_argument('--batch-size', '--batch_size', type=int, default=64,
-            help="Size of batch samples from replay buffer.")
-    model_arg_parser.add_argument('--train-freq', '--train_freq', type=int, default=None,
-            help="(SAC) Ratio between the number of steps and the number of times to train."
-            + " The default for std is 1, i.e. train every step. The default otherwise"
-            + " is nx+1, i.e. train every time step.")
-    #model_arg_parser.add_argument('--noise-type', '--noise_type', type=str, default='adaptive-param_0.2',
-            #help="(DDPG) Noise added to actions.")
-    model_arg_parser.add_argument('--learning-starts', type=int, default=None,
-            help="(SAC) At what step the learning starts; before this, actions are take at"
-            + " random. Note: a full timestep actually contains dx steps. Default is one episode's"
-            + " worth.")
+    model_arg_parser = get_model_arg_parser()
     model_args, rest = model_arg_parser.parse_known_args(rest)
      
     if main_args.env.startswith("weno"):
@@ -130,20 +102,23 @@ def main():
     set_global_seed(args.seed)
 
     env = build_env(args.env, args)
+
+    eval_env_args = Namespace(**vars(args))
+    eval_env_args.follow_solution = False
     if args.eval_env is None:
-        eval_envs = [build_env(args.env, args, test=True)]
+        eval_envs = [build_env(args.env, eval_env_args, test=True)]
     else:
         assert(args.eval_env == "custom")
         eval_envs = []
-        smooth_sine_args = Namespace(**vars(args))
+        smooth_sine_args = Namespace(**vars(eval_env_args))
         smooth_sine_args.init_type = "smooth_sine"
         smooth_sine_args.ep_length = 500
         eval_envs.append(build_env(args.env, smooth_sine_args, test=True))
-        smooth_rare_args = Namespace(**vars(args))
+        smooth_rare_args = Namespace(**vars(eval_env_args))
         smooth_rare_args.init_type = "smooth_rare"
         smooth_rare_args.ep_length = 500
         eval_envs.append(build_env(args.env, smooth_rare_args, test=True))
-        accelshock_args = Namespace(**vars(args))
+        accelshock_args = Namespace(**vars(eval_env_args))
         accelshock_args.init_type = "accelshock"
         accelshock_args.ep_length = 500
         eval_envs.append(build_env(args.env, accelshock_args, test=True))

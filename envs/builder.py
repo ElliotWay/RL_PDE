@@ -46,11 +46,23 @@ def get_env_arg_parser():
     parser.add_argument('--reward-adjustment', type=nonnegative_float, default=1000.0,
                         help="Constant that affects the relative importance of small errors compared to big errors."
                         + " Larger values mean that smaller errors are still important compared to big errors.")
+    parser.add_argument('--reward-mode', '--reward_mode', type=str, default=None,
+                        help="String that controls how the reward is calculated. The default"
+                        + " depends on the current implementation in burgers_env.py."
+                        + " This argument may contain multiple parts, so 'stencil-L2dist-nosquash'"
+                        + " will use the L2 distance of the stencil with no squash function"
+                        + " applied as the reward. It need not contain every part, so 'stencil'"
+                        + " uses the stencil to calculate the reward combined with the other"
+                        + " default parts.")
     parser.add_argument('--memo', dest='memoize', action='store_true', default=None,
                         help="Use a memoized solution to save time. Enabled by default except with random, "
                         + " schedule, and sample initial conditions, and in run_test.py. See --no-memo.")
     parser.add_argument('--no-memo', dest='memoize', action='store_false', default=None,
                         help="Do not use a memoized solution.")
+    parser.add_argument('--follow-solution', default=False, action='store_true',
+                        help="Force the environment to follow the solution. This means that"
+                        + " actions produce the corresponding reward, but not the "
+                        + " corresponding change in state. Only used for training environment.")
 
     return parser
 
@@ -64,42 +76,32 @@ def build_env(env_name, args, test=False):
         else:
             args.memoize = True
 
+    kwargs = {  'xmin': args.xmin,
+                'xmax': args.xmax,
+                'nx': args.nx,
+                'init_type': args.init_type,
+                'boundary': args.boundary,
+                'C': args.C,
+                'fixed_step': args.timestep,
+                'weno_order': args.order,
+                'eps': args.eps,
+                'episode_length': args.ep_length,
+                'analytical': args.analytical,
+                'precise_weno_order': args.precise_order,
+                'precise_scale': args.precise_scale,
+                'reward_adjustment': args.reward_adjustment,
+                'reward_mode': args.reward_mode,
+                'memoize': args.memoize,
+                'srca': args.srca,
+                'test': test,
+                }
+
     if env_name == "weno_burgers":
-        env = WENOBurgersEnv(xmin=args.xmin, xmax=args.xmax, nx=args.nx,
-                             init_type=args.init_type, boundary=args.boundary,
-                             C=args.C, fixed_step=args.timestep,
-                             weno_order=args.order, eps=args.eps, episode_length=args.ep_length,
-                             analytical=args.analytical,
-                             precise_weno_order=args.precise_order, precise_scale=args.precise_scale,
-                             reward_adjustment=args.reward_adjustment,
-                             memoize=args.memoize,
-                             srca=args.srca,
-                             test=test
-                             )
+        env = WENOBurgersEnv(follow_solution=args.follow_solution, **kwargs)
     elif env_name == "split_flux_burgers":
-        env = SplitFluxBurgersEnv(xmin=args.xmin, xmax=args.xmax, nx=args.nx,
-                                  init_type=args.init_type, boundary=args.boundary,
-                                  C=args.C, fixed_step=args.timestep,
-                                  weno_order=args.order, eps=args.eps, episode_length=args.ep_length,
-                                  analytical=args.analytical,
-                                  precise_weno_order=args.precise_order, precise_scale=args.precise_scale,
-                                  reward_adjustment=reward_adjustment,
-                                  memoize=args.memoize,
-                                  srca=args.srca,
-                                  test=test
-                                  )
+        env = SplitFluxBurgersEnv(**kwargs)
     elif env_name == "flux_burgers":
-        env = FluxBurgersEnv(xmin=args.xmin, xmax=args.xmax, nx=args.nx,
-                             init_type=args.init_type, boundary=args.boundary,
-                             C=args.C, fixed_step=args.timestep,
-                             weno_order=args.order, eps=args.eps, episode_length=args.ep_length,
-                             analytical=args.analytical,
-                             precise_weno_order=args.precise_order, precise_scale=args.precise_scale,
-                             reward_adjustment=reward_adjustment,
-                             memoize=args.memoize,
-                             srca=args.srca,
-                             test=test
-                             )
+        env = FluxBurgersEnv(**kwargs)
     else:
         print("Unrecognized environment type: \"" + str(env_name) + "\".")
         sys.exit(0)

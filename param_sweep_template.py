@@ -13,6 +13,7 @@ import time
 import argparse
 
 from util.misc import get_git_commit_id, is_clean_git_repo
+from util.misc import human_readable_time_delta
 
 # Sometimes this enables colors on Windows terminals.
 os.system("")
@@ -79,6 +80,7 @@ SLEEP_TIME = 0.25 # seconds
 
 ON_POSIX = 'posix' in sys.builtin_module_names
 
+num_errors = 0
 arg_matrix = []
 def build_command_list(index, arg_list, log_dir):
     if index == len(values_table):
@@ -88,15 +90,21 @@ def build_command_list(index, arg_list, log_dir):
         keyword, value_list = values_table[index]
         stripped_keyword = keyword.lstrip("-")
         for value in value_list:
-            try:
+            #try:
+                #value, extra = value
+            #except (TypeError, ValueError):
+                #extra = None
+            if isinstance(value, tuple):
                 value, extra = value
-            except (TypeError, ValueError):
+            else:
                 extra = None
 
             new_arg_list = list(arg_list)
-            new_arg_list += [keyword, str(value)]
+            # shlex.split is like the usual .split method on string except
+            # it does not split on spaces contained inside quotes.
+            new_arg_list += [keyword]
+            new_arg_list += shlex.split(str(value))
             if extra is not None:
-                # shlex takes care of quoted strings with spaces.
                 new_arg_list += shlex.split(extra)
             ####################################################################
             # Some arguments, namely log_dir, need more careful manipulation.  #
@@ -131,6 +139,7 @@ def check_procs(procs, queues):
             if ret_val != 0:
                 print("{}{}: {}Finished with nonzero return value: {}.{}".format(
                     colors.SEQUENCE[index], index, colors.FAIL, ret_val, colors.ENDC))
+                num_errors += 1
             del procs[index]
             del queues[index]
 
@@ -149,7 +158,7 @@ def main():
     build_command_list(0, "", base_log_dir)
 
     command_prefix = base_command
-    command_prefix = command_prefix.split()
+    command_prefix = shlex.split(command_prefix)
 
     # Dictionaries instead of lists because procs should have the same index
     # when other procs finish and are removed.
@@ -180,6 +189,8 @@ def main():
     except:
         # We're on a Unix machine that doesn't have SIGBREAK, that's fine.
         pass
+
+    start_time = time.time()
 
     try:
         commands_started = 0
@@ -243,6 +254,10 @@ def main():
 
                 arg_list = arg_matrix[commands_started]
                 full_command = command_prefix + arg_list
+                #TODO: Some arguments in the full command have spaces.
+                #These are being passed correctly to Popen, but will
+                #look wrong here.
+                #Add quotes to arguments with spaces.
                 command_string = " ".join(full_command)
                 print("{}{}: {}Starting new process ({}/{}):{}".format(
                     colors.SEQUENCE[new_index], new_index,
@@ -289,7 +304,17 @@ def main():
                 time.sleep(SLEEP_TIME)
                 check_procs(running_procs, output_queues)
 
-
+    print("{}Done! {}/{} processes finished in {}.{}".format(
+        colors.OKGREEN, commands_started, len(arg_matrix),
+        human_readable_time_delta(time.time() - start_time),
+        colors.ENDC))
+    if commands_started < len(arg_matrix):
+        print("{}{}/{} processes were never started.{}".format(
+            colors.WARNING, len(arg_matrix) - commands_started, len(arg_matrix),
+            colors.ENDC))
+    if num_errors > 0:
+        print("{}{}/{} processes had nonzero return values.".format(
+            colors.FAIL, num_errors, len(arg_matrix), colors.ENDC))
 
 
 if __name__ == "__main__":

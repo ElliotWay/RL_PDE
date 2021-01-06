@@ -46,8 +46,11 @@ class SACModel(BaselinesModel):
                        train_freq=args.train_freq,
                        verbose=1,
                        #TODO: should this be out of the actual log dir? I don't
-                       #actually use tensorboard, so I'm not sure.
-                       tensorboard_log="./log/weno_burgers/tensorboard",
+                       # actually use tensorboard, so I'm not sure.
+                       # It's moot anyway; tb files are taking up space which is silly
+                       # given I'm not using them, so I'm disabling these logs.
+                       #tensorboard_log="./log/weno_burgers/tensorboard",
+                       tensorboard_log=None,
                        )
         self._model = self.sac # Used by superclass.
 

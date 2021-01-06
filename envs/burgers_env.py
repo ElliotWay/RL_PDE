@@ -11,7 +11,8 @@ from stable_baselines import logger
 
 from envs.grid import Grid1d
 from envs.source import RandomSource
-from envs.solutions import PreciseWENOSolution, AnalyticalSolution, MemoizedSolution
+from envs.solutions import PreciseWENOSolution, AnalyticalSolution
+from envs.solutions import MemoizedSolution, OneStepSolution
 import envs.weno_coefficients as weno_coefficients
 from util.softmax_box import SoftmaxBox
 from util.misc import create_stencil_indexes
@@ -111,11 +112,12 @@ class AbstractBurgersEnv(gym.Env):
             fixed_step=0.0005, C=0.5,
             weno_order=3, eps=0.0, srca=0.0, episode_length=300,
             analytical=False, precise_weno_order=None, precise_scale=1,
-            reward_adjustment=1000,
+            reward_adjustment=1000, reward_mode=None,
             memoize=False,
             test=False):
 
         self.test = test
+        self.reward_mode = self.fill_default_reward_mode(reward_mode)
 
         self.ng = weno_order+1
         self.nx = nx
@@ -142,17 +144,29 @@ class AbstractBurgersEnv(gym.Env):
                     precise_scale=precise_scale, precise_order=precise_weno_order,
                     boundary=boundary, init_type=init_type, flux_function=flux, source=self.source,
                     eps=eps)
-        if memoize:
+
+        if "one-step" in self.reward_mode:
+            self.solution = OneStepSolution(self.solution, self.grid)
+            if memoize:
+                print("Note: can't memoize solution when using one-step reward.")
+        elif memoize:
             self.solution = MemoizedSolution(self.solution)
 
-        # Disable this for now. The original idea was that you could compare both WENO and the learned RL solution to the analytical solution.
-        if False: #self.analytical or self.precise_weno_order != self.weno_order or self.precise_nx != self.nx:
+        show_separate_weno = (self.analytical
+                              or self.precise_weno_order != self.weno_order
+                              or self.precise_nx != self.nx
+                              or isinstance(self.solution, OneStepSolution))
+        if show_separate_weno:
             self.weno_solution = PreciseWENOSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng,
                                                      precise_scale=1, precise_order=weno_order,
                                                      boundary=boundary, init_type=init_type, flux_function=flux,
                                                      source=self.source, eps=eps)
+            if memoize:
+                self.weno_solution = MemoizedSolution(self.weno_solution)
         else:
             self.weno_solution = None
+
+        self.previous_error = np.zeros_like(self.grid.get_full())
 
         self.fixed_step = fixed_step
         self.C = C  # CFL number
@@ -508,23 +522,32 @@ class AbstractBurgersEnv(gym.Env):
         start_rgb = (0.9, 0.9, 0.9) #light grey
 
         # Plot the true solution first so it appears under the RL solution.
-        if not plot_error and not no_true and self.solution.is_recording_state():
-            solution_state_history = np.array(self.solution.get_state_history())[:, self.ng:-self.ng]
-
-            assert len(state_history) == len(solution_state_history), "History mismatch."
-            
-            if full_true:
-                true_rgb = matplotlib.colors.to_rgb(self.true_color)
-                true_color_sequence = color_sequence(start_rgb, true_rgb, num_states)
-                sliced_solution_history = solution_state_history[slice_indexes]
-                
-                for state_values, color in zip(sliced_solution_history[1:-1], true_color_sequence[1:-1]):
-                    plt.plot(x_values, state_values, ls='-', linewidth=1, color=color)
-                true = plt.plot(x_values, solution_state_history[-1],
-                                ls='-', linewidth=1, color=true_rgb)
+        if not plot_error and not no_true:
+            if not isinstance(self.solution, OneStepSolution) and self.solution.is_recording_state():
+            #if isinstance(self.solution, OneStepSolution):
+                solution_state_history = np.array(self.solution.get_state_history())[:, self.ng:-self.ng]
+            elif self.weno_solution is not None and self.weno_solution.is_recording_state():
+                solution_state_history = np.array(self.weno_solution.get_state_history())[:, self.ng:-self.ng]
             else:
-                true = plt.plot(x_values, solution_state_history[-1], 
-                                ls='-', linewidth=4, color=self.true_color)
+                solution_state_history = None
+
+            if solution_state_history is not None:
+                assert len(state_history) == len(solution_state_history), "History mismatch."
+                
+                if full_true:
+                    true_rgb = matplotlib.colors.to_rgb(self.true_color)
+                    true_color_sequence = color_sequence(start_rgb, true_rgb, num_states)
+                    sliced_solution_history = solution_state_history[slice_indexes]
+                    
+                    for state_values, color in zip(sliced_solution_history[1:-1], true_color_sequence[1:-1]):
+                        plt.plot(x_values, state_values, ls='-', linewidth=1, color=color)
+                    true = plt.plot(x_values, solution_state_history[-1],
+                                    ls='-', linewidth=1, color=true_rgb)
+                else:
+                    true = plt.plot(x_values, solution_state_history[-1], 
+                                    ls='-', linewidth=4, color=self.true_color)
+            else:
+                true = None
         else:
             true = None
 
@@ -703,60 +726,129 @@ class AbstractBurgersEnv(gym.Env):
         plt.close(fig)
         return filename
 
+    def fill_default_reward_mode(self, reward_mode_arg):
+        reward_mode = "" if reward_mode_arg is None else reward_mode_arg
+
+        if (not "full" in reward_mode
+                and not "change" in reward_mode
+                and not "one-step" in reward_mode):
+            reward_mode += "_full"
+
+        if (not "adjacent" in reward_mode
+                and not "stencil" in reward_mode):
+            reward_mode += "_adjacent"
+
+        if (not "avg" in reward_mode
+                and not "max" in reward_mode
+                and not "L2" in reward_mode):
+            reward_mode += "_avg"
+
+        if (not "nosquash" in reward_mode
+                and not "arctansquash" in reward_mode):
+            reward_mode += "_arctansquash"
+
+        return reward_mode
+    
     def calculate_reward(self):
-        """ Optional reward calculation based on the error between grid and solution. """
+        """ Reward calculation based on the error between grid and solution. """
 
         done = False
 
-        # Error-based reward.
-        reward = 0.0
+        # Use difference with WENO actions instead. (Might be useful for testing.)
+        if "wenodiff" in self.reward_mode:
+            last_action = self.action_history[-1].copy()
+
+            if self.solution.is_recording_actions():
+                weno_action = self.solution.get_action_history()[-1].copy()
+            elif self.weno_solution is not None:
+                assert self.weno_solution.is_recording_actions()
+                weno_action = self.weno_solution.get_action_history()[-1].copy()
+            else:
+                raise Exception("AbstractBurgersEnv: reward_mode problem")
+            action_diff = weno_action - last_action
+            action_diff = action_diff.reshape((len(action_diff), -1))
+            if "L1" in self.reward_mode:
+                error = np.sum(np.abs(action_diff), axis=-1)
+            elif "L2" in self.reward_mode:
+                error = np.sqrt(np.sum(action_diff**2, axis=-1))
+            else:
+                raise Exception("AbstractBurgersEnv: reward_mode problem")
+
+            return -error, done
+
+
+
+        # Use error with the "true" solution as the reward.
         error = self.solution.get_full() - self.grid.get_full()
 
-        # Clip tiny errors.
-        #error[error < 0.001] = 0
-        # Enhance extreme errors.
-        #error[error > 0.1] *= 10
+        if "full" in self.reward_mode:
+            pass
+        # Use the difference in error as a reward instead of the full reward with the solution.
+        elif "change" in self.reward_mode:
+            previous_error = self.previous_error
+            self.previous_error = error
+            error = (error - previous_error)
+        else:
+            raise Exception("AbstractBurgersEnv: reward_mode problem")
 
-        # error = error[self.ng:-self.ng]
-        # These give reward based on error in cell right of interface, so missing reward for rightmost interface.
-        #reward = np.max(np.abs(error))
-        #reward = (error) ** 2
-
-        # Reward as average of error in two adjacent cells.
         error = np.abs(error)
-        reward = (error[self.ng-1:-self.ng] + error[self.ng:-(self.ng-1)]) / 2
 
-        # Reward as function of the errors in the stencil.
-        # max error across stencil
-        #stencil_indexes = create_stencil_indexes(
-                #stencil_size=(self.weno_order * 2 - 1),
-                #num_stencils=(self.nx + 1),
-                #offset=(self.ng - self.weno_order))
-        #error_stencils = error[stencil_indexes]
-        #reward = np.amax(np.abs(error_stencils), axis=-1)
-        #reward = np.sqrt(np.sum(error_stencils**2, axis=-1))
+        # Clip tiny errors and enhance extreme errors.
+        if "clip" in self.reward_mode:
+            error[error < 0.001] = 0
+            error[error > 0.1] *= 10
 
-        # Squash error.
-        #reward = -np.arctan(reward)
+        # Average of error in two adjacent cells.
+        if "adjacent" in self.reward_mode and "avg" in self.reward_mode:
+            combined_error = (error[self.ng-1:-self.ng] + error[self.ng:-(self.ng-1)]) / 2
+        # Combine error across the stencil.
+        elif "stencil" in self.reward_mode:
+            stencil_indexes = create_stencil_indexes(
+                    stencil_size=(self.weno_order * 2 - 1),
+                    num_stencils=(self.nx + 1),
+                    offset=(self.ng - self.weno_order))
+            error_stencils = error[stencil_indexes]
+            if "max" in self.reward_mode:
+                combined_error = np.amax(error_stencils, axis=-1)
+            elif "avg" in self.reward_mode:
+                combined_error = np.mean(error_stencils, axis=-1)
+            elif "L2" in self.reward_mode:
+                combined_error = np.sqrt(np.sum(error_stencils**2, axis=-1))
+            else:
+                raise Exception("AbstractBurgersEnv: reward_mode problem")
+        else:
+            raise Exception("AbstractBurgersEnv: reward_mode problem")
 
-        # The constant controls the relative importance of small rewards compared to large rewards.
-        # Towards infinity, all rewards (or penalties) are equally important.
-        # Towards 0, small rewards are increasingly less important.
-        # An alternative to arctan(C*x) with this property would be x^(1/C).
-        reward = -np.arctan(self.reward_adjustment * reward)
+        # We want to penalize error, not reward it.
+        reward = -combined_error
 
-        max_penalty = np.pi / 2
-        #reward = -error
-        #max_penalty = 1e7
+        # Squash reward.
+        if "nosquash" in self.reward_mode:
+            max_penalty = 1e7
+        elif "arctansquash" in self.reward_mode:
+            max_penalty = np.pi / 2
+            if "noadjust" in self.reward_mode:
+                reward = np.arctan(reward)
+            else:
+                # The constant controls the relative importance of small rewards compared to large rewards.
+                # Towards infinity, all rewards (or penalties) are equally important.
+                # Towards 0, small rewards are increasingly less important.
+                # An alternative to arctan(C*x) with this property would be x^(1/C).
+                reward = np.arctan(self.reward_adjustment * reward)
+        else:
+            raise Exception("AbstractBurgersEnv: reward_mode problem")
 
         # Conservation-based reward.
+        # Doesn't work (always 0), but a good idea. We'll try this again eventually.
         # reward = -np.log(np.sum(rhs[g.ilo:g.ihi+1]))
 
         # Give a penalty and end the episode if we're way off.
-        #if np.max(state) > 1e7 or np.isnan(np.max(state)): state possibly made more sense here
+        #if np.max(state) > 1e7 or np.isnan(np.max(state)): state possibly made more sense here?
         if np.max(error) > 1e7 or np.isnan(np.max(error)):
             reward -= max_penalty * (self.episode_length - self.steps)
             done = True
+
+        #print("reward:", reward)
 
         return reward, done
 
@@ -793,8 +885,10 @@ class AbstractBurgersEnv(gym.Env):
 
 class WENOBurgersEnv(AbstractBurgersEnv):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, follow_solution=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+        self.follow_solution = follow_solution
 
         self.action_space = SoftmaxBox(low=0.0, high=1.0, 
                                        shape=(self.grid.real_length() + 1, 2, self.weno_order),
@@ -802,7 +896,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         self.observation_space = spaces.Box(low=-1e7, high=1e7,
                                             shape=(self.grid.real_length() + 1, 2, 2 * self.weno_order - 1),
                                             dtype=np.float64)
-        
+       
         self.solution.set_record_state(True)
         if self.weno_solution is not None:
             self.weno_solution.set_record_state(True)
@@ -886,6 +980,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         self.t = 0.0
         self.steps = 0
+        self.previous_error = np.zeros_like(self.grid.get_full())
 
         return self.prep_state()
 
@@ -995,14 +1090,15 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         if np.isnan(action).any():
             raise Exception("NaN detected in action.")
 
-        # Should probably find a way to pass this to agent if dt varies.
+        self.action_history.append(action)
+
+        # Find a way to pass this to agent if dt varies.
         dt = self.timestep()
 
         step = dt * self.rk_substep_weno(action)
 
         state, reward, done = self._finish_step(step, dt)
 
-        self.action_history.append(action)
         self.state_history.append(self.grid.get_full().copy())
 
         return state, reward, done, {}
@@ -1016,6 +1112,11 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         Returns state, reward, done.
         """
+        # Update solution first, in case it depends on our current state.
+        self.solution.update(dt, self.t)
+
+        if self.weno_solution is not None:
+            self.weno_solution.update(dt, self.t)
 
         if self.eps > 0.0:
             R = self.eps * self.lap()
@@ -1032,20 +1133,21 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         self.t += dt
 
-        state = self.prep_state()
-
         self.steps += 1
         if self.steps >= self.episode_length:
             done = True
         else:
             done = False
 
-        self.solution.update(dt, self.t)
         reward, force_done = self.calculate_reward()
         done = done or force_done
 
-        if self.weno_solution is not None:
-            self.weno_solution.update(dt, self.t)
+        # Set the state to the solution after calculating
+        # the reward. Useful for testing?
+        if self.follow_solution:
+            self.grid.set(self.solution.get_real())
+
+        state = self.prep_state()
 
         if np.isnan(state).any():
             raise Exception("NaN detected in state.")
@@ -1054,6 +1156,53 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         return state, reward, done
 
+class DiscreteWENOBurgersEnv(WENOBurgersEnv):
+    def __init__(self, actions_per_dim=2, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        action_list = []
+        action_list.append(np.zeros(self.weno_order, dtype=np.int32))
+
+        # Enumerate combinations of integers that add up to actions_per_dim.
+        # e.g. [0,1,2], [1,1,1], [3,0,0] for 3 actions per dimension.
+        for dim in range(self.weno_order-1):
+            new_actions = []
+            for old_action in action_list:
+                sum_so_far = np.sum(old_action)
+                for i in range(actions_per_dim - sum_so_far):
+                    new_action = old_action.copy()
+                    new_action[dim] = i
+                    new_actions.append(new_action)
+            action_list = new_actions
+
+        # Set the last action so that the action adds up to actions_per_dim.
+        for action in action_list:
+            remaining = actions_per_dim - 1 - np.sum(action)
+            action[-1] = remaining
+
+        # Normalize so the actions add up to 1 instead.
+        self.action_list = np.array(action_list) / (actions_per_dim - 1)
+
+        # At each interface, there are N^2 possible actions, because the + and -
+        # directions have the same N options available, and we should accept any
+        # combination.
+        self.action_space = spaces.MultiDiscrete(
+                    [len(action_list)**2] * ((self.grid.real_length() + 1)))
+
+        # The observation space is declared in WENOBurgersEnv.
+
+    def reset(self):
+        return super().reset()
+
+    def step(self, action):
+        plus_actions = action // len(self.action_list)
+        minus_actions = action % len(self.action_list)
+
+        combined_actions = np.vstack((plus_actions, minus_actions)).transpose()
+
+        selected_actions = self.action_list[combined_actions]
+
+        return super().step(selected_actions)
 
 class SplitFluxBurgersEnv(AbstractBurgersEnv):
 
@@ -1135,6 +1284,7 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
 
         self.t = 0.0
         self.steps = 0
+        self.previous_error = np.zeros_like(self.grid.get_full())
 
         return self.prep_state()
 
@@ -1197,6 +1347,11 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
             self.source.update(dt, self.t + dt)
             rhs += self.source.get_real()
 
+        self.solution.update(dt, self.t)
+
+        if self.weno_solution is not None:
+            self.weno_solution.update(dt, self.t)
+
         u_copy += dt * rhs
         self.grid.set(u_copy)
 
@@ -1208,12 +1363,8 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
         if self.steps >= self.episode_length:
             done = True
 
-        self.solution.update(dt, self.t)
         reward, force_done = self.calculate_reward()
         done = done or force_done
-
-        if self.weno_solution is not None:
-            self.weno_solution.update(dt, self.t)
 
         if np.isnan(state).any():
             raise Exception("NaN detected in state.")
@@ -1287,6 +1438,7 @@ class FluxBurgersEnv(AbstractBurgersEnv):
 
         self.t = 0.0
         self.steps = 0
+        self.previous_error = np.zeros_like(self.grid.get_full())
 
         return self.prep_state()
 
@@ -1340,6 +1492,10 @@ class FluxBurgersEnv(AbstractBurgersEnv):
             self.source.update(dt, self.t + dt)
             rhs += self.source.get_real()
 
+        self.solution.update(dt, self.t)
+        if self.weno_solution is not None:
+            self.weno_solution.update(dt, self.t)
+
         u_copy += dt * rhs
         self.grid.set(u_copy)
 
@@ -1353,12 +1509,9 @@ class FluxBurgersEnv(AbstractBurgersEnv):
         if self.steps >= self.episode_length:
             done = True
 
-        self.solution.update(dt, self.t)
         reward, force_done = self.calculate_reward()
         done = done or force_done
 
-        if self.weno_solution is not None:
-            self.weno_solution.update(dt, self.t)
 
         if np.isnan(state).any():
             raise Exception("NaN detected in state.")
