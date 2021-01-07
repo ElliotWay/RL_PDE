@@ -10,8 +10,8 @@ class Model:
         raise NotImplementedError
     def train(self, s, a, r, s2, done):
         """
-        Train using samples.
-        Should return a dict of information (may be empty dict).
+        Train using samples. The samples should be consecutive.
+        Returns a dict of information (may be empty dict).
         """
         raise NotImplementedError
     def predict(self, state, deterministic=True):
@@ -21,7 +21,10 @@ class Model:
         """
         raise NotImplementedError
     def save(self, path):
-        """ Save the model to path. """
+        """
+        Save the model to path.
+        Returns the actual path saved to (in case it is changed by e.g. adding an extension).
+        """
         raise NotImplementedError
     def load(self, path):
         """ Load the model from path. """
