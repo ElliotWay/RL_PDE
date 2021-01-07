@@ -31,10 +31,11 @@ def gaussian_policy_net(state_tensor, action_shape, layers, activation_fn,
     flattened_action_size = np.prod(action_shape)
     with tf.variable_scope(scope, reuse):
         flat_state = tf.layers.flatten(state_tensor)
-        policy_latent = mlp(input_tensor, activation_fn, layer_norm=False)
+        # TODO Could use layer normalization - that might be a good idea, esp. with ReLU.
+        policy_latent = mlp(flat_state, layers=layers, activ_fn=activation_fn, layer_norm=False)
 
         # Not sure why the sqrt(2) hyperparameter for initialization. StableBaselines uses it.
-        flat_mean = linear(policy_latent, scope="mean", flattened_action_size, init_scale=np.sqrt(2))
+        flat_mean = linear(policy_latent, "mean", flattened_action_size, init_scale=np.sqrt(2))
         flat_log_std = tf.get_variable(name='logstd', shape=[flattened_action_size],
                                    initializer=tf.zeros_initializer())
 
@@ -102,7 +103,10 @@ class PolicyGradientModel(Model):
         self.done_ph = tf.placeholder(dtype=tf.bool, shape=(None,), name="done")
         self.returns_ph = tf.placeholder(dtype=dtype, shape=(None,), name="returns")
 
-        self.policy_means, self.policy_log_stds = gaussian_policy_net(..., name="policy")
+        # Probably use ReLU? Could use tanh since network doesn't have too many layers.
+        self.policy_means, self.policy_log_stds = gaussian_policy_net(
+                self.state_ph, self.action_ph.shape, args.layers, tf.nn.relu,
+                scope="policy")
         #TODO Squash policy output?
         self.policy = (self.policy_means + tf.exp(self.policy_log_stds)
                 * tf.random.normal(tf.shape(self.policy_means), dtype=self.policy_means.dtype))

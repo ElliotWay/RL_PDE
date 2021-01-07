@@ -20,7 +20,7 @@ from rl_pde.run import train
 from rl_pde.emi import BatchEMI, StandardEMI, TestEMI
 from envs import get_env_arg_parser, build_env
 from models import get_model_arg_parser
-from models import SACModel, TestModel
+from models import SACModel, PolicyGradientModel, TestModel
 from models.fixed import FixedOneStepModel
 from util import metadata, action_snapshot
 from util.misc import rescale, set_global_seed
@@ -133,6 +133,10 @@ def main():
 
     if args.model == 'sac':
         model_cls = SACModel
+    elif args.model == 'pg' or args.model == 'reinforce':
+        model_cls = PolicyGradientModel
+        if args.gamma == 0.0:
+            args.return_style = "myopic"
     elif args.model == 'test':
         model_cls = TestModel
     elif args.model == "fixed-1step" or args.model == "fixed":
