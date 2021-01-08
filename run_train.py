@@ -1,5 +1,6 @@
 import os
 os.environ['PYTHONHASHSEED'] = "42069"
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = "2"
 import argparse
 import shutil
 import signal
@@ -13,6 +14,7 @@ tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 import matplotlib
 matplotlib.use("Agg")
 
+#TODO: Remove dependency on this logger. The functionality we need can be easily implemented.
 from stable_baselines import logger
 #from stable_baselines.ddpg.noise import AdaptiveParamNoiseSpec, OrnsteinUhlenbeckActionNoise, NormalActionNoise
 

@@ -18,6 +18,9 @@ class Model:
         """
         Select actions given a batch of states.
         The model should NOT train inside this method.
+
+        Also returns the recurrent state if we're using a recurrent network, or None otherwise.
+        Returns action, recurrent_state
         """
         raise NotImplementedError
     def save(self, path):

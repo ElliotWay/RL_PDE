@@ -7,6 +7,8 @@ import gym
 # I found these too useful to avoid using them, but too complex to justify copying.
 # Copy them over anyway if you need to modify the network internals further
 # (or to remove external dependencies).
+# One change to make to that code is to allow for float64 size weights, though that's probably
+# unnecessary.
 from stable_baselines.common.tf_layers import mlp, linear
 
 from models import Model
@@ -26,11 +28,20 @@ def gaussian_policy_net(state_tensor, action_shape, layers, activation_fn,
     function for an algorithm such as SAC that needs to control the standard deviation for
     exploration.
 
+    Parameters
+    ----------
+    state_tensor : Tensor (probably a placeholder) containing the state.
+    action_shape : tuple representing shape of an action (e.g. env.action_space.shape)
+    layers : iterable of ints for each layer size e.g. [32, 32]. Can be empty list for no hidden
+                layers.
+    activation_fn : TensorFlow activation function, e.g. tf.nn.relu
+
     Returns the means and log standard deviations.
     """
+    flattened_state_size = np.prod(state_tensor.shape[1:])
     flattened_action_size = np.prod(action_shape)
     with tf.variable_scope(scope, reuse):
-        flat_state = tf.layers.flatten(state_tensor)
+        flat_state = tf.reshape(state_tensor, (-1, flattened_state_size))
         # TODO Could use layer normalization - that might be a good idea, esp. with ReLU.
         policy_latent = mlp(flat_state, layers=layers, activ_fn=activation_fn, layer_norm=False)
 
@@ -55,7 +66,7 @@ def tf_nll_gaussian(values, means, stds):
     Adapted from the Stable Baselines version.
     """
     action_dims = tuple(range(len(values.shape))[1:])
-    action_size = np.prod(values.shape[1:])
+    action_size = tf.cast(tf.reduce_prod(values.shape[1:]), values.dtype)
     return (0.5 * tf.reduce_sum(tf.square((values - means) / stds), axis=action_dims) 
            + 0.5 * np.log(2.0 * np.pi) * action_size 
            + tf.reduce_sum(stds, axis=-1))
@@ -80,6 +91,7 @@ def get_optimizer(args):
 class PolicyGradientModel(Model):
     def __init__(self, env, args):
 
+        self.env = env
         self.args = args
 
         obs_space = env.observation_space
@@ -93,6 +105,13 @@ class PolicyGradientModel(Model):
             raise Exception("State space and action space of different dtypes?"
                     + " ({} and {})".format(dtype, action_space.dtype))
 
+        self.session = tf.Session()
+        # Need explicit graph to prevent eager execution,
+        # which is apparently not possible with optimizer.apply_gradients.
+        #self.graph = tf.Graph()
+        #with self.graph.as_default():
+            #self.session = tf.Session(graph=self.graph)
+
         self.state_ph = tf.placeholder(dtype=dtype,
                 shape=(None,) + obs_space.shape, name="state")
         self.action_ph = tf.placeholder(dtype=dtype,
@@ -104,35 +123,36 @@ class PolicyGradientModel(Model):
         self.returns_ph = tf.placeholder(dtype=dtype, shape=(None,), name="returns")
 
         # Probably use ReLU? Could use tanh since network doesn't have too many layers.
-        self.policy_means, self.policy_log_stds = gaussian_policy_net(
-                self.state_ph, self.action_ph.shape, args.layers, tf.nn.relu,
+        self.policy_mean, self.policy_log_std = gaussian_policy_net(
+                self.state_ph, action_space.shape, args.layers, tf.nn.relu,
                 scope="policy")
+        self.policy_std = tf.exp(self.policy_log_std)
         #TODO Squash policy output?
-        self.policy = (self.policy_means + tf.exp(self.policy_log_stds)
-                * tf.random.normal(tf.shape(self.policy_means), dtype=self.policy_means.dtype))
-        self.deterministic_policy = self.policy_means
+        self.policy = (self.policy_mean + self.policy_std
+                * tf.random.normal(tf.shape(self.policy_mean), dtype=self.policy_mean.dtype))
+        self.deterministic_policy = self.policy_mean
 
         # Policy Gradient
         # (log pi(a|s)) * Q(s,a)
         # (Note the double negative of "loss" and "negative" log likelihood means we maximize
         # this quantity).
         self.policy_loss = tf.reduce_mean(
-                tf_nll_gaussian(self.action_ph, self.policy_means, self.policy_stds)
+                tf_nll_gaussian(self.action_ph, self.policy_mean, self.policy_std)
                 * self.returns_ph)
 
         policy_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="policy")
         policy_gradients = tf.gradients(self.policy_loss, policy_params)
+        grads = list(zip(policy_gradients, policy_params))
 
         self.optimizer = get_optimizer(self.args)
-        self.train_policy = self.optimizer.apply_gradient(policy_gradients)
+        self.train_policy = self.optimizer.apply_gradients(grads)
 
-        self.session = tf.get_default_session()
         tf.global_variables_initializer().run(session=self.session)
 
     def compute_returns(self, s, a, r, s2, done):
-        if ("return_style" not in args
-                or args.return_style is None
-                or args.return_style == "full"):
+        if ("return_style" not in self.args
+                or self.args.return_style is None
+                or self.args.return_style == "full"):
 
             reward_acc = 0.0
             # This part is un-Pythonic.
@@ -148,10 +168,10 @@ class PolicyGradientModel(Model):
             
             return returns
                       
-        elif args.return_style == "myopic":
+        elif self.args.return_style == "myopic":
             return r
         else:
-            raise Exception("Unknown return-style: {}".format(args.return_style))
+            raise Exception("Unknown return-style: {}".format(self.args.return_style))
     
     def train(self, s, a, r, s2, done):
 
@@ -166,12 +186,12 @@ class PolicyGradientModel(Model):
         return {"policy_loss": policy_loss}
 
     def predict(self, state, deterministic=True):
-        feed_dict = {self.state_ph:s}
+        feed_dict = {self.state_ph:state}
 
         if deterministic:
-            return self.session.run(self.deterministic_policy, feed_dict=feed_dict)
+            return self.session.run(self.deterministic_policy, feed_dict=feed_dict), None
         else:
-            return self.session.run(self.policy, feed_dict=feed_dict)
+            return self.session.run(self.policy, feed_dict=feed_dict), None
 
     def save(self, path):
         print("Model not saved: save function not implemented.")
