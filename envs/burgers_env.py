@@ -892,10 +892,10 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         self.action_space = SoftmaxBox(low=0.0, high=1.0, 
                                        shape=(self.grid.real_length() + 1, 2, self.weno_order),
-                                       dtype=np.float64)
+                                       dtype=np.float32)
         self.observation_space = spaces.Box(low=-1e7, high=1e7,
                                             shape=(self.grid.real_length() + 1, 2, 2 * self.weno_order - 1),
-                                            dtype=np.float64)
+                                            dtype=np.float32)
        
         self.solution.set_record_state(True)
         if self.weno_solution is not None:
@@ -1211,10 +1211,10 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
 
         self.action_space = SoftmaxBox(low=-np.inf, high=np.inf,
                                        shape=(self.grid.real_length() + 1, 2, 2 * self.weno_order - 1),
-                                       dtype=np.float64)
+                                       dtype=np.float32)
         self.observation_space = spaces.Box(low=-1e7, high=1e7,
                                             shape=(self.grid.real_length() + 1, 2, 2 * self.weno_order - 1),
-                                            dtype=np.float64)
+                                            dtype=np.float32)
         if self.weno_solution is None:
             self.solution.set_record_actions("coef")
         else:
@@ -1381,10 +1381,10 @@ class FluxBurgersEnv(AbstractBurgersEnv):
 
         self.action_space = SoftmaxBox(low=-np.inf, high=np.inf,
                                        shape=(self.grid.real_length() + 1, 2 * self.weno_order),
-                                       dtype=np.float64)
+                                       dtype=np.float32)
         self.observation_space = spaces.Box(low=-1e7, high=1e7,
                                             shape=(self.grid.real_length() + 1, 2 * self.weno_order),
-                                            dtype=np.float64)
+                                            dtype=np.float32)
 
     def prep_state(self):
         """
