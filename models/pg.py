@@ -150,6 +150,16 @@ class PolicyGradientModel(Model):
 
         tf.global_variables_initializer().run(session=self.session)
 
+        self.setup_loading()
+
+    def setup_loading(self):
+        self.load_op = {}
+        self.load_ph = {}
+        for param in self.params:
+            placeholder = tf.placeholder(dtype=param.dtype, shape=param.shape)
+            self.load_op[param] = param.assign(placeholder)
+            self.load_ph[param] = placeholder
+
     def compute_returns(self, s, a, r, s2, done):
         if (self.return_style is None
                 or self.return_style == "full"):
@@ -207,9 +217,18 @@ class PolicyGradientModel(Model):
         param_values = self.session.run(params)
         param_dict = OrderedDict((param.name, value) for param, value in zip(params, param_values))
 
-        return save_to_zip(path, data=data, params=params)
+        return save_to_zip(path, data=extra_data, params=param_dict)
 
     def load(self, path):
-        data, param_dict = load_from_zip(path, self.params)
+        data, param_dict = load_from_zip(path)
         self.__dict__.update(data)
 
+        feed_dict = {}
+        for param in self.params:
+            placeholder = self.load_ph[param]
+            param_value = param_dict[param.name]
+            feed_dict[placeholder] = param_value
+
+        self.session.run(self.load_op, feed_dict=feed_dict)
+        print("Model loaded from {}".format(path))
+        print("I'm not 100% sure loading works correctly, in case it looks completely wrong.")

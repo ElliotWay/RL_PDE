@@ -1,5 +1,4 @@
 import os
-import io
 import argparse
 import subprocess
 import random
