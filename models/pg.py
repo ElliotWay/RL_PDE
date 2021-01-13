@@ -1,5 +1,6 @@
 import os
 import zipfile
+from collections import OrderedDict
 import numpy as np
 import tensorflow as tf
 import gym
@@ -12,7 +13,7 @@ import gym
 from stable_baselines.common.tf_layers import mlp, linear
 
 from models import Model
-from util.misc import serialize_ndarray, deserialize_ndarray
+from util.serialize import save_to_zip, load_from_zip
 
 def gaussian_policy_net(state_tensor, action_shape, layers, activation_fn,
         scope="policy", reuse=False):
@@ -72,8 +73,7 @@ def tf_nll_gaussian(values, means, stds):
            + tf.reduce_sum(stds, axis=-1))
 
 def get_optimizer(args):
-    if ("optimizer" not in args
-            or args.optimizer is None
+    if (args.optimizer is None
             or args.optimizer == "sgd"):
         optimizer = tf.train.GradientDescentOptimizer(learning_rate=args.learning_rate)
     elif args.optimizer == "adam":
@@ -91,8 +91,8 @@ def get_optimizer(args):
 class PolicyGradientModel(Model):
     def __init__(self, env, args):
 
-        self.env = env
-        self.args = args
+        self.return_style = args.return_style
+        self.gamma = args.gamma
 
         obs_space = env.observation_space
         action_space = env.action_space
@@ -143,16 +143,16 @@ class PolicyGradientModel(Model):
         policy_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="policy")
         policy_gradients = tf.gradients(self.policy_loss, policy_params)
         grads = list(zip(policy_gradients, policy_params))
+        self.params = policy_params
 
-        self.optimizer = get_optimizer(self.args)
+        self.optimizer = get_optimizer(args)
         self.train_policy = self.optimizer.apply_gradients(grads)
 
         tf.global_variables_initializer().run(session=self.session)
 
     def compute_returns(self, s, a, r, s2, done):
-        if ("return_style" not in self.args
-                or self.args.return_style is None
-                or self.args.return_style == "full"):
+        if (self.return_style is None
+                or self.return_style == "full"):
 
             reward_acc = 0.0
             # This part is un-Pythonic.
@@ -163,15 +163,15 @@ class PolicyGradientModel(Model):
             for index in reversed(range(len(r))):
                 if done[index]:
                     reward_acc = 0.0
-                reward_acc = r[index] + self.args.gamma * reward_acc
+                reward_acc = r[index] + self.gamma * reward_acc
                 returns[index] = reward_acc
             
             return returns
                       
-        elif self.args.return_style == "myopic":
+        elif self.return_style == "myopic":
             return r
         else:
-            raise Exception("Unknown return-style: {}".format(self.args.return_style))
+            raise Exception("Unknown return-style: {}".format(self.return_style))
     
     def train(self, s, a, r, s2, done):
 
@@ -194,8 +194,22 @@ class PolicyGradientModel(Model):
             return self.session.run(self.policy, feed_dict=feed_dict), None
 
     def save(self, path):
-        print("Model not saved: save function not implemented.")
-        return path
+        """
+        Save model paramaters to be loaded later.
+
+        Based on StableBaselines save structure.
+        """
+        extra_data = {
+                "return_style": self.return_style,
+                "gamma": self.gamma,
+        }
+        params = self.params
+        param_values = self.session.run(params)
+        param_dict = OrderedDict((param.name, value) for param, value in zip(params, param_values))
+
+        return save_to_zip(path, data=data, params=params)
 
     def load(self, path):
-        print("Model not loaded: load function not implemented.")
+        data, param_dict = load_from_zip(path, self.params)
+        self.__dict__.update(data)
+

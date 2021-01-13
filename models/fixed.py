@@ -5,7 +5,7 @@ import numpy as np
 from scipy.special import softmax
 
 from models import Model
-from util.misc import serialize_ndarray, deserialize_ndarray
+from util.serialize import serialize_ndarray, deserialize_ndarray
 
 class FixedOneStepModel(Model):
     """
