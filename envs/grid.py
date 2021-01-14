@@ -206,7 +206,7 @@ class Grid1d(GridBase):
             if 'b' in params:
                 b = params['b']
             elif self.deterministic_init:
-                b = 0.0
+                b = 0.5
             else:
                 b = float(np.random.uniform(-1.0, 1.0))
             self.init_params['b'] = b
@@ -214,6 +214,35 @@ class Grid1d(GridBase):
                 a = params['a']
             else:
                 a = float(3.5 - np.abs(b))
+            self.init_params['a'] = a
+            self.u = a + b * np.sin(k * np.pi * self.x / (self.xmax - self.xmin))
+
+        elif self.init_type == "random-many-shocks":
+            if boundary is None:
+                self.boundary = "periodic"
+            if 'k' in params:
+                k = params['k']
+            elif self.deterministic_init:
+                k = 12 #6
+            else:
+                # Note that k must be even integer.
+                k = int(np.random.choice(np.arange(10, 16, 2)))
+            self.init_params['k'] = k
+            if 'b' in params:
+                b = params['b']
+            elif self.deterministic_init:
+                b = 0.5
+            else:
+                b_size = np.random.choice(np.linspace(0.2, 1.0, 9))
+                b_sign = np.random.randint(2) * 2 - 1
+                b = b_sign * b_size
+            self.init_params['b'] = b
+            if 'a' in params:
+                a = params['a']
+            elif self.deterministic_init:
+                a = 0.0
+            else:
+                a = np.random.choice(np.linspace(-2.0, 2.0, 9))
             self.init_params['a'] = a
             self.u = a + b * np.sin(k * np.pi * self.x / (self.xmax - self.xmin))
 
