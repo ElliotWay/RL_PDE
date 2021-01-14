@@ -781,7 +781,8 @@ class AbstractBurgersEnv(gym.Env):
         # Use error with the "true" solution as the reward.
         error = self.solution.get_full() - self.grid.get_full()
 
-        if "full" in self.reward_mode:
+        if "full" in self.reward_mode or "one-step" in self.reward_mode:
+            # one-step is handled by the solution
             pass
         # Use the difference in error as a reward instead of the full reward with the solution.
         elif "change" in self.reward_mode:
