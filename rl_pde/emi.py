@@ -294,3 +294,34 @@ class BatchEMI(EMI):
     def get_policy(self):
         return self.policy
 
+class HomogenousMARL_EMI(BatchEMI):
+    """
+    EMI that structues the environment as a MARL problem with homogenous agents.
+    It takes samples from the environment, keeps the time and spatial dimension while flattening
+    the rest, and passes this to the model.
+    
+    It is up to the model to interpret the spatial dimension as simultaneous agents.
+
+    The environment space from the presented to the model is the shape of the individual actions,
+    i.e. the flattened shape after removing time and spatial dimensions. This requires the model to
+    create homogenous agents that are location-agnostic, even though the model receives information
+    about location during training.
+    """
+    def training_episode(self, env):
+        self.policy.save_model_samples()
+        _, _, reward, done, raw_new_state = rollout(env, self.policy)
+    
+        # Training requires the state/actions from the perspective of the model, not the
+        # perspective of the environment.
+        state, action = self.policy.get_model_samples()
+        last_state = self.policy.obs_adjust(raw_new_state[-1])
+        new_state = state[1:] + [last_state]
+
+        # Unlike with BatchEMI, we need not reshape the trajectories before training.
+        extra_info = self._model.train(state, action, reward, done, new_state)
+
+        avg_reward = np.mean(reward)
+        timesteps = len(state)
+        info_dict = {'avg_reward': avg_reward, 'timesteps':timesteps}
+        info_dict.update(extra_info)
+        return info_dict

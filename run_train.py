@@ -17,7 +17,7 @@ from stable_baselines import logger
 #from stable_baselines.ddpg.noise import AdaptiveParamNoiseSpec, OrnsteinUhlenbeckActionNoise, NormalActionNoise
 
 from rl_pde.run import train
-from rl_pde.emi import BatchEMI, StandardEMI, TestEMI
+from rl_pde.emi import BatchEMI, HomogenousMARL_EMI, StandardEMI, TestEMI
 from envs import get_env_arg_parser, build_env
 from models import get_model_arg_parser
 from models import SACModel, TestModel
@@ -178,6 +178,9 @@ def main():
 
     if args.emi == 'batch':
         emi = BatchEMI(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
+    elif args.emi == 'marl':
+        emi = HomgenousMARL_EMI(env, model_cls, args, obs_adjust=obs_adjust,
+                action_adjust=action_adjust)
     elif args.emi == 'std' or args.emi == 'standard':
         emi = StandardEMI(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
     elif args.emi == 'test':
