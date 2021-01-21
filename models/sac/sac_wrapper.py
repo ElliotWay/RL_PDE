@@ -7,6 +7,7 @@ from stable_baselines.common.math_util import safe_mean, unscale_action, scale_a
 from stable_baselines.common.schedules import get_schedule_fn
 
 from models import BaselinesModel
+from models.replay_buffer import SB_MARL_ReplayBuffer
 
 class SACModel(BaselinesModel):
     """
@@ -53,6 +54,11 @@ class SACModel(BaselinesModel):
                        tensorboard_log=None,
                        )
         self._model = self.sac # Used by superclass.
+
+        # To use the MARL style replay buffer, we need to replace the one SAC is currently using.
+        if args.replay_style == "marl":
+            raise NotImplementedError
+            #self.sac.replay_buffer = SB_MARL_ReplayBuffer(num_agents=#How do we get this?
 
         sac = self.sac
         sac._setup_learn()
