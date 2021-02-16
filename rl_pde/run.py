@@ -99,7 +99,7 @@ def train(env, eval_envs, emi, args):
         if ep % args.log_freq == 0:
             ep_string = ("{:0" + str(ep_precision) + "}").format(ep)
 
-            if args.emi == "batch":
+            if args.emi != "std":
                 # The action snapshot doesn't make sense if EMI is not batched,
                 # because a standard EMI has a fixed input size.
                 action_snapshot.save_action_snapshot(
