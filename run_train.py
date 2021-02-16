@@ -130,6 +130,23 @@ def main():
     if args.train_freq is None:
         args.train_freq = 1 if args.emi == "std" else env.action_space.shape[0]
 
+    if args.replay_style == 'marl':
+        if args.emi != 'marl':
+            args.emi = 'marl'
+            print("EMI set to MARL for MARL-style replay buffer.")
+        if args.batch_size % (args.nx + 1) != 0:
+            old_batch_size = args.batch_size
+            new_batch_size = old_batch_size + (args.nx + 1) - (old_batch_size % (args.nx + 1))
+            args.batch_size = new_batch_size
+            print("Batch size changed from {} to {} to align with MARL-style replay buffer."
+                    .format(old_batch_size, new_batch_size))
+        if args.buffer_size % (args.nx + 1) != 0:
+            old_buffer_size = args.buffer_size
+            new_buffer_size = old_buffer_size + (args.nx + 1) - (old_buffer_size % (args.nx + 1))
+            args.buffer_size = new_buffer_size
+            print("Replay buffer size changed from {} to {} to align with MARL-style buffer."
+                    .format(old_buffer_size, new_buffer_size))
+
     if args.model == 'sac':
         model_cls = SACModel
     elif args.model == 'test':

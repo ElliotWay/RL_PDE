@@ -35,14 +35,15 @@ class SB_MARL_ReplayBuffer(ReplayBuffer):
         for data in zip(obs_t, action, reward, obs_tp1, done):
             self.add(*data)
 
-    def sample(self, batch_size: int):
-        assert batch_size % self.num_agents == 0, "Sample size must be divisible by the" \
-                " number of agents."
+    def sample(self, batch_size: int, env=None):
+        assert batch_size % self.num_agents == 0, ("Sample size ({}) must be divisible by the" 
+                + " number of agents ({}).").format(batch_size, self.num_agents)
+        assert env is None, "VecEnv stuff is not implemented for MARL style buffer."
 
-        real_batch_size = batch_size / self.num_agents
-        real_buf_size = len(self) / self.num_agents
+        real_batch_size = batch_size // self.num_agents
+        real_buf_size = len(self) // self.num_agents
         base_indexes = np.random.randint(real_buf_size, size=real_batch_size)
         
-        buf_indexes = ((num_agents * base_indexes)[..., None]
-                        + np.arange(num_agents)[None, ...]).flatten()
-        return self._storage[buf_indexes]
+        buf_indexes = ((self.num_agents * base_indexes)[..., None]
+                        + np.arange(self.num_agents)[None, ...]).flatten()
+        return self._encode_sample(buf_indexes)

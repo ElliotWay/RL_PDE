@@ -34,6 +34,7 @@ def get_model_arg_parser():
     parser.add_argument('--replay-style', '--replay_style', type=str, default=None,
             help="(SAC) Option to use MARL style replay buffer that samples entire timesteps"
             + " instead of individual locations. Use --replay-style marl."
-            + " Probably also use --emi marl.")
+            + " This also forces --emi marl and increases batch size to be a multiple of the"
+            + " spatial dimension.")
  
     return parser

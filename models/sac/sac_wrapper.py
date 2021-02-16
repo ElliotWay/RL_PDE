@@ -57,13 +57,11 @@ class SACModel(BaselinesModel):
 
         # To use the MARL style replay buffer, we need to replace the one SAC is currently using.
         if args.replay_style == "marl":
+            print("Using MARL style replay buffer.")
             #TODO: Fix this hack. This class should NOT be aware of the number of agents via this
             # parameter. It should only perceive the individual environment.
-            adjusted_buffer_size = args.buffer_size
-            if adjusted_buffer_size % (args.nx + 1) != 0:
-                adjusted_buffer_size += (args.nx + 1) - (adjusted_buffer_size % (args.nx + 1))
             self.sac.replay_buffer = SB_MARL_ReplayBuffer(num_agents=(args.nx+1),
-                    size=adjusted_buffer_size)
+                    size=args.buffer_size)
 
         sac = self.sac
         sac._setup_learn()
@@ -117,9 +115,11 @@ class SACModel(BaselinesModel):
         return unscaled_action, None
 
     def train(self, s, a, r, s2, done):
+        assert done.dtype == np.bool, "Done is not bool. Args may be in wrong order."
         sac = self.sac
 
-        self.steps_seen += len(s)
+        total_individual_steps = np.prod(r.shape)
+        self.steps_seen += total_individual_steps
         step = self.steps_seen
 
         with SetVerbosity(sac.verbose), \
@@ -144,7 +144,7 @@ class SACModel(BaselinesModel):
             current_lr = sac.learning_rate(frac)
             # SAC trains for gradient_steps every train_freq steps.
             # We need to train the equivalent number of times here.
-            for grad_step in range(int(sac.gradient_steps * (len(s) / sac.train_freq))):
+            for grad_step in range(int(sac.gradient_steps * (total_individual_steps / sac.train_freq))):
                 # Break if the warmup phase is not over
                 # or if there are not enough samples in the replay buffer
                 if not sac.replay_buffer.can_sample(sac.batch_size) \
