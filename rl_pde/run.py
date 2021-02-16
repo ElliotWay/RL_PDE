@@ -34,6 +34,7 @@ def rollout(env, policy, num_rollouts=1, rk4=False, deterministic=False, every_s
     Returns
     -------
     (states, actions, rewards, dones, next_states)
+    Each is a list.
     """
     states = []
     actions = []

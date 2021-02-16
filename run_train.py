@@ -179,7 +179,7 @@ def main():
     if args.emi == 'batch':
         emi = BatchEMI(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
     elif args.emi == 'marl':
-        emi = HomgenousMARL_EMI(env, model_cls, args, obs_adjust=obs_adjust,
+        emi = HomogenousMARL_EMI(env, model_cls, args, obs_adjust=obs_adjust,
                 action_adjust=action_adjust)
     elif args.emi == 'std' or args.emi == 'standard':
         emi = StandardEMI(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)

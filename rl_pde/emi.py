@@ -318,7 +318,13 @@ class HomogenousMARL_EMI(BatchEMI):
         new_state = state[1:] + [last_state]
 
         # Unlike with BatchEMI, we need not reshape the trajectories before training.
-        extra_info = self._model.train(state, action, reward, done, new_state)
+        # (It helps to convert the lists to numpy arrays, though.)
+        state = np.array(state)
+        action = np.array(action)
+        reward = np.array(reward)
+        unbatched_done = np.repeat(done, len(state[0])).reshape((-1, len(state[0])))
+        new_state = np.array(new_state)
+        extra_info = self._model.train(state, action, reward, unbatched_done, new_state)
 
         avg_reward = np.mean(reward)
         timesteps = len(state)

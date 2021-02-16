@@ -33,7 +33,7 @@ class SACModel(BaselinesModel):
         policy_cls = LnMlpPolicy if args.layer_norm else MlpPolicy
 
         if args.learning_starts is None:
-            args.learning_starts = args.ep_length*args.nx
+            args.learning_starts = args.ep_length*(args.nx+1)
 
         policy_kwargs = {'layers':args.layers}
         self.sac = SAC(policy_cls,
@@ -57,8 +57,13 @@ class SACModel(BaselinesModel):
 
         # To use the MARL style replay buffer, we need to replace the one SAC is currently using.
         if args.replay_style == "marl":
-            raise NotImplementedError
-            #self.sac.replay_buffer = SB_MARL_ReplayBuffer(num_agents=#How do we get this?
+            #TODO: Fix this hack. This class should NOT be aware of the number of agents via this
+            # parameter. It should only perceive the individual environment.
+            adjusted_buffer_size = args.buffer_size
+            if adjusted_buffer_size % (args.nx + 1) != 0:
+                adjusted_buffer_size += (args.nx + 1) - (adjusted_buffer_size % (args.nx + 1))
+            self.sac.replay_buffer = SB_MARL_ReplayBuffer(num_agents=(args.nx+1),
+                    size=adjusted_buffer_size)
 
         sac = self.sac
         sac._setup_learn()

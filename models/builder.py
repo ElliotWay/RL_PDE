@@ -31,5 +31,9 @@ def get_model_arg_parser():
             help="(SAC) At what step the learning starts; before this, actions are take at"
             + " random. Note: a full timestep actually contains dx steps. Default is one episode's"
             + " worth.")
+    parser.add_argument('--replay-style', '--replay_style', type=str, default=None,
+            help="(SAC) Option to use MARL style replay buffer that samples entire timesteps"
+            + " instead of individual locations. Use --replay-style marl."
+            + " Probably also use --emi marl.")
  
     return parser

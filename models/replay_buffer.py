@@ -24,15 +24,15 @@ class SB_MARL_ReplayBuffer(ReplayBuffer):
             raise ValueError("Buffer size must be divisible by number of agents.")
         super().__init__(size)
 
-    def add(self, obs_t, action, reward, obs_tpl, done):
+    def add(self, obs_t, action, reward, obs_tp1, done):
         assert obs_t.shape[0] == self.num_agents
         # These samples are a batch of size num_agents, we can add them into the buffer by using
         # the extend method instead.
-        super().extend(obs_t, action, reward, obs_tpl, done)
+        super().extend(obs_t, action, reward, obs_tp1, done)
         assert self._next_idx % self.num_agents == 0
 
-    def extend(self, obs_t, action, reward, obs_tpl, done):
-        for data in zip(obs_t, action, reward, obs_tpl, done):
+    def extend(self, obs_t, action, reward, obs_tp1, done):
+        for data in zip(obs_t, action, reward, obs_tp1, done):
             self.add(*data)
 
     def sample(self, batch_size: int):
