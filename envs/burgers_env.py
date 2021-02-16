@@ -732,20 +732,32 @@ class AbstractBurgersEnv(gym.Env):
         if (not "full" in reward_mode
                 and not "change" in reward_mode
                 and not "one-step" in reward_mode):
-            reward_mode += "_full"
+            if "l2d" in reward_mode:
+                reward_mode += "_full"
+            else:
+                reward_mode += "_full"
 
         if (not "adjacent" in reward_mode
                 and not "stencil" in reward_mode):
-            reward_mode += "_adjacent"
+            if "l2d" in reward_mode:
+                reward_mode += "_stencil"
+            else:
+                reward_mode += "_adjacent"
 
         if (not "avg" in reward_mode
                 and not "max" in reward_mode
                 and not "L2" in reward_mode):
-            reward_mode += "_avg"
+            if "l2d" in reward_mode:
+                reward_mode += "_max"
+            else:
+                reward_mode += "_avg"
 
         if (not "nosquash" in reward_mode
                 and not "arctansquash" in reward_mode):
-            reward_mode += "_arctansquash"
+            if "l2d" in reward_mode:
+                reward_mode += "_logsquash"
+            else:
+                reward_mode += "_arctansquash"
 
         return reward_mode
     
@@ -819,22 +831,23 @@ class AbstractBurgersEnv(gym.Env):
         else:
             raise Exception("AbstractBurgersEnv: reward_mode problem")
 
-        # We want to penalize error, not reward it.
-        reward = -combined_error
-
         # Squash reward.
         if "nosquash" in self.reward_mode:
             max_penalty = 1e7
+            reward = -combined_error
+        elif "logsquash" in self.reward_mode:
+            max_penalty = 1e7
+            reward = -np.log(combined_error + 1e-30)
         elif "arctansquash" in self.reward_mode:
             max_penalty = np.pi / 2
             if "noadjust" in self.reward_mode:
-                reward = np.arctan(reward)
+                reward = np.arctan(-combined_error)
             else:
                 # The constant controls the relative importance of small rewards compared to large rewards.
                 # Towards infinity, all rewards (or penalties) are equally important.
                 # Towards 0, small rewards are increasingly less important.
                 # An alternative to arctan(C*x) with this property would be x^(1/C).
-                reward = np.arctan(self.reward_adjustment * reward)
+                reward = np.arctan(self.reward_adjustment * -combined_error)
         else:
             raise Exception("AbstractBurgersEnv: reward_mode problem")
 
