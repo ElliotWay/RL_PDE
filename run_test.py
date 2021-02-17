@@ -255,6 +255,7 @@ def main():
             return np.clip(z_score, -clip_obs, clip_obs)
             action_adjust = None
             obs_adjust = None
+        raise Exception("Need to implement this properly to account for chages to run_train.")
         if args.mode == "weno":
             action_adjust = softmax
             obs_adjust = z_score_last_dim

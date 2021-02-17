@@ -38,6 +38,10 @@ def main():
                         help="Name of the environment in which to train the agent.")
     parser.add_argument('--emi', type=str, default='batch',
                         help="Environment-model interface. Options are 'batch' and 'std'.")
+    parser.add_argument('--obs-scale', '--obs_scale', type=str, default='z_score_last',
+                        help="Adjustment function to observation. Compute Z score along the last"
+                        + " dimension (the stencil) with 'z_score_last', the Z score along every"
+                        + " dimension with 'z_score_all', or leave them the same with 'none'.")
     parser.add_argument('--eval-env', '--eval_env', default=None,
                         help="Evaluation env. Default is to use an identical environment to the training environment."
                         + " Pass 'custom' to use a representative sine/rarefaction/accelshock combination.")
@@ -50,7 +54,7 @@ def main():
                         help="Total number of episodes to train.")
     parser.add_argument('--log-freq', '--log_freq', type=int, default=10,
                         help="Number of episodes to wait between logging information.")
-    parser.add_argument('--n-best-models', '--b_best_models', type=int, default=5,
+    parser.add_argument('--n-best-models', '--n_best_models', type=int, default=5,
                         help="Number of best models so far to keep track of.")
     parser.add_argument('--seed', type=int, default=1,
                         help="Set random seed for reproducibility.")
@@ -192,6 +196,14 @@ def main():
         obs_adjust = z_score_last_dim
     else:
         print("No state/action normalization enabled for {}.".format(args.env))
+
+    if args.obs_scale is not None:
+        if args.obs_scale == "z_score_last":
+            obs_adjust = z_score_last_dim
+        elif args.obs_scale == "z_score_all":
+            obs_adjust = z_score_all_dims
+        elif args.obs_scale == "none":
+            obs_adjust = None
 
     if args.emi == 'batch':
         emi = BatchEMI(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)

@@ -156,7 +156,10 @@ class StandardEMI(EMI):
         # Training requires the state/actions from the perspective of the model, not the
         # perspective of the environment.
         s, a = self.policy.get_model_samples()
-        last_state = self.policy.obs_adjust(raw_s2[-1])
+        if self.policy.obs_adjust is not None:
+            last_state = self.policy.obs_adjust(raw_s2[-1])
+        else:
+            last_state = raw_s2[-1]
         s2 = s[1:] + [last_state]
 
         extra_info = self._model.train(s, a, r, s2, done)
@@ -265,7 +268,10 @@ class BatchEMI(EMI):
         # Training requires the state/actions from the perspective of the model, not the
         # perspective of the environment.
         state, action = self.policy.get_model_samples()
-        last_state = self.policy.obs_adjust(raw_new_state[-1])
+        if self.policy.obs_adjust is not None:
+            last_state = self.policy.obs_adjust(raw_new_state[-1])
+        else:
+            last_state = raw_new_state[-1]
         new_state = state[1:] + [last_state]
 
         # Convert batched trajectory into list of samples while preserving consecutive
@@ -314,7 +320,10 @@ class HomogenousMARL_EMI(BatchEMI):
         # Training requires the state/actions from the perspective of the model, not the
         # perspective of the environment.
         state, action = self.policy.get_model_samples()
-        last_state = self.policy.obs_adjust(raw_new_state[-1])
+        if self.policy.obs_adjust is not None:
+            last_state = self.policy.obs_adjust(raw_new_state[-1])
+        else:
+            last_state = raw_new_state[-1]
         new_state = state[1:] + [last_state]
 
         # Unlike with BatchEMI, we don't need to reorder the data. We still need to flatten states
