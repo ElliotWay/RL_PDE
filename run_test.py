@@ -142,6 +142,10 @@ def main():
                         help="Type of model to be loaded. (Overrides the meta file.)")
     parser.add_argument('--emi', type=str, default='batch',
                         help="Environment-model interface. (Overrides the meta file.)")
+    parser.add_argument('--obs-scale', '--obs_scale', type=str, default='z_score_last',
+                        help="Adjustment function to observation. Compute Z score along the last"
+                        + " dimension (the stencil) with 'z_score_last', the Z score along every"
+                        + " dimension with 'z_score_all', or leave them the same with 'none'.")
     parser.add_argument('--log-dir', type=str, default=None,
                         help="Directory to place log file and other results. Default is test/env/agent/timestamp.")
     parser.add_argument('--ep-length', type=int, default=500,
@@ -255,7 +259,7 @@ def main():
             return np.clip(z_score, -clip_obs, clip_obs)
             action_adjust = None
             obs_adjust = None
-        raise Exception("Need to implement this properly to account for chages to run_train.")
+
         if args.mode == "weno":
             action_adjust = softmax
             obs_adjust = z_score_last_dim
@@ -265,6 +269,14 @@ def main():
             obs_adjust = z_score_last_dim
         else:
             print("No state/action normalization enabled for {}.".format(args.env))
+
+        if args.obs_scale is not None:
+            if args.obs_scale == "z_score_last":
+                obs_adjust = z_score_last_dim
+            elif args.obs_scale == "z_score_all":
+                obs_adjust = z_score_all_dims
+            elif args.obs_scale == "none":
+                obs_adjust = None
 
         if args.model == 'sac':
             model_cls = SACModel
