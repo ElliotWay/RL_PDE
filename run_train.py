@@ -1,5 +1,6 @@
 import os
 os.environ['PYTHONHASHSEED'] = "42069"
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = "2"
 import argparse
 import shutil
 import signal
@@ -13,6 +14,7 @@ tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 import matplotlib
 matplotlib.use("Agg")
 
+#TODO: Remove dependency on this logger. The functionality we need can be easily implemented.
 from stable_baselines import logger
 #from stable_baselines.ddpg.noise import AdaptiveParamNoiseSpec, OrnsteinUhlenbeckActionNoise, NormalActionNoise
 
@@ -20,7 +22,8 @@ from rl_pde.run import train
 from rl_pde.emi import BatchEMI, HomogenousMARL_EMI, StandardEMI, TestEMI
 from envs import get_env_arg_parser, build_env
 from models import get_model_arg_parser
-from models import SACModel, TestModel
+from models import SACModel, PolicyGradientModel, TestModel
+from models.fixed import FixedOneStepModel
 from util import metadata, action_snapshot
 from util.misc import rescale, set_global_seed
 
@@ -153,8 +156,14 @@ def main():
 
     if args.model == 'sac':
         model_cls = SACModel
+    elif args.model == 'pg' or args.model == 'reinforce':
+        model_cls = PolicyGradientModel
+        if args.gamma == 0.0:
+            args.return_style = "myopic"
     elif args.model == 'test':
         model_cls = TestModel
+    elif args.model == "fixed-1step" or args.model == "fixed":
+        model_cls = FixedOneStepModel
     else:
         raise Exception("Unrecognized model type: \"{}\"".format(args.model))
 

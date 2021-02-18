@@ -36,5 +36,11 @@ def get_model_arg_parser():
             + " instead of individual locations. Use --replay-style marl."
             + " This also forces --emi marl and increases batch size to be a multiple of the"
             + " spatial dimension.")
+    parser.add_argument('--optimizer', type=str, default=None,
+            help="(PG) Gradient Descent algorithm to use for training. Default depends on Model.")
+    parser.add_argument('--return-style', '--return_style', type=str, default=None,
+            help="(PG) Style of returns for estimating Q(s,a). Default depends on Model."
+            + " 'full' uses (or tries to use) the entire return. 'myopic' uses only the"
+            + " immediate reward, as if gamma was set to 0.0.")
  
     return parser

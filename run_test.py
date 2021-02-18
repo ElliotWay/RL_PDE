@@ -1,6 +1,7 @@
 import argparse
 from argparse import Namespace
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = "2"
 import shutil
 import signal
 import sys
@@ -20,7 +21,7 @@ from rl_pde.emi import BatchEMI, StandardEMI, TestEMI
 from envs import get_env_arg_parser, build_env
 from agents import StandardWENOAgent, StationaryAgent, EqualAgent, MiddleAgent, LeftAgent, RightAgent, RandomAgent
 from models import get_model_arg_parser
-from models import SACModel, TestModel
+from models import SACModel, PolicyGradientModel, TestModel
 from util import metadata
 from util.misc import set_global_seed
 
@@ -280,6 +281,8 @@ def main():
 
         if args.model == 'sac':
             model_cls = SACModel
+        elif args.model == 'pg' or args.model == 'reinforce':
+            model_cls = PolicyGradientModel
         elif args.model == 'test':
             model_cls = TestModel
         else:

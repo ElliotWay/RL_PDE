@@ -142,6 +142,7 @@ def load_to_namespace(meta_filename, args_ns, override_args=None):
     # TODO find a way to get around some of this stuff? Might not be possible.
 
     print("M Loading from meta file: {}".format(meta_filename))
+    print("TODO Clean this up so you don't see a lot of irrelevant information.")
 
     # Note that this is not a deep copy - changes to the dict will also change the namespace.
     arg_dict = vars(args_ns)

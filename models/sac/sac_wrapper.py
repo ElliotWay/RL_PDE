@@ -19,9 +19,9 @@ class SACModel(BaselinesModel):
 
     Things in SAC that are not implemented: callbacks, VecEnv stuff, HER compatability, anything in
     info dict from environment such as successes, some information that SAC records is not recorded
-    but as much as possible is passed to caller
+    but as much as possible is passed to caller.
     Things different from SAC: training happens whenever new experience is passed instead of every
-    train_freq steps
+    train_freq steps.
 
     Any bugs in SAC are probably in here too.
 

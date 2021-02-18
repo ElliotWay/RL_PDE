@@ -1,5 +1,4 @@
 import os
-import io
 import argparse
 import subprocess
 import random
@@ -101,17 +100,6 @@ def set_global_seed(seed):
     np.random.seed(seed)
     tf.set_random_seed(seed)
     random.seed(seed)
-
-# These functions were adapted from Stable Baselines code.
-def serialize_ndarray(array):
-    byte_file = io.BytesIO()
-    np.save(byte_file, array)
-    serialized_array = byte_file.getvalue()
-    return serialized_array
-def deserialize_ndarray(serialized_array):
-    byte_file = io.BytesIO(serialized_array)
-    array = np.load(byte_file)
-    return array
 
 def human_readable_time_delta(time_delta, sig_units=0):
     """
