@@ -12,9 +12,14 @@ def makeRNN():
     cell = IntegrateCell(grid,
             prep_state_fn=WENO_prep_state,
             policy_net=policy,
-            integrate_fn=WENO_integrate
+            integrate_fn=WENO_integrate,
+            reward_fn=WENO_reward,
             )
     rnn = IntegrateRNN(cell)
+
+    states, actions, rewards = rnn(initial_state_ph, num_steps)
+
+    loss = -tf.reduce_sum(rewards)
 
 
 
@@ -49,26 +54,28 @@ class IntegrateRNN(Layer):
     def call(initial_state, num_steps):
         states_ta = tf.TensorArray(dtype=self.dtype, size=num_steps)
         actions_ta = tf.TensorArray(dtype=self.dtype, size=num_steps)
+        rewards_ta = tf.TensorArray(dtype=self.dtype, size=num_steps)
 
         def condition_fn(time, *_):
             return time < num_steps
 
-        def loop_fn(time, states_ta, actions_ta, current_state):
-            next_action, next_state = self.cell(current_state)
+        def loop_fn(time, states_ta, actions_ta, rewards_ta, current_state):
+            next_action, next_reward, next_state = self.cell(current_state)
 
             # Overwriting the TensorArrays is necessary to keep connections
             # through the entire network graph.
             states_ta = states_ta.write(time, next_state)
             actions_ta = actions_ta.write(time, next_action)
+            rewards_ta = rewards_ta.write(time, next_reward)
 
-            return (time + 1, states_ta, actions_ta, next_state)
+            return (time + 1, states_ta, actions_ta, rewards_ta, next_state)
 
         initial_time = tf.Constant(0, dtype=tf.int32)
 
-        _time, states_ta, actions_ta, final_state = tf.while_loop(
+        _time, states_ta, actions_ta, rewards_ta, final_state = tf.while_loop(
                 cond=condition_fn,
                 body=loop_fn,
-                loop_vars=(initial_time, states_ta, actions_ta, initial_state),
+                loop_vars=(initial_time, states_ta, actions_ta, rewards_ta, initial_state),
                 parallel_iterations=10, # Iterations of the loop to run in parallel?
                                         # I'm not sure how that works.
                                         # 10 is the default value. Keras backend uses 32.
@@ -77,7 +84,8 @@ class IntegrateRNN(Layer):
 
         states = states_ta.stack()
         actions = actions_ta.stack()
-        return states, actions
+        rewards = rewards_ta.stack()
+        return states, actions, rewards
 
 
 class IntegrateCell(Layer):
@@ -103,18 +111,16 @@ class IntegrateCell(Layer):
 
     def call(state, **kwargs):
 
-        # Convert input to RL state.
         real_state = state
         rl_state = self.prep_state_fn(real_state)
 
-        # From the RL state, compute the RL action.
         rl_action = self.policy_net(rl_state)
 
-        # From the RL state and the RL action, compute the next real state.
         next_real_state = self.integrate_fn(real_state, rl_state, rl_action)
 
-        # Return the next real state AND the RL action (otherwise we never see the action).
-        return rl_action, next_real_state
+        rl_reward = self.reward_fn(real_state, rl_state, rl_action, next_real_state)
+
+        return rl_action, rl_reward, next_real_state
 
 
 def make_policy_network(state_size, action_size):
