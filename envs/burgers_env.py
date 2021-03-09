@@ -110,22 +110,72 @@ class AbstractBurgersEnv(gym.Env):
     def __init__(self,
             xmin=0.0, xmax=1.0, nx=128, boundary=None, init_type="smooth_sine",
             fixed_step=0.0005, C=0.5,
-            weno_order=3, eps=0.0, srca=0.0, episode_length=300,
+            weno_order=3, state_order=None, eps=0.0, srca=0.0, episode_length=300,
             analytical=False, precise_weno_order=None, precise_scale=1,
             reward_adjustment=1000, reward_mode=None,
             memoize=False,
             test=False):
+        """
+        Construct the Burgers environment.
+
+        Parameters
+        ----------
+        xmin : float
+            lower bound of the physical space
+        xmax : float
+            upper bound of the physical space
+        nx : int
+            number of discretized cells
+        boundary : string
+            type of boundary condition (periodic/outflow)
+        init_type : string
+            type of initial condition (various, see grid.py)
+        fixed_step : float
+            length of fixed timestep
+        C : float
+            CFL number for varying length timesteps (NOT CURRENTLY USED)
+        weno_order : int
+            Order of WENO approximation. Affects action and state space sizes.
+        state_order : int
+            Use to specify a state space that is wider than it otherwise should be.
+        eps : float
+            viscosity parameter
+        srca : float
+            source amplitude
+        episode_length : int
+            number of timesteps before the episode terminates
+        analytical : bool
+            whether to use an analytical solution instead of a numerical one
+        precise_weno_order : int
+            use to compute the weno solution with a higher weno order
+        precise_scale : int
+            use to compute the weno solution with more precise grid
+        reward_adjustment : float
+            adjust the reward squashing function - higher makes small changes to large rewards
+            less important
+        reward_mode : str
+            composite string specifying the type of reward function
+        memoize : bool
+            use a memoized weno solution
+        test : bool
+            whether this is a strictly test environment (passed to Grid1d to ensure initial
+            conditions are not randomized)
+        """
 
         self.test = test
         self.reward_mode = self.fill_default_reward_mode(reward_mode)
 
-        self.ng = weno_order+1
         self.nx = nx
         self.weno_order = weno_order
+        if state_order is None:
+            self.state_order = weno_order
+        else:
+            self.state_order = state_order
+        self.ng = self.state_order + 1
         self.grid = Grid1d(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng,
                            boundary=boundary, init_type=init_type,
                            deterministic_init=self.test)
-        
+
         if srca > 0.0:
             self.source = RandomSource(grid=self.grid, amplitude=srca)
         else:
@@ -814,7 +864,8 @@ class AbstractBurgersEnv(gym.Env):
         # Average of error in two adjacent cells.
         if "adjacent" in self.reward_mode and "avg" in self.reward_mode:
             combined_error = (error[self.ng-1:-self.ng] + error[self.ng:-(self.ng-1)]) / 2
-        # Combine error across the stencil.
+        # Combine error across the WENO stencil.
+        # (NOT the state stencil i.e. self.state_order * 2 - 1, even if we are using a wide state.)
         elif "stencil" in self.reward_mode:
             stencil_indexes = create_stencil_indexes(
                     stencil_size=(self.weno_order * 2 - 1),
@@ -908,8 +959,8 @@ class WENOBurgersEnv(AbstractBurgersEnv):
                                        shape=(self.grid.real_length() + 1, 2, self.weno_order),
                                        dtype=np.float32)
         self.observation_space = spaces.Box(low=-1e7, high=1e7,
-                                            shape=(self.grid.real_length() + 1, 2, 2 * self.weno_order - 1),
-                                            dtype=np.float32)
+                                            shape=(self.grid.real_length() + 1, 2, 2 * self.state_order - 1),
+                                            dtype=np.float64)
        
         self.solution.set_record_state(True)
         if self.weno_solution is not None:
@@ -951,11 +1002,9 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         fp = (f + alpha * g.u) / 2
         fm = (f - alpha * g.u) / 2
 
-        stencil_size = self.weno_order * 2 - 1
-        num_stencils = g.real_length() + 1
-        offset = g.ng - self.weno_order
-        # Adding a row vector and column vector gives us an "outer product" matrix where each row is a stencil.
-        fp_stencil_indexes = offset + np.arange(stencil_size)[None, :] + np.arange(num_stencils)[:, None]
+        fp_stencil_indexes = create_stencil_indexes(stencil_size=self.state_order * 2 - 1,
+                                                    num_stencils=g.real_length() + 1,
+                                                    offset=g.ng - self.state_order)
         fm_stencil_indexes = fp_stencil_indexes + 1
 
         fp_stencils = fp[fp_stencil_indexes]
@@ -1170,6 +1219,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         return state, reward, done
 
+
 class DiscreteWENOBurgersEnv(WENOBurgersEnv):
     def __init__(self, actions_per_dim=2, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -1227,8 +1277,8 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
                                        shape=(self.grid.real_length() + 1, 2, 2 * self.weno_order - 1),
                                        dtype=np.float32)
         self.observation_space = spaces.Box(low=-1e7, high=1e7,
-                                            shape=(self.grid.real_length() + 1, 2, 2 * self.weno_order - 1),
-                                            dtype=np.float32)
+                                            shape=(self.grid.real_length() + 1, 2, 2 * self.state_order - 1),
+                                            dtype=np.float64)
         if self.weno_solution is None:
             self.solution.set_record_actions("coef")
         else:
@@ -1259,11 +1309,9 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
         fp = (f + alpha * g.u) / 2
         fm = (f - alpha * g.u) / 2
 
-        stencil_size = self.weno_order * 2 - 1
-        num_stencils = g.real_length() + 1
-        offset = g.ng - self.weno_order
-        # Adding a row vector and column vector gives us an "outer product" matrix where each row is a stencil.
-        fp_stencil_indexes = offset + np.arange(stencil_size)[None, :] + np.arange(num_stencils)[:, None]
+        fp_stencil_indexes = create_stencil_indexes(stencil_size=self.state_order * 2 - 1,
+                                                    num_stencils=g.real_length() + 1,
+                                                    offset=g.ng - self.state_order)
         fm_stencil_indexes = fp_stencil_indexes + 1
 
         fp_stencils = fp[fp_stencil_indexes]
@@ -1397,8 +1445,8 @@ class FluxBurgersEnv(AbstractBurgersEnv):
                                        shape=(self.grid.real_length() + 1, 2 * self.weno_order),
                                        dtype=np.float32)
         self.observation_space = spaces.Box(low=-1e7, high=1e7,
-                                            shape=(self.grid.real_length() + 1, 2 * self.weno_order),
-                                            dtype=np.float32)
+                                            shape=(self.grid.real_length() + 1, 2 * self.state_order),
+                                            dtype=np.float64)
 
     def prep_state(self):
         """
@@ -1421,9 +1469,9 @@ class FluxBurgersEnv(AbstractBurgersEnv):
 
         # stencil_size is 1 more than in other versions. This is because we
         # need to include the stencils for both + and -.
-        stencil_indexes = create_stencil_indexes(stencil_size=self.weno_order * 2,
+        stencil_indexes = create_stencil_indexes(stencil_size=self.state_order * 2,
                                                  num_stencils=g.real_length() + 1,
-                                                 offset=g.ng - self.weno_order
+                                                 offset=g.ng - self.state_order
                                                  )
 
         stencils = f[stencil_indexes]

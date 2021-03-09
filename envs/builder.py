@@ -15,6 +15,9 @@ def get_env_arg_parser():
                         help="Number of cells into which to discretize x dimension.")
     parser.add_argument('--order', type=positive_int, default=2,
                         help="Order of WENO approximation (assuming using WENO environment or agent).")
+    parser.add_argument('--state_order', '--state-order', type=positive_int, default=None,
+                        help="\"Order\" of state space; use a larger state that corresponds"
+                        + " to a different order. The action space is still based on --order.")
 
     parser.add_argument('--fixed-timesteps', dest='fixed_timesteps', action='store_true',
                         help="Use fixed timesteps. (This is enabled by default.)")
@@ -84,6 +87,7 @@ def build_env(env_name, args, test=False):
                 'C': args.C,
                 'fixed_step': args.timestep,
                 'weno_order': args.order,
+                'state_order': args.state_order,
                 'eps': args.eps,
                 'episode_length': args.ep_length,
                 'analytical': args.analytical,
@@ -103,8 +107,7 @@ def build_env(env_name, args, test=False):
     elif env_name == "flux_burgers":
         env = FluxBurgersEnv(**kwargs)
     else:
-        print("Unrecognized environment type: \"" + str(env_name) + "\".")
-        sys.exit(0)
+        raise Exception("Unrecognized environment type: \"" + str(env_name) + "\".")
 
     return env
 
