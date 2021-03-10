@@ -802,8 +802,7 @@ class AbstractBurgersEnv(gym.Env):
             else:
                 reward_mode += "_avg"
 
-        if (not "nosquash" in reward_mode
-                and not "arctansquash" in reward_mode):
+        if (not "squash" in reward_mode):
             if "l2d" in reward_mode:
                 reward_mode += "_logsquash"
             else:
