@@ -36,7 +36,7 @@ def get_model_arg_parser():
             + " instead of individual locations. Use --replay-style marl."
             + " This also forces --emi marl and increases batch size to be a multiple of the"
             + " spatial dimension.")
-    parser.add_argument('--optimizer', type=str, default=None,
+    parser.add_argument('--optimizer', type=str, default="adam",
             help="(PG) Gradient Descent algorithm to use for training. Default depends on Model.")
     parser.add_argument('--return-style', '--return_style', type=str, default=None,
             help="(PG) Style of returns for estimating Q(s,a). Default depends on Model."
@@ -44,3 +44,21 @@ def get_model_arg_parser():
             + " immediate reward, as if gamma was set to 0.0.")
  
     return parser
+
+def get_optimizer(args):
+    if (args.optimizer is None
+            or args.optimizer == "sgd"):
+        optimizer = tf.train.GradientDescentOptimizer(learning_rate=args.learning_rate)
+    elif args.optimizer == "adam":
+        optimizer = tf.train.AdamOptimizer(learning_rate=args.learning_rate)
+    elif args.optimizer == "momentum":
+        optimizer = tf.train.MomentumOptimizer(learning_rate=args.learning_rate,
+                momemntum=args.momentum)
+    elif args.optimizer == "rmsprop":
+        optimizer = tf.train.RMSPropOptimizer(learning_rate=args.learning_rate,
+                decay=0.99, momentum=args.momentum, epsilon=1e-5)
+    else:
+        raise Exception("Unknown optimizer: {}".format(args.optimizer))
+    return optimizer
+
+

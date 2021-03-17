@@ -4,23 +4,78 @@ import numpy as np
 import tensorflow as tf
 from tf.keras.layers import Layer
 
+from models.builder import get_optimizer
+from models.net import policy_net
 from util.misc import create_stencil_indexes
+from util.serialize import save_to_zip, load_from_zip
 import envs.weno_coefficients as weno_coefficients
 
-def makeRNN():
-    policy = make_policy_network()
-    cell = IntegrateCell(grid,
-            prep_state_fn=WENO_prep_state,
-            policy_net=policy,
-            integrate_fn=WENO_integrate,
-            reward_fn=WENO_reward,
-            )
-    rnn = IntegrateRNN(cell)
+#TODO convert to batches of initial states, not sure this works otherwise.
 
-    states, actions, rewards = rnn(initial_state_ph, num_steps)
+# Unlike our other models, it doesn't make sense to train with a set of trajectories, as the global
+# model has trajectories as part of its internal workings.
+# Instead, the only training input is the initial state, so the train function is changed to
+# train(initial_state) instead.
+# The predict method, on the other hand, is the same, as the global must still have the local model
+# built in.
+class GlobalBackpropModel:
+    def __init__(self, env, args):
 
-    loss = -tf.reduce_sum(rewards)
+        #TODO make initial_state_ph and state_ph
+        # (initial_state is across EVERY location, state is only across one stencil)
 
+        self.session = tf.Session()
+
+        #TODO Use ReLU? Could make an argument instead.
+        self.policy = policy_net(self.state_ph, env.action_space.shape, layers=args.layers,
+                activation_fn=tf.nn.relu, scope="policy")
+        cell = IntegrateCell(grid,
+                prep_state_fn=WENO_prep_state,
+                policy_net=self.policy,
+                integrate_fn=WENO_integrate,
+                reward_fn=WENO_reward,
+                )
+        rnn = IntegrateRNN(cell)
+
+        #TODO possibly restrict num_steps to something smaller?
+        # We'd then need to sample timesteps from a WENO trajectory.
+
+        states, actions, rewards = rnn(initial_state_ph, num_steps=args.ep_length)
+
+        self.loss = -tf.reduce_sum(rewards)
+        #TODO this doesn't look right, I should be reducing over the mean in the batch dimension.
+
+        params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="policy")
+        gradients = tf.gradients(self.loss, params)
+        grads = list(zip(gradients, params))
+        self.params = params
+
+        self.optimizer = get_optimizer(args)
+        self.train_policy = self.optimizer.apply_gradients(grads)
+
+    def train(self, initial_state):
+
+        feed_dict = {self.initial_state_ph:initial_state}
+
+        loss, _ = self.session.run([self.loss, self.train_policy], feed_dict=feed_dict)
+        return {"loss":loss}
+
+    def predict(self, state, deterministic=True):
+        #TODO check if state is single or batch OR every location
+        # OR batch of every location
+        # Currently assumes same as policy expects.
+
+        feed_dict = {self.state_ph:state}
+        action = self.session.run(self.policy, feed_dict=feed_dict)
+
+        return action
+
+    def save(self, path):
+        #return path
+        raise NotImplementedError
+
+    def load(self, path):
+        raise NotImplementedError
 
 
 class IntegrateRNN(Layer):
@@ -48,7 +103,7 @@ class IntegrateRNN(Layer):
         self.swap_to_cpu = swap_to_cpu
 
     def build(self, input_size):
-        #???
+        self.cell.build(input_size)
         super().build()
 
     def call(initial_state, num_steps):
@@ -99,17 +154,10 @@ class IntegrateCell(Layer):
         self.reward_fn = reward_fn
         
     def build(self, input_size):
-        # The input_size is irrelevant, right? It only ever depends on the initial state.
-        # Build the cell.
-        #???
-
-        # Required by RNN API:
-        self.state_size = None # Should be grid size. (Size of the recurrent state.)
-        self.output_size = None # Should be size of the RL action.
-
+        policy_net.build(input_size)
         super().build()
 
-    def call(state, **kwargs):
+    def call(self, state):
 
         real_state = state
         rl_state = self.prep_state_fn(real_state)
@@ -121,11 +169,6 @@ class IntegrateCell(Layer):
         rl_reward = self.reward_fn(real_state, rl_state, rl_action, next_real_state)
 
         return rl_action, rl_reward, next_real_state
-
-
-def make_policy_network(state_size, action_size):
-    #Make e.g. the 32,32 network.
-    pass
 
 
 """

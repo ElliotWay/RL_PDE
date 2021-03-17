@@ -13,6 +13,7 @@ import gym
 from stable_baselines.common.tf_layers import mlp, linear
 
 from models import Model
+from models.builder import get_optimizer
 from util.serialize import save_to_zip, load_from_zip
 
 def gaussian_policy_net(state_tensor, action_shape, layers, activation_fn,
@@ -71,22 +72,6 @@ def tf_nll_gaussian(values, means, stds):
     return (0.5 * tf.reduce_sum(tf.square((values - means) / stds), axis=action_dims) 
            + 0.5 * np.log(2.0 * np.pi) * action_size 
            + tf.reduce_sum(stds, axis=-1))
-
-def get_optimizer(args):
-    if (args.optimizer is None
-            or args.optimizer == "sgd"):
-        optimizer = tf.train.GradientDescentOptimizer(learning_rate=args.learning_rate)
-    elif args.optimizer == "adam":
-        optimizer = tf.train.AdamOptimizer(learning_rate=args.learning_rate)
-    elif args.optimizer == "momentum":
-        optimizer = tf.train.MomentumOptimizer(learning_rate=args.learning_rate,
-                momemntum=args.momentum)
-    elif args.optimizer == "rmsprop":
-        optimizer = tf.train.RMSPropOptimizer(learning_rate=args.learning_rate,
-                decay=0.99, momentum=args.momentum, epsilon=1e-5)
-    else:
-        raise Exception("Unknown optimizer: {}".format(args.optimizer))
-    return optimizer
 
 class PolicyGradientModel(Model):
     def __init__(self, env, args):
