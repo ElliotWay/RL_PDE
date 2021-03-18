@@ -10,8 +10,6 @@ from util.misc import create_stencil_indexes
 from util.serialize import save_to_zip, load_from_zip
 import envs.weno_coefficients as weno_coefficients
 
-#TODO convert to batches of initial states, not sure this works otherwise.
-
 # Unlike our other models, it doesn't make sense to train with a set of trajectories, as the global
 # model has trajectories as part of its internal workings.
 # Instead, the only training input is the initial state, so the train function is changed to
@@ -19,14 +17,23 @@ import envs.weno_coefficients as weno_coefficients
 # The predict method, on the other hand, is the same, as the global must still have the local model
 # built in.
 class GlobalBackpropModel:
-    def __init__(self, env, args):
-
-        #TODO make initial_state_ph and state_ph
-        # (initial_state is across EVERY location, state is only across one stencil)
+    def __init__(self, env, args, dtype=tf.float32):
+        self.dtype = dtype
+        self.env = env
 
         self.session = tf.Session()
+        
+        # initial_state_ph is the REAL physical initial state
+        #TODO should initial_state_ph include ghost cells?
+        self.initial_state_ph = tf.placeholder(dtype=dtype,
+                shape=(None, args.nx), name="init_real_state")
+        # state_ph is the RL state at one location
+        self.state_ph = tf.placeholder(dtype=dtype,
+                shape=(None,) + env.observation_space.shape[1:], name="rl_state")
 
         #TODO Use ReLU? Could make an argument instead.
+        #TODO Is state_ph as the input right? It needs to link to every location, but we're not
+        # feeding in them all as state_ph. How might we do that otherwise?
         self.policy = policy_net(self.state_ph, env.action_space.shape, layers=args.layers,
                 activation_fn=tf.nn.relu, scope="policy")
         cell = IntegrateCell(grid,
@@ -42,8 +49,10 @@ class GlobalBackpropModel:
 
         states, actions, rewards = rnn(initial_state_ph, num_steps=args.ep_length)
 
-        self.loss = -tf.reduce_sum(rewards)
-        #TODO this doesn't look right, I should be reducing over the mean in the batch dimension.
+        assert tf.rank(rewards) == 3
+        # Sum over the length of the trajectory, then average over each location,
+        # and average over the batch.
+        self.loss = -tf.reduce_mean(tf.reduce_sum(rewards, axis=2))
 
         params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="policy")
         gradients = tf.gradients(self.loss, params)
@@ -53,6 +62,8 @@ class GlobalBackpropModel:
         self.optimizer = get_optimizer(args)
         self.train_policy = self.optimizer.apply_gradients(grads)
 
+        #TODO do something with states/actions as a debug output?
+
     def train(self, initial_state):
 
         feed_dict = {self.initial_state_ph:initial_state}
@@ -61,12 +72,32 @@ class GlobalBackpropModel:
         return {"loss":loss}
 
     def predict(self, state, deterministic=True):
-        #TODO check if state is single or batch OR every location
-        # OR batch of every location
-        # Currently assumes same as policy expects.
 
-        feed_dict = {self.state_ph:state}
-        action = self.session.run(self.policy, feed_dict=feed_dict)
+        single_obs_rank = len(self.env.observation_space.shape) - 1
+        input_rank = len(state.shape)
+
+        if input_rank == single_obs_rank:
+            # Single local state.
+            assert state.shape == self.env.observation_space.shape[1:]
+            state = state[None]
+            action = self.session.run(self.policy, feed_dict={self.state_ph:state})
+            action = action[0]
+
+        elif input_rank == single_obs_rank + 1:
+            # Batch of local states 
+            # OR single global state.
+            assert state.shape[1:] == self.env.observation_space.shape[1:]
+            action = self.session.run(self.policy, feed_dict={self.state_ph:state})
+
+        elif input_rank == single_obs_rank + 2:
+            # Batch of global states.
+            assert state.shape[1:] == self.env.observation_space.shape
+            batch_length = state.shape[0]
+            spatial_length = state.shape[1]
+            flattened_state = state.reshape((batch_length * spatial_length,) + state.shape[2:])
+            flattened_action = self.session.run(self.policy,
+                    feed_dict={self.state_ph:flattened_state})
+            action = flattened_action.reshape((batch_length, spatial_length,) + action.shape[1:])
 
         return action
 
@@ -160,23 +191,27 @@ class IntegrateCell(Layer):
     def call(self, state):
 
         real_state = state
-        rl_state = self.prep_state_fn(real_state)
+        # Use map to apply function across every element in the batch.
+        rl_state = tf.map_fn(self.prep_state_fn, real_state)
 
+        # We don't need map on the policy because it already expects a batch.
+        #TODO: wait, that's not right. It expects a batch, but of individual states.
+        # How do we broadcast the policy over every location?
         rl_action = self.policy_net(rl_state)
 
-        next_real_state = self.integrate_fn(real_state, rl_state, rl_action)
+        next_real_state = tf.map_fn(self.integrate_fn, (real_state, rl_state, rl_action))
 
-        rl_reward = self.reward_fn(real_state, rl_state, rl_action, next_real_state)
+        rl_reward = tf.map_fn(self.reward_fn, (real_state, rl_state, rl_action, next_real_state))
 
         return rl_action, rl_reward, next_real_state
 
 
-"""
-Based on prep_state in WENOBurgersEnv.
-#TODO Create function in WENOBurgersEnv that returns this function?
-"""
 @tf.function
 def WENO_prep_state(state):
+    """
+    Based on prep_state in WENOBurgersEnv.
+    #TODO Create function in WENOBurgersEnv that returns this function?
+    """
 
     #TODO Expand boundaries? Or is that already in state?
 
@@ -207,12 +242,20 @@ def WENO_prep_state(state):
 
     return rl_state
 
-"""
-Based on a combination of functions in envs/burgers_env.py.
-#TODO Same deal, could probably put this into the gym Env.
-"""
 @tf.function
-def WENO_integrate(real_state, rl_state, rl_action):
+def WENO_integrate(args):
+    """
+    Based on a combination of functions in envs/burgers_env.py.
+    #TODO Same deal, could probably put this into the gym Env.
+
+    Parameters
+    ----------
+    args : tuple
+        The tuple should be made up of (real_state, rl_state, rl_action).
+        (Needs to be a tuple so this function works with tf.map_fn.)
+    """
+    real_state, rl_state, rl_action = args
+
     # TODO does real_state contain ghost cells here?
     # Don't forget that both the cell and the reward function call this.
 
@@ -246,12 +289,19 @@ def WENO_integrate(real_state, rl_state, rl_action):
     new_state = real_state + step
     return new_state
 
-"""
-Based on a combination of functions in envs/burgers_env.py and in agents.py.
-#TODO Same deal again, could probably put this into the Env.
-"""
 @tf.function
-def WENO_reward(real_state, rl_state, rl_action, next_real_state):
+def WENO_reward(args):
+    """
+    Based on a combination of functions in envs/burgers_env.py and in agents.py.
+    #TODO Same deal again, could probably put this into the Env.
+
+    Parameters
+    ----------
+    args : tuple
+        The tuple should be made up of (real_state, rl_state, rl_action, next_real_state).
+        (Needs to be a tuple so this function works with tf.map_fn.)
+    """
+    real_state, rl_state, rl_action, next_real_state = args
     # Note that real_state and next_real_state do not include ghost cells.
 
     # agents.py#StandardWENOAgent._weno_weights_batch()
