@@ -1,5 +1,13 @@
 import numpy as np
 import tensorflow as tf
+from tf.keras.layers import Layer, Dense
+
+# I found these too useful to avoid using them, but too complex to justify copying.
+# Copy them over anyway if you need to modify the network internals further
+# (or to remove external dependencies).
+# One change to make to that code is to allow for float64 size weights, though that's probably
+# unnecessary.
+from stable_baselines.common.tf_layers import mlp, linear
 
 def gaussian_policy_net(state_tensor, action_shape, layers, activation_fn,
         scope="policy", reuse=False):
@@ -42,7 +50,9 @@ def gaussian_policy_net(state_tensor, action_shape, layers, activation_fn,
 
     return mean, log_std
 
-def policy_net(state_ph, action_shape, layers, activation_fn,
+#TODO delete or rewrite this function. This was the original version, but I
+# realized I needed it as a Layer. (I could have made use of reuse=True instead.)
+def policy_net(state_tensor, action_shape, layers, activation_fn,
         scope="policy", reuse=False):
     """
     Construct a deterministic policy network.
@@ -65,3 +75,38 @@ def policy_net(state_ph, action_shape, layers, activation_fn,
         action = tf.reshape(flat_action, (-1,) + action_shape)
 
     return action
+
+def PolicyNet(Layer):
+    def __init__(self, layers, action_shape, activation_fn=tf.nn.relu, name=None):
+        self.action_shape = action_shape
+        flattened_action_shape = np.prod(action_shape)
+
+        self.hidden_layers = []
+        for i, size in enumerate(layers):
+            fc_layer = Dense(size, activation=activation_fn, name=("fc" + str(i)))
+            self.hidden_layers.append(fc_layer)
+
+        # TODO SB uses orth_init for this layer. Is that necessary?
+        self.output_layer = Dense(flattened_action_shape, name="action")
+
+        super().__init__(name=name)
+
+    def build(self, input_shape):
+        # Sub-layers should build automatically when they are called for the first time.
+        super().build()
+
+    def call(self, state):
+        # Does this work? Do we have that state information during call?
+        # I *think* so, but I'm not sure.
+        flattened_state_size = np.prod(state.shape[1:])
+        flat_state = tf.reshape(state, (-1, flattened_state_size))
+
+        output = state
+        for layer in self.hidden_layers:
+            output = layer(output)
+            # TODO Could use layer normalization - that might be a good idea, esp. with ReLU.
+        flat_action = self.output_layer(output)
+
+        action = tf.reshape(flat_action, (-1,) + self.action_shape)
+
+        return action

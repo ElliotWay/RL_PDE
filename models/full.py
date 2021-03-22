@@ -5,7 +5,7 @@ import tensorflow as tf
 from tf.keras.layers import Layer
 
 from models.builder import get_optimizer
-from models.net import policy_net
+from models.net import PolicyNet
 from util.misc import create_stencil_indexes
 from util.serialize import save_to_zip, load_from_zip
 import envs.weno_coefficients as weno_coefficients
@@ -23,19 +23,16 @@ class GlobalBackpropModel:
 
         self.session = tf.Session()
         
-        # initial_state_ph is the REAL physical initial state
-        #TODO should initial_state_ph include ghost cells?
-        self.initial_state_ph = tf.placeholder(dtype=dtype,
-                shape=(None, args.nx), name="init_real_state")
-        # state_ph is the RL state at one location
-        self.state_ph = tf.placeholder(dtype=dtype,
-                shape=(None,) + env.observation_space.shape[1:], name="rl_state")
 
-        #TODO Use ReLU? Could make an argument instead.
-        #TODO Is state_ph as the input right? It needs to link to every location, but we're not
-        # feeding in them all as state_ph. How might we do that otherwise?
-        self.policy = policy_net(self.state_ph, env.action_space.shape, layers=args.layers,
-                activation_fn=tf.nn.relu, scope="policy")
+        #TODO Use ReLU? A CL argument with ReLU as the default might make sense.
+        with tf.variable_scope("policy", reuse=False):
+            self.policy = PolicyNet(layers=args.layers, action_shape=env.action_space.shape,
+                    activation_fn=tf.nn.relu)
+        # Direct policy input and output used in predict() method during inference.
+        self.policy_input_ph = tf.placeholder(dtype=dtype,
+                shape=(None,) + env.observation_space.shape[1:], name="policy_input")
+        self.policy_output = self.policy(self.policy_input_ph)
+
         cell = IntegrateCell(grid,
                 prep_state_fn=WENO_prep_state,
                 policy_net=self.policy,
@@ -43,6 +40,11 @@ class GlobalBackpropModel:
                 reward_fn=WENO_reward,
                 )
         rnn = IntegrateRNN(cell)
+
+        # initial_state_ph is the REAL physical initial state
+        #TODO should initial_state_ph include ghost cells?
+        self.initial_state_ph = tf.placeholder(dtype=dtype,
+                shape=(None, args.nx), name="init_real_state")
 
         #TODO possibly restrict num_steps to something smaller?
         # We'd then need to sample timesteps from a WENO trajectory.
@@ -55,6 +57,8 @@ class GlobalBackpropModel:
         self.loss = -tf.reduce_mean(tf.reduce_sum(rewards, axis=2))
 
         params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="policy")
+        print("{} params - does that look right compared to layers={} ?".format(
+            len(params), layers)
         gradients = tf.gradients(self.loss, params)
         grads = list(zip(gradients, params))
         self.params = params
@@ -80,14 +84,14 @@ class GlobalBackpropModel:
             # Single local state.
             assert state.shape == self.env.observation_space.shape[1:]
             state = state[None]
-            action = self.session.run(self.policy, feed_dict={self.state_ph:state})
+            action = self.session.run(self.policy_output, feed_dict={self.policy_input_ph:state})
             action = action[0]
 
         elif input_rank == single_obs_rank + 1:
             # Batch of local states 
             # OR single global state.
             assert state.shape[1:] == self.env.observation_space.shape[1:]
-            action = self.session.run(self.policy, feed_dict={self.state_ph:state})
+            action = self.session.run(self.policy_output, feed_dict={self.policy_input_ph:state})
 
         elif input_rank == single_obs_rank + 2:
             # Batch of global states.
@@ -95,8 +99,8 @@ class GlobalBackpropModel:
             batch_length = state.shape[0]
             spatial_length = state.shape[1]
             flattened_state = state.reshape((batch_length * spatial_length,) + state.shape[2:])
-            flattened_action = self.session.run(self.policy,
-                    feed_dict={self.state_ph:flattened_state})
+            flattened_action = self.session.run(self.policy_output,
+                    feed_dict={self.policy_input_ph:flattened_state})
             action = flattened_action.reshape((batch_length, spatial_length,) + action.shape[1:])
 
         return action
@@ -134,7 +138,6 @@ class IntegrateRNN(Layer):
         self.swap_to_cpu = swap_to_cpu
 
     def build(self, input_size):
-        self.cell.build(input_size)
         super().build()
 
     def call(initial_state, num_steps):
@@ -185,19 +188,27 @@ class IntegrateCell(Layer):
         self.reward_fn = reward_fn
         
     def build(self, input_size):
-        policy_net.build(input_size)
         super().build()
 
     def call(self, state):
+        # state has shape [batch, location, ...]
 
         real_state = state
-        # Use map to apply function across every element in the batch.
+        # Use tf.map_fn to apply function across every element in the batch.
         rl_state = tf.map_fn(self.prep_state_fn, real_state)
 
-        # We don't need map on the policy because it already expects a batch.
-        #TODO: wait, that's not right. It expects a batch, but of individual states.
-        # How do we broadcast the policy over every location?
-        rl_action = self.policy_net(rl_state)
+        # The policy expects a batch so we don't need to use tf.map_fn;
+        # however, it expects batches of INDIVIDUAL states, not every location at once, so we need
+        # to combine the batch and location axes first (and then reshape the actions back).
+        rl_state_shape = rl_state.get_shape().as_list()
+        new_state_shape = [rl_state_shape[0] + rl_state_shape[1],] + rl_state_shape[2:]
+        reshaped_state = tf.reshape(rl_state, new_state_shape)
+
+        shaped_action = self.policy_net(reshaped_state)
+
+        shaped_action_shape = shaped_action.get_shape().as_list()
+        rl_action_shape = [rl_state_shape[0], rl_state_shape[1]] + shaped_action_shape[1:]
+        rl_action = tf.reshape(shaped_action, rl_action_shape)
 
         next_real_state = tf.map_fn(self.integrate_fn, (real_state, rl_state, rl_action))
 
