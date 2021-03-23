@@ -22,7 +22,6 @@ class GlobalBackpropModel:
         self.env = env
 
         self.session = tf.Session()
-        
 
         #TODO Use ReLU? A CL argument with ReLU as the default might make sense.
         with tf.variable_scope("policy", reuse=False):
@@ -34,10 +33,10 @@ class GlobalBackpropModel:
         self.policy_output = self.policy(self.policy_input_ph)
 
         cell = IntegrateCell(grid,
-                prep_state_fn=WENO_prep_state,
+                prep_state_fn=env.tf_prep_state,
                 policy_net=self.policy,
-                integrate_fn=WENO_integrate,
-                reward_fn=WENO_reward,
+                integrate_fn=env.tf_integrate,
+                reward_fn=env.tf_calculate_reward,
                 )
         rnn = IntegrateRNN(cell)
 
@@ -217,6 +216,9 @@ class IntegrateCell(Layer):
 
         return rl_action, rl_reward, next_real_state
 
+# The following functions were moved into envs/burgers_env.py#WENOBurgersEnv.
+# I'm keeping the original versions here in case I need them, but it should be okay to delete these
+# if new versions are working.
 
 @tf.function
 def WENO_prep_state(state):
@@ -231,8 +233,9 @@ def WENO_prep_state(state):
     bc = "outflow"
     ghost_size = tf.constant(self.ng, size=(1,))
     if bc == "outflow":
-        # This implementation assumes that state is a 1-D Tensor of scalars (which it probably is,
-        # but maybe won't always be).
+        # This implementation assumes that state is a 1-D Tensor of scalars.
+        # In the future, if we expand to multiple dimensions, then it won't be, so this will need
+        # to be changed (probably use tf.tile instead).
         # Not 100% sure tf.fill can be used this way.
         left_ghost = tf.fill(ghost_size, state[0])
         right_ghost = tf.fill(ghost_size, state[-1])
@@ -456,5 +459,4 @@ def WENO_reward(args):
     # end adaptation of calculate_reward()
 
     return reward
-
 

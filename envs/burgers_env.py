@@ -6,6 +6,7 @@ import gym
 import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
+import tensorflow as tf
 from gym import spaces
 from stable_baselines import logger
 
@@ -16,6 +17,11 @@ from envs.solutions import MemoizedSolution, OneStepSolution
 import envs.weno_coefficients as weno_coefficients
 from util.softmax_box import SoftmaxBox
 from util.misc import create_stencil_indexes
+
+#TODO (long-term):
+# Rewrite this file. It's close to 2000 lines long, as of writing this comment, which is too many
+# for one file. Probably the Abstract class should be separate, and only have e.g. the plot
+# functions.
 
 # Used in step function to extract all the stencils.
 def weno_i_stencils_batch(order, q_batch):
@@ -86,9 +92,6 @@ def weno_weights_batch(order, q_batch):
         w[i, :] = alpha / np.sum(alpha)
 
     return w
-
-def flux(q):
-    return 0.5 * q ** 2
 
 class AbstractBurgersEnv(gym.Env):
     """
@@ -789,7 +792,6 @@ class AbstractBurgersEnv(gym.Env):
             return -error, done
 
 
-
         # Use error with the "true" solution as the reward.
         error = self.solution.get_full() - self.grid.get_full()
 
@@ -866,6 +868,85 @@ class AbstractBurgersEnv(gym.Env):
 
         return reward, done
 
+    @tf.function
+    def tf_prep_state(self, state):
+        """
+        Function that converts the real physical state to the RL state perceived by the agent, but
+        written as a Tensorflow function so that it can be inserted into a network and
+        backpropagated through.
+
+        Parameters
+        ----------
+        state : Tensor
+            Representation of the real physical state. This should have no ghost cells.
+
+        Returns
+        -------
+        rl_state : Tensor
+            Version of the state perceived by the agent. This SHOULD have ghost cells.
+        """
+        raise NotImplementedError()
+
+    @tf.function
+    def tf_integrate(self, args):
+        """
+        Function that calculates the next real physical state based on the previous state and
+        agent's action, but written as a Tensorflow function so that it can be inserted into a
+        network and backpropagated through.
+
+        Parameters
+        ----------
+        args : tuple
+            The tuple should be made up of (real_state, rl_state, rl_action).
+            (Needs to be a tuple so this function works with tf.map_fn.)
+            real_state : Tensor
+                Representation of the real physical state. This should have no ghost cells.
+            rl_state : Tensor
+                Version of the state perceived by the agent (as returned by tf_prep_state()). This
+                SHOULD have ghost cells.
+            rl_action : Tensor
+                Action from the agent that corresponds to rl_state.
+
+        Returns
+        -------
+        next_real_state : Tensor
+            The real physical state on the following timestep. This should also have no ghost
+            cells.
+        """
+
+        raise NotImplementedError()
+
+    @tf.function
+    def tf_calculate_reward(self, args):
+        """
+        Function that calculates the reward based on the difference between the physical state
+        reached by following actions suggested by the agent and the physical state that would be
+        reached by following WENO, but written as a Tensorflow function so that it can be inserted
+        into a network and backpropagated through.
+
+        Parameters
+        ----------
+        args : tuple
+            The tuple should be made up of (real_state, rl_state, rl_action, next_real_state).
+            (Needs to be a tuple so this function works with tf.map_fn.)
+            real_state : Tensor
+                Representation of the real physical state. This should have no ghost cells.
+            rl_state : Tensor
+                Version of the state perceived by the agent (as returned by tf_prep_state()). This
+                SHOULD have ghost cells.
+            rl_action : Tensor
+                Action from the agent that corresponds to rl_state.
+            next_real_state : Tensor
+                The real physical state on the following timestep (as returned by tf_integrate()).
+                This should also have no ghost cells.
+
+        Returns
+        -------
+        reward : Tensor
+            Reward for the agent at each location.
+        """
+        raise NotImplementedError()
+ 
     def close(self):
         # Delete references for easier garbage collection.
         self.grid = None
@@ -1169,6 +1250,227 @@ class WENOBurgersEnv(AbstractBurgersEnv):
             raise Exception("NaN detected in reward.")
 
         return state, reward, done
+
+    @tf.function
+    def tf_prep_state(self, state):
+        # Note the similarity to prep_state() above.
+
+        # state (the real physical state) does not have ghost cells, but agents operate on a stencil
+        # that can spill beyond the boundary, so we need to add ghost cells to create the rl_state.
+
+        bc = "outflow"
+        ghost_size = tf.constant(self.ng, size=(1,))
+        if bc == "outflow":
+            # This implementation assumes that state is a 1-D Tensor of scalars.
+            # In the future, if we expand to multiple dimensions, then it won't be, so this will need
+            # to be changed (probably use tf.tile instead).
+            # Not 100% sure tf.fill can be used this way.
+            left_ghost = tf.fill(ghost_size, state[0])
+            right_ghost = tf.fill(ghost_size, state[-1])
+            full_state = tf.concat([left_ghost, state, right_ghost], axis=0)
+        else:
+            raise NotImplementedError()
+        #TODO if you implement periodic here instead, you should probably also change things in how
+        # reward is computed as well - right now it assumes that errors beyond the boundaries are
+        # irrelevant, but they would be meaningful with a periodic system.
+
+        # Compute flux.
+        flux = 0.5 * (full_state ** 2)
+
+        alpha = tf.reduce_max(tf.abs(flux))
+
+        flux_plus = (flux + alpha * full_state) / 2
+        flux_minus = (flux - alpha * full_state) / 2
+
+        #TODO Could change things to use traditional convolutions instead.
+        # Maybe if this whole thing actually works.
+
+        plus_indexes = create_stencil_indexes(
+                        stencil_size=(self.weno_order * 2 - 1),
+                        num_stencils=(self.nx + 1),
+                        offset=(self.ng - self.weno_order))
+        minus_indexes = plus_index + 1
+        minus_indexes = np.flip(minus_indexes, axis=-1)
+
+        plus_stencils = flux_plus[plus_indexes]
+        minus_stencils = flux_minus[minus_indexes]
+
+        # Stack together into rl_state.
+        # Stack on dim 1 to keep location dim 0.
+        rl_state = tf.stack([plus_stencils, minus_stencils], axis=1)
+
+        return rl_state
+
+    @tf.function
+    def tf_integrate(self, args):
+        real_state, rl_state, rl_action = args
+
+        # Note that real_state does not contain ghost cells here, but rl_state DOES (and rl_action has
+        # weights corresponding to the ghost cells).
+
+        plus_stencils = rl_state[:, 0]
+        minus_stencils = rl_state[:, 1]
+
+        #Note the similarity in this block to weno_i_stencils_batch().
+        a_mat = weno_coefficients.a_all[self.order]
+        a_mat = np.flip(a_mat, axis=-1)
+        a_mat = tf.constant(a_mat)
+        sub_stencil_indexes = create_stencil_indexes(stencil_size=self.order, num_stencils=self.order)
+        plus_interpolated = tf.reduce_sum(a_mat * plus_stencils[:, sub_stencil_indexes], axis=-1)
+        minus_interpolated = tf.reduce_sum(a_mat * minus_stencils[:, sub_stencil_indexes], axis=-1)
+
+        plus_action = rl_action[:, 0]
+        minus_action = rl_action[:, 1]
+
+        fpr = tf.reduce_sum(plus_action * plus_interpolated, axis=-1)
+        fml = tf.reduce_sum(minus_action * minus_interpolated, axis=-1)
+
+        reconstructed_flux = fpr + fml
+
+        derivative_u_t = (reconstructed_flux[:-1] - reconstructed_flux[1:]) / self.dx
+
+        #TODO implement RK4 as well?
+
+        step = self.dt * derivative_u_t
+
+        #TODO implement viscosity and random source?
+        
+        new_state = real_state + step
+        return new_state
+
+    # TODO: modify this so less is in subclass? The reward section could go in the abstract class,
+    # but this needs to be here because of how we calculate the WENO step. Not a high priority.
+    # (And anyway, if we're refactoring, this should probably be the one canonical function instead
+    # of having TF and non-TF versions.)
+    @tf.function
+    def tf_calculate_reward(self, args):
+        real_state, rl_state, rl_action, next_real_state = args
+        # Note that real_state and next_real_state do not include ghost cells, but rl_state does.
+
+        # This section is adapted from agents.py#StandardWENOAgent._weno_weights_batch()
+        C_values = weno_coefficients.C_all[self.order]
+        C_values = tf.constant(C_values)
+        sigma_mat = weno_coefficients.sigma_all[self.order]
+        sigma_mat = tf.constant(sigma_mat)
+
+        fp_stencils = rl_state[:, 0]
+        fm_stencils = rl_state[:, 1]
+
+        sub_stencil_indexes = create_stencil_indexes(stencil_size=self.order, num_stencils=self.order)
+
+        sub_stencils_fp = tf.reverse(fp_stencils[:, sub_stencil_indexes], axis=-1)
+        sub_stencils_fm = tf.reverse(fm_stencils[:, sub_stencil_indexes], axis=-1)
+
+        q_squared_fp = sub_stencils_fp[:, :, None, :] * sub_stencils_fp[:, :, :, None]
+        q_squared_fm = sub_stencils_fm[:, :, None, :] * sub_stencils_fm[:, :, :, None]
+
+        beta_fp = tf.reduce_sum(sigma_mat * q_squared_fp, axis=(-2, -1))
+        beta_fm = tf.reduce_sum(sigma_mat * q_squared_fm, axis=(-2, -1))
+
+        epsilon = tf.constant(1e-16)
+        alpha_fp = C_values / (epsilon + beta_fp ** 2)
+        alpha_fm = C_values / (epsilon + beta_fm ** 2)
+
+        weights_fp = alpha_fp / (tf.reduce_sum(alpha_fp, axis=-1)[:, None])
+        weights_fm = alpha_fm / (tf.reduce_sum(alpha_fm, axis=-1)[:, None])
+        weno_action = tf.stack([weights_fp, weights_fm], axis=1)
+        # end adaptation of _weno_weights_batch()
+
+        weno_next_real_state = self.tf_integrate((real_state, rl_state, weno_action))
+
+        # This section is adapted from AbstactBurgersEnv.calculate_reward()
+        if "wenodiff" in self.reward_mode:
+            last_action = rl_action
+
+            action_diff = weno_action - last_action
+            partially_flattened_shape = (self.action_space.shape[0],
+                    np.prod(self.action_space.shape[1:]))
+            action_diff = tf.reshape(action_diff, partially_flattened_shape)
+            if "L1" in self.reward_mode:
+                error = tf.reduce_sum(tf.abs(action_diff), axis=-1)
+            elif "L2" in self.reward_mode:
+                error = tf.sqrt(tf.reduce_sum(action_diff**2, axis=-1))
+            else:
+                raise Exception("reward_mode problem")
+
+            return -error
+
+        error = weno_next_real_state - next_real_state
+
+        if "one-step" in self.reward_mode:
+            # This version is ALWAYS one-step - the others are tricky to implement in TF.
+        elif "full" in self.reward_mode:
+            raise Exception("Reward mode 'full' invalid - only 'one-step' reward implemented"
+                " in Tensorflow functions.")
+        elif "change" in self.reward_mode:
+            raise Exception("Reward mode 'change' invalid - only 'one-step' reward implemented"
+                " in Tensorflow functions.")
+        else:
+            raise Exception("reward_mode problem")
+
+        if "clip" in self.reward_mode:
+            raise Exception("Reward clipping not implemented in Tensorflow functions.")
+
+        # TODO if we change the boundary condition to periodic, then we should change this to handle
+        # that instead of simply assuming errors past the boundary are all 0.
+        # That would involve extra functions for calculating the ghost cells here.
+
+        # Average of error in two adjacent cells.
+        if "adjacent" in self.reward_mode and "avg" in self.reward_mode:
+            error = tf.abs(error)
+            combined_error = (error[:-1] + error[1:]) / 2
+            # Assume error beyond boundaries is 0, so error at edge interfaces is error at edge cells.
+            combined_error = tf.concat([error[0] / 2, combined_error, error[-1] / 2], axis=0)
+        # Combine error across the stencil.
+        elif "stencil" in self.reward_mode:
+            # This is trickier and we need to expand the error into the ghost cells.
+            # Still assume the error is 0 for convenience.
+            ghost_error = tf.constant([0.0] * self.ng)
+            full_error = tf.concat([ghost_error, error, ghost_error])
+            
+            stencil_indexes = create_stencil_indexes(
+                    stencil_size=(self.weno_order * 2 - 1),
+                    num_stencils=(self.nx + 1),
+                    offset=(self.ng - self.weno_order))
+            error_stencils = full_error[stencil_indexes]
+            if "max" in self.reward_mode:
+                error_stencils = tf.abs(error_stencils)
+                combined_error = tf.reduce_max(error_stencils, axis=-1)
+            elif "avg" in self.reward_mode:
+                error_stencils = tf.abs(error_stencils)
+                combined_error = tf.reduce_mean(error_stencils, axis=-1)
+            elif "L2" in self.reward_mode:
+                combined_error = tf.sqrt(tf.reduce_sum(error_stencils**2, axis=-1))
+            elif "L1" in self.reward_mode:
+                error_stencils = tf.abs(error_stencils)
+                combined_error = tf.reduce_sum(error_stencils, axis=-1)
+            else:
+                raise Exception("reward_mode problem")
+        else:
+            raise Exception("reward_mode problem")
+
+        # Squash reward.
+        if "nosquash" in self.reward_mode:
+            reward = -combined_error
+        elif "logsquash" in self.reward_mode:
+            epsilon = tf.constant(1e-16)
+            reward = -tf.log(combined_error + epsilon)
+        elif "arctansquash" in self.reward_mode:
+            if "noadjust" in self.reward_mode:
+                reward = tf.atan(-combined_error)
+            else:
+                reward_adjustment = tf.contant(self.reward_adjustment)
+                # The constant controls the relative importance of small rewards compared to large rewards.
+                # Towards infinity, all rewards (or penalties) are equally important.
+                # Towards 0, small rewards are increasingly less important.
+                # An alternative to arctan(C*x) with this property would be x^(1/C).
+                reward = tf.atan(reward_adjustment * -combined_error)
+        else:
+            raise Exception("reward_mode problem")
+
+        # end adaptation of calculate_reward().
+
+        return reward
 
 class DiscreteWENOBurgersEnv(WENOBurgersEnv):
     def __init__(self, actions_per_dim=2, *args, **kwargs):
