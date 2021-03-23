@@ -42,7 +42,8 @@ class GlobalBackpropModel:
         rnn = IntegrateRNN(cell)
 
         # initial_state_ph is the REAL physical initial state
-        #TODO should initial_state_ph include ghost cells?
+        # (It should not contain ghost cells - those should be handled by the prep_state function
+        # that converts real state to rl state.)
         self.initial_state_ph = tf.placeholder(dtype=dtype,
                 shape=(None, args.nx), name="init_real_state")
 
@@ -221,18 +222,34 @@ class IntegrateCell(Layer):
 def WENO_prep_state(state):
     """
     Based on prep_state in WENOBurgersEnv.
-    #TODO Create function in WENOBurgersEnv that returns this function?
+    #TODO Create function in WENOBurgersEnv that returns this function.
     """
 
-    #TODO Expand boundaries? Or is that already in state?
+    # state (the real physical state) does not have ghost cells, but agents operate on a stencil
+    # that can spill beyond the boundary, so we need to add ghost cells to create the rl_state.
+
+    bc = "outflow"
+    ghost_size = tf.constant(self.ng, size=(1,))
+    if bc == "outflow":
+        # This implementation assumes that state is a 1-D Tensor of scalars (which it probably is,
+        # but maybe won't always be).
+        # Not 100% sure tf.fill can be used this way.
+        left_ghost = tf.fill(ghost_size, state[0])
+        right_ghost = tf.fill(ghost_size, state[-1])
+        full_state = tf.concat([left_ghost, state, right_ghost], axis=0)
+    else:
+        raise NotImplementedError()
+    #TODO if you implement periodic here instead, you should probably also change things in how
+    # reward is computed as well - right now it assumes that errors beyond the boundaries are
+    # irrelevant, but they would be meaningful with a periodic system..
 
     # Compute flux.
-    flux = 0.5 * (state ** 2)
+    flux = 0.5 * (full_state ** 2)
 
     alpha = tf.reduce_max(tf.abs(flux))
 
-    flux_plus = (flux + alpha * state) / 2
-    flux_minus = (flux - alpha * state) / 2
+    flux_plus = (flux + alpha * full_state) / 2
+    flux_minus = (flux - alpha * full_state) / 2
 
     #TODO Could change things to use traditional convolutions instead.
     # Maybe if this whole thing actually works.
@@ -267,8 +284,8 @@ def WENO_integrate(args):
     """
     real_state, rl_state, rl_action = args
 
-    # TODO does real_state contain ghost cells here?
-    # Don't forget that both the cell and the reward function call this.
+    # Note that real_state does not contain ghost cells here, but rl_state DOES (and rl_action has
+    # weights corresponding to the ghost cells).
 
     plus_stencils = rl_state[:, 0]
     minus_stencils = rl_state[:, 1]
@@ -313,7 +330,7 @@ def WENO_reward(args):
         (Needs to be a tuple so this function works with tf.map_fn.)
     """
     real_state, rl_state, rl_action, next_real_state = args
-    # Note that real_state and next_real_state do not include ghost cells.
+    # Note that real_state and next_real_state do not include ghost cells, but rl_state does.
 
     # agents.py#StandardWENOAgent._weno_weights_batch()
     C_values = weno_coefficients.C_all[self.order]
@@ -363,7 +380,7 @@ def WENO_reward(args):
 
         return -error
 
-    error = self.solution.get_full() - self.grid.get_full()
+    error = weno_next_real_state - next_real_state
 
     if "one-step" in self.reward_mode:
         # This version is ALWAYS one-step - the others are tricky to implement in TF.
@@ -378,6 +395,10 @@ def WENO_reward(args):
 
     if "clip" in self.reward_mode:
         raise Exception("Reward clipping not implemented in Tensorflow functions.")
+
+    # TODO if we change the boundary condition to periodic, then we should change this to handle
+    # that instead of simply assuming errors past the boundary are all 0.
+    # That would involve extra functions for calculating the ghost cells here.
 
     # Average of error in two adjacent cells.
     if "adjacent" in self.reward_mode and "avg" in self.reward_mode:
