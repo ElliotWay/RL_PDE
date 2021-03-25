@@ -143,11 +143,13 @@ class PolicyWrapper:
 class StandardEMI(EMI):
     """
     EMI that simply takes samples from the environment and gives them to the model.
+    (It still applies a PolicyWrapper to potentially modify actions and observations.)
     """
     def __init__(self, env, model_cls, args, action_adjust=None, obs_adjust=None):
         self._model = model_cls(env, args)
         self.original_env = env
         self.policy = PolicyWrapper(self._model, action_adjust, obs_adjust)
+        self.args = args
 
     def training_episode(self, env):
         self.policy.save_model_samples()
@@ -173,6 +175,45 @@ class StandardEMI(EMI):
 
     def get_policy(self):
         return self.policy
+
+#TODO Figure out PolicyWrapper discrepancy. It isn't applied this way, so it needs to be applied as
+# part of the model instead. How might we do that? (It's also problematic, as we would like the
+# Model to be unaware of such things, but there's no way around it with a GlobalModel.)
+#TODO Also, since I need to write this note somewhere, do we need to use this emi for the model,
+# but a BatchedEMI for the policy? Or will the above change incorporate such things into the policy
+# anyway? (I don't think it can, so we need to do that somehow.) Solution: Make this
+# BatchedGlobalEMI (that's closer to what it is anyway), but pass the original environment to the
+# Model constructor instead of the unbatched version. The policy is only used when we return it
+# from get_policy().
+class StandardGlobalEMI(StandardEMI):
+    """
+    EMI that simply takes samples from the environment and gives them to the model,
+    except this version can handle a GlobalModel instead of the usual Model type.
+
+    That is, the "training episode" trains with a set of initial conditions, instead of with a set
+    of trajectories.
+    """
+    def training_episode(self, env):
+        num_inits = self.args.inits_per_ep
+        initial_conditions = []
+        for _ in range(num_inits):
+            rl_state = env.reset()
+            # Important to use copy - grid.get_real returns the writable grid cells, which are
+            # changed by the environment.
+            phys_state = np.copy(env.grid.get_real())
+            initial_conditions.append(phys_state)
+        initial_conditions = np.array(initial_conditions)
+
+        extra_info = self._model.train(initial_conditions)
+
+        rewards = extra_info['rewards']
+        del extra_info['rewards']
+
+        info_dict = {}
+        info_dict['avg_reward'] = np.mean(np.sum(rewards, axis=1), axis=0)
+        info_dict['timesteps'] = num_inits * self.args.ep_length
+        info_dict.update(extra_info)
+        return info_dict
 
 class UnbatchedEnvPL(gym.Env):
     """
@@ -302,7 +343,7 @@ class BatchEMI(EMI):
 
 class HomogenousMARL_EMI(BatchEMI):
     """
-    EMI that structues the environment as a MARL problem with homogenous agents.
+    EMI that structures the environment as a MARL problem with homogenous agents.
     It takes samples from the environment, keeps the time and spatial dimension while flattening
     the rest, and passes this to the model.
     

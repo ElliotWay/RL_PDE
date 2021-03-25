@@ -1,18 +1,14 @@
 import os
 import numpy as np
 
-class Model:
+class AbstractModel:
     """
-    RL model representing the ability to train on experience.
+    General RL model representing a trainable policy.
+    The "train" function is not defined as part of this interface, representing different possible
+    ways to train.
     """
     def __init__(self, env, args):
         """ Create a model for the given env using the args namespace. """
-        raise NotImplementedError
-    def train(self, s, a, r, s2, done):
-        """
-        Train using samples. The samples should be consecutive.
-        Returns a dict of information (may be empty dict).
-        """
         raise NotImplementedError
     def predict(self, state, deterministic=True):
         """
@@ -33,7 +29,33 @@ class Model:
         """ Load the model from path. """
         raise NotImplementedError
 
-class TestModel:
+class Model(AbstractModel):
+    """
+    RL model representing the ability to train from trajectories of experience.
+    """
+    def train(self, s, a, r, s2, done):
+        """
+        Train using samples. The samples should be consecutive.
+        Returns a dict of information (may be empty dict).
+        """
+        raise NotImplementedError
+
+class GlobalModel(AbstractModel):
+    """
+    RL model that trains based exclusively on a batch of initial states.
+    The underlying model must somehow capture the mechanics of the environment as part of itself
+    (i.e. with the "full" model aka the "global backpropagation" idea).
+    """
+    def train(self, initial_state):
+        """
+        Train using a set of initial_states.
+        Returns a dict of information. Unlike the standard model, this dict must contain at least a
+        key 'rewards' containing the reward values in a 2D structure (1st axis is batch, 2nd axis
+        is timestep).
+        """
+        raise NotImplementedError
+
+class TestModel(Model):
     """ Fake model for testing. """
     def __init__(self, env, args):
         self.obs_shape = env.observation_space.shape
@@ -64,7 +86,7 @@ class TestModel:
     def load(self, path):
         print("Test model is pretending to load from {}".format(path))
 
-class BaselinesModel:
+class BaselinesModel(Model):
     """
     Model that wraps an existing model class using the Stable Baselines interface.
     Contains default implementations of predict, save, and load that forward these calls to

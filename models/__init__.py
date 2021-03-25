@@ -1,4 +1,4 @@
-from models.model import Model, BaselinesModel, TestModel
+from models.model import Model, BaselinesModel, TestModel, GlobalModel
 from models.sac import SACModel
 from models.pg import PolicyGradientModel
 

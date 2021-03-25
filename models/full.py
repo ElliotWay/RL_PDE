@@ -4,20 +4,33 @@ import numpy as np
 import tensorflow as tf
 from tf.keras.layers import Layer
 
+from models import GlobalModel
 from models.builder import get_optimizer
 from models.net import PolicyNet
 from util.misc import create_stencil_indexes
 from util.serialize import save_to_zip, load_from_zip
 import envs.weno_coefficients as weno_coefficients
 
-# Unlike our other models, it doesn't make sense to train with a set of trajectories, as the global
-# model has trajectories as part of its internal workings.
-# Instead, the only training input is the initial state, so the train function is changed to
-# train(initial_state) instead.
-# The predict method, on the other hand, is the same, as the global must still have the local model
-# built in.
-class GlobalBackpropModel:
+class GlobalBackpropModel(GlobalModel):
+    """
+    Model that uses the "global backprop" idea, that is, we construct a recurrent network that
+    unrolls to the entire length of an episode, with the transition and reward functions built into
+    the network. This allows us to backpropagate over the entire length of space and time, as the
+    transition and reward functions are known and differentiable. We can also optimize the rewards
+    directly, instead of using e.g. the policy gradient.
+
+    Unlike our other models, it doesn't make sense to train with a set of trajectories, as the
+    global model has trajectories as part of its internal workings. Instead, the only training
+    input is the initial state, so the train function is changed to train(initial_state) instead.
+    The predict method, on the other hand, is the same, as the global must still have the local
+    model built in.
+    """
     def __init__(self, env, args, dtype=tf.float32):
+        """
+        Create the GlobalBackprop Model.
+        Note that as of writing this, the env needs to be specifically a WENOBurgersEnv - a general
+        gym.Env instance won't work.
+        """
         self.dtype = dtype
         self.env = env
 
@@ -50,6 +63,9 @@ class GlobalBackpropModel:
         # We'd then need to sample timesteps from a WENO trajectory.
 
         states, actions, rewards = rnn(initial_state_ph, num_steps=args.ep_length)
+        self.states = states
+        self.actions = actions
+        self.rewards = rewards
 
         assert tf.rank(rewards) == 3
         # Sum over the length of the trajectory, then average over each location,
@@ -58,7 +74,7 @@ class GlobalBackpropModel:
 
         params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="policy")
         print("{} params - does that look right compared to layers={} ?".format(
-            len(params), layers)
+            len(params), layers))
         gradients = tf.gradients(self.loss, params)
         grads = list(zip(gradients, params))
         self.params = params
@@ -66,16 +82,18 @@ class GlobalBackpropModel:
         self.optimizer = get_optimizer(args)
         self.train_policy = self.optimizer.apply_gradients(grads)
 
-        #TODO do something with states/actions as a debug output?
-
     def train(self, initial_state):
 
         feed_dict = {self.initial_state_ph:initial_state}
 
-        loss, _ = self.session.run([self.loss, self.train_policy], feed_dict=feed_dict)
-        return {"loss":loss}
+        _, loss, rewards = self.session.run([self.train_policy, self.loss, self.rewards], feed_dict=feed_dict)
+        #TODO do something with states, actions, rewards as a debug output?
+        return {"loss":loss, "rewards":rewards}
 
     def predict(self, state, deterministic=True):
+        if not deterministic:
+            print("Note: this model is strictly deterministic so using deterministic=False will"
+            " have no effect.")
 
         single_obs_rank = len(self.env.observation_space.shape) - 1
         input_rank = len(state.shape)
