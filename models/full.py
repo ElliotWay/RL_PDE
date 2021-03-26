@@ -177,7 +177,7 @@ class IntegrateRNN(Layer):
 
             return (time + 1, states_ta, actions_ta, rewards_ta, next_state)
 
-        initial_time = tf.Constant(0, dtype=tf.int32)
+        initial_time = tf.constant(0, dtype=tf.int32)
 
         _time, states_ta, actions_ta, rewards_ta, final_state = tf.while_loop(
                 cond=condition_fn,

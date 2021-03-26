@@ -249,35 +249,8 @@ def main():
 
         metadata.load_to_namespace(meta_file, args)
 
-        # TODO: repeated code in train and test is bad. Move stuff into util file.
-        def softmax(action):
-            exp_actions = np.exp(action)
-            return exp_actions / np.sum(exp_actions, axis=-1)[..., None]
-        clip_obs = 5 # (in stddevs from the mean)
-        epsilon = 1e-10
-        def z_score_last_dim(obs):
-            z_score = (obs - obs.mean(axis=-1)[..., None]) / (obs.std(axis=-1)[..., None] + epsilon)
-            return np.clip(z_score, -clip_obs, clip_obs)
-            action_adjust = None
-            obs_adjust = None
-
-        if args.mode == "weno":
-            action_adjust = softmax
-            obs_adjust = z_score_last_dim
-        elif args.mode == "split_flux":
-            obs_adjust = z_score_last_dim
-        elif args.mode == "flux":
-            obs_adjust = z_score_last_dim
-        else:
-            print("No state/action normalization enabled for {}.".format(args.env))
-
-        if args.obs_scale is not None:
-            if args.obs_scale == "z_score_last":
-                obs_adjust = z_score_last_dim
-            elif args.obs_scale == "z_score_all":
-                obs_adjust = z_score_all_dims
-            elif args.obs_scale == "none":
-                obs_adjust = None
+        obs_adjust = numpy_fn(args.obs_scale)
+        action_adjust = numpy_fn(args.action_scale)
 
         if args.model == 'sac':
             model_cls = SACModel

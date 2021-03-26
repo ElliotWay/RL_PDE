@@ -25,6 +25,7 @@ from models import get_model_arg_parser
 from models import SACModel, PolicyGradientModel, TestModel
 from models.fixed import FixedOneStepModel
 from util import metadata, action_snapshot
+from util.function_dict import numpy_fn
 from util.misc import rescale, set_global_seed
 
 def main():
@@ -194,25 +195,25 @@ def main():
         z_score = (obs - obs.mean()) / (obs.std() + epsilon)
         return np.clip(z_score, -clip_obs, clip_obs)
 
-    action_adjust = None
-    obs_adjust = None
-    if args.mode == "weno":
-        action_adjust = softmax
-        obs_adjust = z_score_last_dim
-    elif args.mode == "split_flux":
-        obs_adjust = z_score_last_dim
-    elif args.mode == "flux":
-        obs_adjust = z_score_last_dim
-    else:
-        print("No state/action normalization enabled for {}.".format(args.env))
+    if args.obs_scale is None:
+        if args.mode == 'weno':
+            args.obs_scale = 'z_score_last_dim'
+        elif args.mode == "split_flux":
+            args.obs_scale = 'z_score_last_dim'
+        elif args.mode == "flux":
+            args.obs_scale = 'z_score_last_dim'
+        else:
+            print("No state normalization coded for {}.".format(args.env))
+            args.obs_scale = 'none'
+    obs_adjust = numpy_fn(args.obs_scale)
 
-    if args.obs_scale is not None:
-        if args.obs_scale == "z_score_last":
-            obs_adjust = z_score_last_dim
-        elif args.obs_scale == "z_score_all":
-            obs_adjust = z_score_all_dims
-        elif args.obs_scale == "none":
-            obs_adjust = None
+    if args.action_scale is None:
+        if args.mode == 'weno':
+            args.action_scale = 'softmax'
+        else:
+            print("No action normalization coded for {}".format(args.env))
+            args.action_scale = 'none'
+    action_adjust = numpy_fn(args.action_scale)
 
     if args.emi == 'batch':
         emi = BatchEMI(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
