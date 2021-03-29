@@ -1,5 +1,5 @@
 import os
-
+from collections import OrderedDict
 import numpy as np
 import tensorflow as tf
 from tf.keras.layers import Layer
@@ -7,10 +7,11 @@ from tf.keras.layers import Layer
 from models import GlobalModel
 from models.builder import get_optimizer
 from models.net import PolicyNet, FunctionWrapper
+import envs.weno_coefficients as weno_coefficients
 from util.misc import create_stencil_indexes
 from util.serialize import save_to_zip, load_from_zip
 from util.function_dict import tensorflow_fn
-import envs.weno_coefficients as weno_coefficients
+from util.serialize import save_to_zip, load_from_zip
 
 class GlobalBackpropModel(GlobalModel):
     """
@@ -79,17 +80,24 @@ class GlobalBackpropModel(GlobalModel):
         self.loss = -tf.reduce_mean(tf.reduce_sum(rewards, axis=2))
 
         params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="policy")
+        self.policy_params = params
         print("{} params - does that look right compared to layers={} ?".format(
             len(params), layers))
         gradients = tf.gradients(self.loss, params)
         grads = list(zip(gradients, params))
-        self.params = params
 
         self.optimizer = get_optimizer(args)
         self.train_policy = self.optimizer.apply_gradients(grads)
 
-    def train(self, initial_state):
+    def setup_loading(self):
+        self.load_op = {}
+        self.load_ph = {}
+        for param in self.policy_params:
+            placeholder = tf.placeholder(dtype=param.dtype, shape=param.shape)
+            self.load_op[param] = param.assign(placeholder)
+            self.load_ph[param] = placeholder
 
+    def train(self, initial_state):
         feed_dict = {self.initial_state_ph:initial_state}
 
         _, loss, rewards = self.session.run([self.train_policy, self.loss, self.rewards], feed_dict=feed_dict)
@@ -130,12 +138,37 @@ class GlobalBackpropModel(GlobalModel):
         return action
 
     def save(self, path):
-        #return path
-        raise NotImplementedError
+        """
+        Save model paramaters to be loaded later.
+
+        Based on StableBaselines save structure.
+        """
+        # I don't think we need to save any extra data? Loading requires loading the meta file
+        # anyway, which contains all of the settings used here.
+        extra_data = {}
+        params = self.policy_params
+        param_values = self.session.run(params)
+        param_dict = OrderedDict((param.name, value) for param, value in zip(params, param_values))
+
+        return save_to_zip(path, data=extra_data, params=param_dict)
 
     def load(self, path):
-        raise NotImplementedError
+        data, param_dict = load_from_zip(path)
+        if len(data) > 0:
+            raise Exception("Miscellaneous data in GlobalBackpropModel was not empty."
+                    " What did you put in there?")
+        #self.__dict__.update(data) # Use this if we put something in extra_data in save().
+                                    # (The keys need to be the same as the name of the field.)
 
+        feed_dict = {}
+        for param in self.policy_params:
+            placeholder = self.load_ph[param]
+            param_value = param_dict[param.name]
+            feed_dict[placeholder] = param_value
+
+        self.session.run(self.load_op, feed_dict=feed_dict)
+        print("Model loaded from {}".format(path))
+        print("I'm not 100% sure loading works correctly, in case it looks completely wrong.")
 
 class IntegrateRNN(Layer):
     def __init__(self, cell, dtype=tf.float32, swap_to_cpu=True):

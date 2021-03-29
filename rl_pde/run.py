@@ -100,7 +100,6 @@ def train(env, eval_envs, emi, args):
             ep_string = ("{:0" + str(ep_precision) + "}").format(ep)
 
             if args.emi != "std":
-                #TODO make this handle new GlobalModel as well.
                 # The action snapshot doesn't make sense if EMI is not batched,
                 # because a standard EMI has a fixed input size.
                 action_snapshot.save_action_snapshot(
