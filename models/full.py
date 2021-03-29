@@ -6,9 +6,10 @@ from tf.keras.layers import Layer
 
 from models import GlobalModel
 from models.builder import get_optimizer
-from models.net import PolicyNet
+from models.net import PolicyNet, FunctionWrapper
 from util.misc import create_stencil_indexes
 from util.serialize import save_to_zip, load_from_zip
+from util.function_dict import tensorflow_fn
 import envs.weno_coefficients as weno_coefficients
 
 class GlobalBackpropModel(GlobalModel):
@@ -45,9 +46,14 @@ class GlobalBackpropModel(GlobalModel):
                 shape=(None,) + env.observation_space.shape[1:], name="policy_input")
         self.policy_output = self.policy(self.policy_input_ph)
 
+        obs_adjust = tensorflow_fn(args.obs_scale)
+        action_adjust = tensorflow_fn(args.action_scale)
+        self.wrapped_policy = FunctionWrapper(layer=self.policy, input_fn=obs_adjust,
+                output_fn=action_adjust)
+
         cell = IntegrateCell(grid,
                 prep_state_fn=env.tf_prep_state,
-                policy_net=self.policy,
+                policy_net=self.wrapped_policy,
                 integrate_fn=env.tf_integrate,
                 reward_fn=env.tf_calculate_reward,
                 )

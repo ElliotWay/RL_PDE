@@ -104,9 +104,34 @@ def PolicyNet(Layer):
         output = state
         for layer in self.hidden_layers:
             output = layer(output)
-            # TODO Could use layer normalization - that might be a good idea, esp. with ReLU.
+            #TODO Could use layer normalization - that might be a good idea, esp. with ReLU.
         flat_action = self.output_layer(output)
 
         action = tf.reshape(flat_action, (-1,) + self.action_shape)
 
         return action
+
+def FunctionWrapper(Layer):
+    """
+    Wrap another Layer with input and output functions.
+    """
+    def __init__(self, layer, input_fn, output_fn):
+        self.layer = layer
+        self.input_fn = input_fn
+        self.output_fn = output_fn
+
+    def build(self, input_shape):
+        super().build()
+
+    def call(self, input_tensor):
+        if self.input_fn is not None:
+            modified_input = self.input_fn(input_tensor)
+        else:
+            modified_input = input_tensor
+        output_tensor = self.layer(modified_input)
+        if self.output_fn is not None:
+            modified_output = self.output_fn(output_tensor)
+        else:
+            modified_output = output_tensor
+        return output_tensor
+
