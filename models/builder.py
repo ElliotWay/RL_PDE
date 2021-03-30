@@ -65,5 +65,3 @@ def get_optimizer(args):
     else:
         raise Exception("Unknown optimizer: {}".format(args.optimizer))
     return optimizer
-
-

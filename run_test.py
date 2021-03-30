@@ -23,6 +23,8 @@ from agents import StandardWENOAgent, StationaryAgent, EqualAgent, MiddleAgent, 
 from models import get_model_arg_parser
 from models import SACModel, PolicyGradientModel, TestModel
 from util import metadata
+from util.function_dict import numpy_fn
+from util.lookup import get_model_class, get_emi_class
 from util.misc import set_global_seed
 
 def save_convergence_plot(grid_sizes, error, args):
@@ -252,23 +254,11 @@ def main():
         obs_adjust = numpy_fn(args.obs_scale)
         action_adjust = numpy_fn(args.action_scale)
 
-        if args.model == 'sac':
-            model_cls = SACModel
-        elif args.model == 'pg' or args.model == 'reinforce':
-            model_cls = PolicyGradientModel
-        elif args.model == 'test':
-            model_cls = TestModel
-        else:
-            raise Exception("Unrecognized model type: \"{}\"".format(args.model))
+        model_cls = get_model_class(args.model)
 
-        if args.emi == 'batch':
-            emi = BatchEMI(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
-        elif args.emi == 'std' or args.emi == 'standard':
-            emi = StandardEMI(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
-        elif args.emi == 'test':
-            emi = TestEMI(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
-        else:
-            raise Exception("Unrecognized EMI: \"{}\"".format(args.emi))
+        emi_cls = get_emi_class(args.emi)
+
+        emi = emi_cls(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
 
         emi.load_model(args.agent)
         agent = emi.get_policy()

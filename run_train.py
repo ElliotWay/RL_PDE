@@ -19,13 +19,11 @@ from stable_baselines import logger
 #from stable_baselines.ddpg.noise import AdaptiveParamNoiseSpec, OrnsteinUhlenbeckActionNoise, NormalActionNoise
 
 from rl_pde.run import train
-from rl_pde.emi import BatchEMI, HomogenousMARL_EMI, StandardEMI, TestEMI
 from envs import get_env_arg_parser, build_env
 from models import get_model_arg_parser
-from models import SACModel, PolicyGradientModel, TestModel
-from models.fixed import FixedOneStepModel
 from util import metadata, action_snapshot
 from util.function_dict import numpy_fn
+from util.lookup import get_model_class, get_emi_class
 from util.misc import rescale, set_global_seed
 
 def main():
@@ -155,45 +153,14 @@ def main():
             print("Replay buffer size changed from {} to {} to align with MARL-style buffer."
                     .format(old_buffer_size, new_buffer_size))
 
-    if args.model == 'sac':
-        model_cls = SACModel
-    elif args.model == 'pg' or args.model == 'reinforce':
-        model_cls = PolicyGradientModel
+    if args.model == 'pg' or args.model == 'reinforce':
         if args.gamma == 0.0:
             args.return_style = "myopic"
-    elif args.model == 'test':
-        model_cls = TestModel
-    elif args.model == "fixed-1step" or args.model == "fixed":
-        model_cls = FixedOneStepModel
-    else:
-        raise Exception("Unrecognized model type: \"{}\"".format(args.model))
-
-    # Things like this make me wish I was writing in a functional language.
-    # I sure could go for some partial evaluation and some function composition.
-    def flat_rescale_from_tanh(action):
-        action = rescale(action, [-1,1], [0,1])
-        return action / np.sum(action, axis=-1)[..., None]
-
-    def softmax(action):
-        exp_actions = np.exp(action)
-        return exp_actions / np.sum(exp_actions, axis=-1)[..., None]
-
-    #def back_to_tanh(action):
-        #return rescale(action, [0,1], [-1,1])
-    #def identity_function(arg):
-        #return arg
-    #def identity_correction(squashed_policy, logp_pi):
-        #return logp_pi
-
-    clip_obs = 5 # (in stddevs from the mean)
-    epsilon = 1e-10
-    def z_score_last_dim(obs):
-        z_score = (obs - obs.mean(axis=-1)[..., None]) / (obs.std(axis=-1)[..., None] + epsilon)
-        return np.clip(z_score, -clip_obs, clip_obs)
-
-    def z_score_all_dims(obs):
-        z_score = (obs - obs.mean()) / (obs.std() + epsilon)
-        return np.clip(z_score, -clip_obs, clip_obs)
+    if args.model == 'full':
+        if args.emi != 'batch-global':
+            args.emi = 'batch-global'
+            print("EMI set to batch-global to fit \'full\' model.")
+    model_cls = get_model_class(args.model)
 
     if args.obs_scale is None:
         if args.mode == 'weno':
@@ -215,17 +182,8 @@ def main():
             args.action_scale = 'none'
     action_adjust = numpy_fn(args.action_scale)
 
-    if args.emi == 'batch':
-        emi = BatchEMI(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
-    elif args.emi == 'marl':
-        emi = HomogenousMARL_EMI(env, model_cls, args, obs_adjust=obs_adjust,
-                action_adjust=action_adjust)
-    elif args.emi == 'std' or args.emi == 'standard':
-        emi = StandardEMI(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
-    elif args.emi == 'test':
-        emi = TestEMI(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
-    else:
-        raise Exception("Unrecognized EMI: \"{}\"".format(args.emi))
+    emi_cls = get_emi_class(args.emi)
+    emi = emi_cls(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
 
     #DDPG stuff.
     """
