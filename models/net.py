@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-from tf.keras.layers import Layer, Dense
+from tensorflow.keras.layers import Layer, Dense
 
 # I found these too useful to avoid using them, but too complex to justify copying.
 # Copy them over anyway if you need to modify the network internals further
@@ -76,7 +76,7 @@ def policy_net(state_tensor, action_shape, layers, activation_fn,
 
     return action
 
-def PolicyNet(Layer):
+class PolicyNet(Layer):
     def __init__(self, layers, action_shape, activation_fn=tf.nn.relu, name=None):
         self.action_shape = action_shape
         flattened_action_shape = np.prod(action_shape)
@@ -93,7 +93,7 @@ def PolicyNet(Layer):
 
     def build(self, input_shape):
         # Sub-layers should build automatically when they are called for the first time.
-        super().build()
+        super().build(input_shape)
 
     def call(self, state):
         # Does this work? Do we have that state information during call?
@@ -111,7 +111,7 @@ def PolicyNet(Layer):
 
         return action
 
-def FunctionWrapper(Layer):
+class FunctionWrapper(Layer):
     """
     Wrap another Layer with input and output functions.
     """
@@ -121,7 +121,7 @@ def FunctionWrapper(Layer):
         self.output_fn = output_fn
 
     def build(self, input_shape):
-        super().build()
+        super().build(input_shape)
 
     def call(self, input_tensor):
         if self.input_fn is not None:

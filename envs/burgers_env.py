@@ -195,7 +195,7 @@ class AbstractBurgersEnv(gym.Env):
             self.solution = PreciseWENOSolution(
                     xmin=xmin, xmax=xmax, nx=nx, ng=self.ng,
                     precise_scale=precise_scale, precise_order=precise_weno_order,
-                    boundary=boundary, init_type=init_type, flux_function=flux, source=self.source,
+                    boundary=boundary, init_type=init_type, flux_function=self.burgers_flux, source=self.source,
                     eps=eps)
 
         if "one-step" in self.reward_mode:
@@ -212,7 +212,8 @@ class AbstractBurgersEnv(gym.Env):
         if show_separate_weno:
             self.weno_solution = PreciseWENOSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng,
                                                      precise_scale=1, precise_order=weno_order,
-                                                     boundary=boundary, init_type=init_type, flux_function=flux,
+                                                     boundary=boundary, init_type=init_type,
+                                                     flux_function=self.burgers_flux,
                                                      source=self.source, eps=eps)
             if memoize:
                 self.weno_solution = MemoizedSolution(self.weno_solution)
@@ -1307,7 +1308,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         # that can spill beyond the boundary, so we need to add ghost cells to create the rl_state.
 
         bc = "outflow"
-        ghost_size = tf.constant(self.ng, size=(1,))
+        ghost_size = tf.constant(self.ng, shape=(1,))
         if bc == "outflow":
             # This implementation assumes that state is a 1-D Tensor of scalars.
             # In the future, if we expand to multiple dimensions, then it won't be, so this will need
@@ -1337,8 +1338,10 @@ class WENOBurgersEnv(AbstractBurgersEnv):
                         stencil_size=(self.weno_order * 2 - 1),
                         num_stencils=(self.nx + 1),
                         offset=(self.ng - self.weno_order))
-        minus_indexes = plus_index + 1
+        minus_indexes = plus_indexes + 1
         minus_indexes = np.flip(minus_indexes, axis=-1)
+
+        print(plus_indexes.shape)
 
         plus_stencils = flux_plus[plus_indexes]
         minus_stencils = flux_minus[minus_indexes]

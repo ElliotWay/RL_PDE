@@ -44,6 +44,10 @@ def main():
                         help="Adjustment function to observation. Compute Z score along the last"
                         + " dimension (the stencil) with 'z_score_last', the Z score along every"
                         + " dimension with 'z_score_all', or leave them the same with 'none'.")
+    parser.add_argument('--action-scale', '--action_scale', type=str, default=None,
+                        help="Adjustment function to action. Default depends on environment."
+                        + " 'softmax' computes softmax, 'rescale_from_tanh' scales to [0,1] then"
+                        + " divides by the sum of the weights, 'none' does nothing.")
     parser.add_argument('--eval-env', '--eval_env', default=None,
                         help="Evaluation env. Default is to use an identical environment to the training environment."
                         + " Pass 'custom' to use a representative sine/rarefaction/accelshock combination.")

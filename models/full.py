@@ -2,7 +2,7 @@ import os
 from collections import OrderedDict
 import numpy as np
 import tensorflow as tf
-from tf.keras.layers import Layer
+from tensorflow.keras.layers import Layer
 
 from models import GlobalModel
 from models.builder import get_optimizer
@@ -38,7 +38,7 @@ class GlobalBackpropModel(GlobalModel):
 
         self.session = tf.Session()
 
-        #TODO Use ReLU? A CL argument with ReLU as the default might make sense.
+        #TODO Use ReLU? A field in args with ReLU as the default might make sense.
         with tf.variable_scope("policy", reuse=False):
             self.policy = PolicyNet(layers=args.layers, action_shape=env.action_space.shape,
                     activation_fn=tf.nn.relu)
@@ -52,7 +52,7 @@ class GlobalBackpropModel(GlobalModel):
         self.wrapped_policy = FunctionWrapper(layer=self.policy, input_fn=obs_adjust,
                 output_fn=action_adjust)
 
-        cell = IntegrateCell(grid,
+        cell = IntegrateCell(
                 prep_state_fn=env.tf_prep_state,
                 policy_net=self.wrapped_policy,
                 integrate_fn=env.tf_integrate,
@@ -69,7 +69,7 @@ class GlobalBackpropModel(GlobalModel):
         #TODO possibly restrict num_steps to something smaller?
         # We'd then need to sample timesteps from a WENO trajectory.
 
-        states, actions, rewards = rnn(initial_state_ph, num_steps=args.ep_length)
+        states, actions, rewards = rnn(self.initial_state_ph, num_steps=args.ep_length)
         self.states = states
         self.actions = actions
         self.rewards = rewards
@@ -189,15 +189,14 @@ class IntegrateRNN(Layer):
           performance by keeping the Tensors on the GPU instead. True by default. Does nothing if
           only using the CPU anyway.
         """
-        super().__init__()
+        super().__init__(dtype=dtype)
         self.cell = cell
-        self.dtype = dtype
         self.swap_to_cpu = swap_to_cpu
 
     def build(self, input_size):
-        super().build()
+        super().build(input_size)
 
-    def call(initial_state, num_steps):
+    def call(self, initial_state, num_steps):
         states_ta = tf.TensorArray(dtype=self.dtype, size=num_steps)
         actions_ta = tf.TensorArray(dtype=self.dtype, size=num_steps)
         rewards_ta = tf.TensorArray(dtype=self.dtype, size=num_steps)
@@ -235,9 +234,8 @@ class IntegrateRNN(Layer):
 
 
 class IntegrateCell(Layer):
-    def __init__(self, grid, prep_state_fn, policy_net, integrate_fn, reward_fn):
+    def __init__(self, prep_state_fn, policy_net, integrate_fn, reward_fn):
         super().__init__()
-        self.grid = grid
 
         self.prep_state_fn = prep_state_fn
         self.policy_net = policy_net
@@ -245,7 +243,7 @@ class IntegrateCell(Layer):
         self.reward_fn = reward_fn
         
     def build(self, input_size):
-        super().build()
+        super().build(input_size)
 
     def call(self, state):
         # state has shape [batch, location, ...]
@@ -443,6 +441,7 @@ def WENO_reward(args):
     error = weno_next_real_state - next_real_state
 
     if "one-step" in self.reward_mode:
+        pass
         # This version is ALWAYS one-step - the others are tricky to implement in TF.
     elif "full" in self.reward_mode:
         raise Exception("Reward mode 'full' invalid - only 'one-step' reward implemented"

@@ -66,7 +66,7 @@ def flat_rescale_from_tanh(action):
     return action / np.sum(action, axis=-1)[..., None]
 flat_rescale_from_tanh_tf = create_rescale_tf([-1,1], [0,1])
 
-fn_key = 'resale_from_tanh'
+fn_key = 'rescale_from_tanh'
 _numpy_fn_dict[fn_key] = flat_rescale_from_tanh
 _tensorflow_fn_dict[fn_key] = flat_rescale_from_tanh_tf
 
@@ -120,7 +120,7 @@ def z_score_last_dim_tf(obs_tensor):
             / (tf.math.reduce_std(obs_tensor, axis=-1)[..., None] + epsilon_tf))
     return tf.clip_by_value(z_score, -clip_obs_tf, clip_obs)
 
-fn_key = 'z_score_last_dim'
+fn_key = 'z_score_last'
 _numpy_fn_dict[fn_key] = z_score_last_dim
 _tensorflow_fn_dict[fn_key] = z_score_last_dim_tf
 
