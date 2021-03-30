@@ -1398,6 +1398,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         error = weno_next_real_state - next_real_state
 
         if "one-step" in self.reward_mode:
+            pass
             # This version is ALWAYS one-step - the others are tricky to implement in TF.
         elif "full" in self.reward_mode:
             raise Exception("Reward mode 'full' invalid - only 'one-step' reward implemented"
