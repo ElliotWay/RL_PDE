@@ -96,7 +96,6 @@ class SACModel(BaselinesModel):
 
         else:
             obs = obs.reshape((-1,) + sac.observation_space.shape)
-            action, _ = sac.predict(obs, deterministic=deterministic)
             action = sac.policy_tf.step(obs, deterministic=deterministic)
             action = action.reshape((-1,) + sac.action_space.shape)
 
