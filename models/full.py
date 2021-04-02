@@ -38,9 +38,13 @@ class GlobalBackpropModel(GlobalModel):
 
         self.session = tf.Session()
 
+        #TODO This is the kind of thing that ought to be handled by the EMI.
+        # Can we extract this responsibility from the global model?
+        action_shape = env.action_space.shape[1:]
+
         #TODO Use ReLU? A field in args with ReLU as the default might make sense.
         with tf.variable_scope("policy", reuse=False):
-            self.policy = PolicyNet(layers=args.layers, action_shape=env.action_space.shape,
+            self.policy = PolicyNet(layers=args.layers, action_shape=action_shape,
                     activation_fn=tf.nn.relu)
         # Direct policy input and output used in predict() method during inference.
         self.policy_input_ph = tf.placeholder(dtype=dtype,
@@ -74,15 +78,13 @@ class GlobalBackpropModel(GlobalModel):
         self.actions = actions
         self.rewards = rewards
 
-        assert tf.rank(rewards) == 3
+        assert len(self.rewards.shape) == 3
         # Sum over the length of the trajectory, then average over each location,
         # and average over the batch.
         self.loss = -tf.reduce_mean(tf.reduce_sum(rewards, axis=2))
 
         params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="policy")
         self.policy_params = params
-        print("{} params - does that look right compared to layers={} ?".format(
-            len(params), layers))
         gradients = tf.gradients(self.loss, params)
         grads = list(zip(gradients, params))
 
@@ -247,6 +249,7 @@ class IntegrateCell(Layer):
 
     def call(self, state):
         # state has shape [batch, location, ...]
+        # (Batch shape may be unknown, other axes should be known.)
 
         real_state = state
         # Use tf.map_fn to apply function across every element in the batch.
@@ -255,19 +258,21 @@ class IntegrateCell(Layer):
         # The policy expects a batch so we don't need to use tf.map_fn;
         # however, it expects batches of INDIVIDUAL states, not every location at once, so we need
         # to combine the batch and location axes first (and then reshape the actions back).
-        rl_state_shape = rl_state.get_shape().as_list()
-        new_state_shape = [rl_state_shape[0] + rl_state_shape[1],] + rl_state_shape[2:]
+        rl_state_shape = rl_state.shape.as_list()
+        new_state_shape = [-1,] + rl_state_shape[2:]
         reshaped_state = tf.reshape(rl_state, new_state_shape)
 
         shaped_action = self.policy_net(reshaped_state)
 
-        shaped_action_shape = shaped_action.get_shape().as_list()
-        rl_action_shape = [rl_state_shape[0], rl_state_shape[1]] + shaped_action_shape[1:]
+        shaped_action_shape = shaped_action.shape.as_list()
+        rl_action_shape = [-1, rl_state_shape[1]] + shaped_action_shape[1:]
         rl_action = tf.reshape(shaped_action, rl_action_shape)
 
-        next_real_state = tf.map_fn(self.integrate_fn, (real_state, rl_state, rl_action))
+        next_real_state = tf.map_fn(self.integrate_fn, (real_state, rl_state, rl_action),
+                dtype=real_state.dtype) # Specify dtype because different from input (not a tuple).
 
-        rl_reward = tf.map_fn(self.reward_fn, (real_state, rl_state, rl_action, next_real_state))
+        rl_reward = tf.map_fn(self.reward_fn, (real_state, rl_state, rl_action, next_real_state),
+                dtype=real_state.dtype)
 
         return rl_action, rl_reward, next_real_state
 

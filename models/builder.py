@@ -1,5 +1,7 @@
 import argparse
 
+import tensorflow as tf
+
 from util.misc import positive_int, nonnegative_float, positive_float
 
 def get_model_arg_parser():

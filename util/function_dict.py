@@ -107,7 +107,7 @@ _tensorflow_fn_dict[fn_key] = tf.identity
 #def identity_correction(squashed_policy, logp_pi):
     #return logp_pi
 
-clip_obs = 5 # (in stddevs from the mean)
+clip_obs = 5.0 # (in stddevs from the mean)
 clip_obs_tf = tf.constant(clip_obs)
 epsilon = 1e-10
 epsilon_tf = tf.constant(epsilon)
@@ -136,7 +136,7 @@ def z_score_all_dims_tf(obs_tensor):
     # I'm not planning on using it soon.
     raise NotImplementedError
 
-#fn_key = 'z_score_all_dims'
+#fn_key = 'z_score_all'
 #_numpy_fn_dict[fn_key] = z_score_all_dims
 #_tensorflow_fn_dict[fn_key] = z_score_all_dims_tf
 

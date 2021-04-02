@@ -718,7 +718,7 @@ class AbstractBurgersEnv(gym.Env):
             if weno_action_history is not None:
                 weno_action_history = weno_action_history[:, location, :].transpose()
 
-            actual_location = self.grid.x[location] - self.dx/2
+            actual_location = self.grid.x[location] - self.grid.dx/2
             if title is None:
                 fig.suptitle("actions at x = {:.4} (i = {} - 1/2)".format(actual_location, location))
             else:
@@ -1052,7 +1052,8 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         elif not self.analytical:
             self.solution.set_record_actions("weno")
 
-        self.k1 = self.k2 = self.k3 = self.u_start = self.dt = None
+        self.dt = self.timestep()
+        self.k1 = self.k2 = self.k3 = self.u_start = None
         self.rk_state = 1
 
         self._action_labels = ["$w^{}_{}$".format(sign, num) for sign in ['+', '-']
@@ -1341,10 +1342,8 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         minus_indexes = plus_indexes + 1
         minus_indexes = np.flip(minus_indexes, axis=-1)
 
-        print(plus_indexes.shape)
-
-        plus_stencils = flux_plus[plus_indexes]
-        minus_stencils = flux_minus[minus_indexes]
+        plus_stencils = tf.gather(flux_plus, plus_indexes)
+        minus_stencils = tf.gather(flux_minus, minus_indexes)
 
         # Stack together into rl_state.
         # Stack on dim 1 to keep location dim 0.
@@ -1363,13 +1362,20 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         minus_stencils = rl_state[:, 1]
 
         #Note the similarity in this block to weno_i_stencils_batch().
-        a_mat = weno_coefficients.a_all[self.order]
+        a_mat = weno_coefficients.a_all[self.weno_order]
         a_mat = np.flip(a_mat, axis=-1)
-        a_mat = tf.constant(a_mat)
-        sub_stencil_indexes = create_stencil_indexes(stencil_size=self.order, num_stencils=self.order)
-        plus_interpolated = tf.reduce_sum(a_mat * plus_stencils[:, sub_stencil_indexes], axis=-1)
-        minus_interpolated = tf.reduce_sum(a_mat * minus_stencils[:, sub_stencil_indexes], axis=-1)
+        a_mat = tf.constant(a_mat, dtype=rl_state.dtype)
+        sub_stencil_indexes = create_stencil_indexes(stencil_size=self.weno_order,
+                num_stencils=self.weno_order)
+        # Here axis 0 is location/batch and axis 1 is stencil,
+        # so to index substencils we gather on axis 1.
+        plus_sub_stencils = tf.gather(plus_stencils, sub_stencil_indexes, axis=1)
+        minus_sub_stencils = tf.gather(minus_stencils, sub_stencil_indexes, axis=1)
+        plus_interpolated = tf.reduce_sum(a_mat * plus_sub_stencils, axis=-1)
+        minus_interpolated = tf.reduce_sum(a_mat * minus_sub_stencils, axis=-1)
 
+        #TODO: update this to handle batches correctly?
+        # But no, it shouldn't need to, this is being called in a map_fn.
         plus_action = rl_action[:, 0]
         minus_action = rl_action[:, 1]
 
@@ -1378,7 +1384,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         reconstructed_flux = fpr + fml
 
-        derivative_u_t = (reconstructed_flux[:-1] - reconstructed_flux[1:]) / self.dx
+        derivative_u_t = (reconstructed_flux[:-1] - reconstructed_flux[1:]) / self.grid.dx
 
         #TODO implement RK4 as well?
 
@@ -1399,18 +1405,23 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         # Note that real_state and next_real_state do not include ghost cells, but rl_state does.
 
         # This section is adapted from agents.py#StandardWENOAgent._weno_weights_batch()
-        C_values = weno_coefficients.C_all[self.order]
-        C_values = tf.constant(C_values)
-        sigma_mat = weno_coefficients.sigma_all[self.order]
-        sigma_mat = tf.constant(sigma_mat)
+        C_values = weno_coefficients.C_all[self.weno_order]
+        C_values = tf.constant(C_values, dtype=real_state.dtype)
+        sigma_mat = weno_coefficients.sigma_all[self.weno_order]
+        sigma_mat = tf.constant(sigma_mat, dtype=real_state.dtype)
 
         fp_stencils = rl_state[:, 0]
         fm_stencils = rl_state[:, 1]
 
-        sub_stencil_indexes = create_stencil_indexes(stencil_size=self.order, num_stencils=self.order)
+        sub_stencil_indexes = create_stencil_indexes(stencil_size=self.weno_order,
+                num_stencils=self.weno_order)
 
-        sub_stencils_fp = tf.reverse(fp_stencils[:, sub_stencil_indexes], axis=-1)
-        sub_stencils_fm = tf.reverse(fm_stencils[:, sub_stencil_indexes], axis=-1)
+        # Here axis 0 is location/batch and axis 1 is stencil,
+        # so to index substencils we gather on axis 1.
+        sub_stencils_fp = tf.reverse(tf.gather(fp_stencils, sub_stencil_indexes, axis=1),
+                axis=(-1,)) # For some reason, axis MUST be iterable, can't be scalar -1.
+        sub_stencils_fm = tf.reverse(tf.gather(fm_stencils, sub_stencil_indexes, axis=1),
+                axis=(-1,))
 
         q_squared_fp = sub_stencils_fp[:, :, None, :] * sub_stencils_fp[:, :, :, None]
         q_squared_fm = sub_stencils_fm[:, :, None, :] * sub_stencils_fm[:, :, :, None]
@@ -1472,7 +1483,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
             error = tf.abs(error)
             combined_error = (error[:-1] + error[1:]) / 2
             # Assume error beyond boundaries is 0, so error at edge interfaces is error at edge cells.
-            combined_error = tf.concat([error[0] / 2, combined_error, error[-1] / 2], axis=0)
+            combined_error = tf.concat([[error[0] / 2], combined_error, [error[-1] / 2]], axis=0)
         # Combine error across the stencil.
         elif "stencil" in self.reward_mode:
             # This is trickier and we need to expand the error into the ghost cells.
@@ -1511,7 +1522,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
             if "noadjust" in self.reward_mode:
                 reward = tf.atan(-combined_error)
             else:
-                reward_adjustment = tf.contant(self.reward_adjustment)
+                reward_adjustment = tf.constant(self.reward_adjustment, dtype=real_state.dtype)
                 # The constant controls the relative importance of small rewards compared to large rewards.
                 # Towards infinity, all rewards (or penalties) are equally important.
                 # Towards 0, small rewards are increasingly less important.

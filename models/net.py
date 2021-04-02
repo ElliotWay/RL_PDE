@@ -96,8 +96,8 @@ class PolicyNet(Layer):
         super().build(input_shape)
 
     def call(self, state):
-        # Does this work? Do we have that state information during call?
-        # I *think* so, but I'm not sure.
+        # The state shape should be [None, something, something, etc.] so using np.prod on
+        # state.shape[1:] works here.
         flattened_state_size = np.prod(state.shape[1:])
         flat_state = tf.reshape(state, (-1, flattened_state_size))
 
@@ -116,6 +116,7 @@ class FunctionWrapper(Layer):
     Wrap another Layer with input and output functions.
     """
     def __init__(self, layer, input_fn, output_fn):
+        super().__init__()
         self.layer = layer
         self.input_fn = input_fn
         self.output_fn = output_fn
