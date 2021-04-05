@@ -91,6 +91,10 @@ class GlobalBackpropModel(GlobalModel):
         self.optimizer = get_optimizer(args)
         self.train_policy = self.optimizer.apply_gradients(grads)
 
+        tf.global_variables_initializer().run(session=self.session)
+
+        self.setup_loading()
+
     def setup_loading(self):
         self.load_op = {}
         self.load_ph = {}
@@ -137,7 +141,7 @@ class GlobalBackpropModel(GlobalModel):
                     feed_dict={self.policy_input_ph:flattened_state})
             action = flattened_action.reshape((batch_length, spatial_length,) + action.shape[1:])
 
-        return action
+        return action, None
 
     def save(self, path):
         """

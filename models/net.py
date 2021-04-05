@@ -101,7 +101,7 @@ class PolicyNet(Layer):
         flattened_state_size = np.prod(state.shape[1:])
         flat_state = tf.reshape(state, (-1, flattened_state_size))
 
-        output = state
+        output = flat_state
         for layer in self.hidden_layers:
             output = layer(output)
             #TODO Could use layer normalization - that might be a good idea, esp. with ReLU.

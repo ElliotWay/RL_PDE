@@ -178,9 +178,9 @@ class StandardEMI(EMI):
 class UnbatchedEnvPL(gym.Env):
     """
     Fake environment that presents a state/action space from another environment with the first
-    dimension (the spatial dimension) removed, and the remaining dimensions flattened.
+    dimension (the spatial dimension) removed, and optionally the remaining dimensions flattened.
     """
-    def __init__(self, real_env):
+    def __init__(self, real_env, flatten=True):
         self.real_env = real_env
 
         real_action_low = real_env.action_space.low
@@ -194,10 +194,16 @@ class UnbatchedEnvPL(gym.Env):
                 and np.all(real_obs_high[0] == real_obs_high[-1])), \
                 "Original env dim 1 was not spatial."
 
-        new_action_low = real_action_low[0].flatten()
-        new_action_high = real_action_high[0].flatten()
-        new_obs_low = real_obs_low[0].flatten()
-        new_obs_high = real_obs_high[0].flatten()
+        new_action_low = real_action_low[0]
+        new_action_high = real_action_high[0]
+        new_obs_low = real_obs_low[0]
+        new_obs_high = real_obs_high[0]
+
+        if flatten:
+            new_action_low = new_action_low.flatten()
+            new_action_high = new_action_high.flatten()
+            new_obs_low = new_obs_low.flatten()
+            new_obs_high = new_obs_high.flatten()
 
         action_space_cls = type(real_env.action_space)
         self.action_space = action_space_cls(low=new_action_low, high=new_action_high,
@@ -369,7 +375,7 @@ class BatchGlobalEMI(EMI):
 
         # The external policy still sees the same interface, so we still use the same decorators as
         # with BatchEMI. Note that unlike in BatchEMI, self.policy is NOT used during training.
-        unbatched_env = UnbatchedEnvPL(env)
+        unbatched_env = UnbatchedEnvPL(env, flatten=False)
         unbatched_policy = UnbatchedPolicy(env, unbatched_env, self._model)
         self.policy = PolicyWrapper(unbatched_policy, action_adjust, obs_adjust)
 

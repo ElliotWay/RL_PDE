@@ -112,7 +112,7 @@ class AbstractBurgersEnv(gym.Env):
 
     def __init__(self,
             xmin=0.0, xmax=1.0, nx=128, boundary=None, init_type="smooth_sine",
-            fixed_step=0.0005, C=0.5,
+            fixed_step=0.0005, C=None, #C=0.5,
             weno_order=3, state_order=None, eps=0.0, srca=0.0, episode_length=300,
             analytical=False, precise_weno_order=None, precise_scale=1,
             reward_adjustment=1000, reward_mode=None,
