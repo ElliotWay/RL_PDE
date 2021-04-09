@@ -83,7 +83,9 @@ def save_action_snapshot(agent, weno_agent=None, suffix=""):
         raise Exception("Need to pass args to action_snapshot.declare_standard_envs"
                 + " before saving an action snapshot.")
 
-    action_dimensions = np.prod(list(standard_envs[0].action_space.shape)[1:])
+    action_dims = list(standard_envs[0].action_space.shape)[1:]
+    action_dims[-1] += 1
+    action_dimensions = np.prod(action_dims)
     fig, axes = plt.subplots(1 + action_dimensions, len(standard_envs), sharex='col', sharey='row', gridspec_kw={'wspace':0, 'hspace':0})
 
     agent_color = "tab:orange"
@@ -93,6 +95,12 @@ def save_action_snapshot(agent, weno_agent=None, suffix=""):
         state = env.reset()
         grid_state = env.grid.get_full()
         action, _ = agent.predict(state, deterministic=True)
+        num = action.max(axis=-1)
+        den = action.sum(axis=-1)
+        proc_coef = np.divide(num, den, out=np.zeros_like(num), where=den != 0)  # if denominator is zero return zero
+        action_proj = np.einsum('ijk,ij->ijk', action, proc_coef)
+        action = np.dstack([action_proj, 1 - action_proj.sum(-1)])
+
         action = action.reshape((-1, action_dimensions))
 
         if weno_agent is not None:

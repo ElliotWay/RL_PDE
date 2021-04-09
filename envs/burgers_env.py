@@ -954,8 +954,8 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         self.follow_solution = follow_solution
 
-        self.action_space = SoftmaxBox(low=0.0, high=1.0, 
-                                       shape=(self.grid.real_length() + 1, 2, self.weno_order),
+        self.action_space = spaces.Box(low=0.0, high=1.0,
+                                       shape=(self.grid.real_length() + 1, 2, self.weno_order - 1),
                                        dtype=np.float32)
         self.observation_space = spaces.Box(low=-1e7, high=1e7,
                                             shape=(self.grid.real_length() + 1, 2, 2 * self.state_order - 1),
@@ -1152,12 +1152,18 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         if np.isnan(action).any():
             raise Exception("NaN detected in action.")
 
-        self.action_history.append(action)
+        num = action.max(axis=-1)
+        den = action.sum(axis=-1)
+        proc_coef = np.divide(num, den, out=np.zeros_like(num), where=den != 0)  # if denominator is zero return zero
+        action_proj = np.einsum('ijk,ij->ijk', action, proc_coef)
+        real_action = np.dstack([action_proj, 1 - action_proj.sum(-1)])
+
+        self.action_history.append(real_action)
 
         # Find a way to pass this to agent if dt varies.
         dt = self.timestep()
 
-        step = dt * self.rk_substep_weno(action)
+        step = dt * self.rk_substep_weno(real_action)
 
         state, reward, done = self._finish_step(step, dt)
 

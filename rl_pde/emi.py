@@ -134,11 +134,12 @@ class PolicyWrapper:
         if self.save_samples:
             self.model_action.append(action)
 
-        if self.action_adjust is not None:
-            adjusted_action = self.action_adjust(action)
-        else:
-            adjusted_action = action
-        return adjusted_action, info
+        # if self.action_adjust is not None:
+        #     adjusted_action = self.action_adjust(action)
+        # else:
+        #     adjusted_action = action
+        # return adjusted_action, info
+        return action, info
 
 class StandardEMI(EMI):
     """
