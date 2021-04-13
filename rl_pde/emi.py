@@ -398,7 +398,10 @@ class BatchGlobalEMI(EMI):
         del extra_info['rewards']
 
         info_dict = {}
-        info_dict['avg_reward'] = np.mean(np.sum(rewards, axis=1), axis=0)
+        # Note that information coming from the model
+        # has dimensions [timestep, initial_condition, ...], so reducing across time is reducing
+        # across axis 0.
+        info_dict['avg_reward'] = np.mean(np.sum(rewards, axis=0), axis=0)
         info_dict['timesteps'] = num_inits * self.args.ep_length
         info_dict.update(extra_info)
         return info_dict

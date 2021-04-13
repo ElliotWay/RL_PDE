@@ -339,8 +339,13 @@ class AbstractBurgersEnv(gym.Env):
             l2_error = np.sqrt(self.grid.dx * np.sum(np.square(error)))
             return l2_error
 
-    def plot_state(self, timestep=None, location=None, plot_error=False,
-            suffix=None, title=None, fixed_axes=False, no_x_borders=False, show_ghost=True):
+    def plot_state(self,
+            timestep=None, location=None,
+            plot_error=False,
+            suffix=None, title=None,
+            fixed_axes=False, no_x_borders=False, show_ghost=True,
+            state_history=None, solution_state_history=None, weno_state_history=None,
+            history_includes_ghost=True):
         """
         Plot environment state at either a timestep or a specific location.
 
@@ -370,35 +375,55 @@ class AbstractBurgersEnv(gym.Env):
         show_ghost : bool
             Plot the ghost cells in addition to the "real" cells. The ghost cells are plotted
             in a lighter color.
+        state_history [, solution_state_history, weno_state_history] : ndarray
+            Override the current state histories with a different set. Useful if, for example, you
+            copied the history from an earlier episode.
+            If using state_history, you must also use solution_state_history. weno_state_history is
+            optional and only necessary if solution_state_history is something different.
+        history_includes_ghost : bool
+            Whether the overriding histories include the ghost cells. history_includes_ghost=False
+            overrides show_ghost to False.
         """
 
         assert (timestep is None or location is None), "Can't plot state at both a timestep and a location."
+
+        override_history = (state_history is not None)
 
         fig = plt.figure()
 
         error_or_state = "error" if plot_error else "state"
 
         if location is None and timestep is None:
-            state_history = self.grid.get_full().copy()
-            solution_state_history = self.solution.get_full().copy()
-            if self.weno_solution is not None:
-                weno_state_history = self.weno_solution.get_full().copy()
+            if state_history is None:
+                state_history = self.grid.get_full().copy()
+                solution_state_history = self.solution.get_full().copy()
+                if self.weno_solution is not None:
+                    weno_state_history = self.weno_solution.get_full().copy()
+                else:
+                    weno_state_history = None
+
+                num_steps = self.steps
+                actual_time = self.t
             else:
-                weno_state_history = None
+                num_steps = len(state_history)
+                actual_time = num_steps * self.fixed_step
 
             if title is None:
-                title = ("{} at t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(error_or_state, self.t, self.steps)
+                title = ("{} at t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(
+                        error_or_state, actual_time, self.steps)
             if suffix is None:
-                suffix = ("_step{:0" + str(self._step_precision) + "}").format(self.steps)
+                suffix = ("_step{:0" + str(self._step_precision) + "}").format(num_steps)
         else:
-            state_history = np.array(self.state_history)
-            solution_state_history = self.solution.get_state_history().copy() \
-                    if self.solution.is_recording_state() else None
-            weno_state_history = self.weno_solution.get_state_history().copy() \
-                    if self.weno_solution is not None and self.weno_solution.is_recording_state() else None
+            if state_history is None:
+                state_history = np.array(self.state_history)
+                solution_state_history = self.solution.get_state_history().copy() \
+                        if self.solution.is_recording_state() else None
+                weno_state_history = self.weno_solution.get_state_history().copy() \
+                        if self.weno_solution is not None and self.weno_solution.is_recording_state() else None
 
             if location is not None:
-                location = self.ng + location
+                if not override_history or history_includes_ghost:
+                    location = self.ng + location
                 state_history = state_history[:,location]
                 if solution_state_history is not None:
                     solution_state_history = solution_state_history[:, location]
@@ -420,7 +445,8 @@ class AbstractBurgersEnv(gym.Env):
                 if title is None:
                     if self.C is None:
                         actual_time = timestep * self.fixed_step
-                        title = ("{} at t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(error_or_state, actual_time, timestep)
+                        title = ("{} at t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(
+                                error_or_state, actual_time, timestep)
                     else:
                         # TODO get time with variable timesteps?
                         title = "{} at step {:0" + str(self._step_precision) + "d}".format(error_or_state, timestep)
@@ -436,7 +462,7 @@ class AbstractBurgersEnv(gym.Env):
             weno_state_history = None
 
         if timestep is None:
-            if show_ghost:
+            if show_ghost and (not override_history or history_includes_ghost):
                 # The ghost arrays slice off one real point so the line connects to the real points.
                 num_ghost_points = self.ng + 1
 
@@ -447,12 +473,16 @@ class AbstractBurgersEnv(gym.Env):
                 plt.plot(ghost_x_right, state_history[-num_ghost_points:], ls='-', color=self.agent_ghost_color)
 
                 if solution_state_history is not None:
-                    plt.plot(ghost_x_left, solution_state_history[:num_ghost_points], ls='-', color=self.true_ghost_color)
-                    plt.plot(ghost_x_right, solution_state_history[-num_ghost_points:], ls='-', color=self.true_ghost_color)
+                    plt.plot(ghost_x_left, solution_state_history[:num_ghost_points],
+                            ls='-', color=self.true_ghost_color)
+                    plt.plot(ghost_x_right, solution_state_history[-num_ghost_points:],
+                            ls='-', color=self.true_ghost_color)
 
                 if weno_state_history is not None:
-                    plt.plot(ghost_x_left, weno_state_history[:num_ghost_points], ls='-', color=self.weno_ghost_color)
-                    plt.plot(ghost_x_right, weno_state_history[-num_ghost_points:], ls='-', color=self.weno_ghost_color)
+                    plt.plot(ghost_x_left, weno_state_history[:num_ghost_points],
+                            ls='-', color=self.weno_ghost_color)
+                    plt.plot(ghost_x_right, weno_state_history[-num_ghost_points:],
+                            ls='-', color=self.weno_ghost_color)
 
             state_history = state_history[self.ng:-self.ng]
             if solution_state_history is not None:
@@ -473,7 +503,7 @@ class AbstractBurgersEnv(gym.Env):
             true_label = "Analytical"
             weno_label = "WENO"
         else:
-            if self.weno_solution is not None:
+            if weno_state_history is not None:
                 true_label = "WENO (order={}, res={})".format(self.precise_weno_order, self.precise_nx)
                 weno_label = "WENO (order={}, res={})".format(self.weno_order, self.nx)
             else:
@@ -522,7 +552,11 @@ class AbstractBurgersEnv(gym.Env):
         plt.close(fig)
         return filename
 
-    def plot_state_evolution(self, num_states=10, full_true=False, no_true=False, plot_error=False, suffix="", title=None):
+    def plot_state_evolution(self,
+            num_states=10, full_true=False, no_true=False, plot_error=False,
+            suffix="", title=None,
+            state_history=None, solution_state_history=None,
+            ):
         """
         Plot the evolution of the state over time on a single plot.
         Ghost cells are not plotted.
@@ -540,7 +574,7 @@ class AbstractBurgersEnv(gym.Env):
         full_true : bool
             Set False by default, which will only plot the final state of the
             true solution. Set True to plot the state of the true solution at
-            every the same number of timesteps as the RL solution. (This may
+            the same number of timesteps as the RL solution. (This may
             be confusing to interpret.)
         no_true : bool
             Set False by default, which plots the true solution. Set True to
@@ -552,16 +586,22 @@ class AbstractBurgersEnv(gym.Env):
             default.
         title : string
             Title for the plot. There is no title by default.
+        state_history [, solution_state_history] : ndarray
+            Override the current state histories with a different set. Useful if, for example, you
+            copied the history from an earlier episode.
         """
+
+        override_history = (state_history is not None)
 
         fig = plt.figure()
 
         x_values = self.grid.x[self.ng:-self.ng]
 
-        state_history = np.array(self.state_history)[:, self.ng:-self.ng]
+        if state_history is None:
+            state_history = np.array(self.state_history)[:, self.ng:-self.ng]
 
         # Indexes into the state history. There are num_states+1 indices, where the first
-        # is always 0m the last is always len(state_history)-1, and the rest are evenly
+        # is always 0 the last is always len(state_history)-1, and the rest are evenly
         # spaced between them.
         slice_indexes = (np.arange(num_states+1)*(len(state_history)-1)/num_states).astype(int)
 
@@ -577,13 +617,14 @@ class AbstractBurgersEnv(gym.Env):
 
         # Plot the true solution first so it appears under the RL solution.
         if not plot_error and not no_true:
-            if not isinstance(self.solution, OneStepSolution) and self.solution.is_recording_state():
-            #if isinstance(self.solution, OneStepSolution):
-                solution_state_history = np.array(self.solution.get_state_history())[:, self.ng:-self.ng]
-            elif self.weno_solution is not None and self.weno_solution.is_recording_state():
-                solution_state_history = np.array(self.weno_solution.get_state_history())[:, self.ng:-self.ng]
-            else:
-                solution_state_history = None
+            if solution_state_history is not None:
+                if not isinstance(self.solution, OneStepSolution) and self.solution.is_recording_state():
+                #if isinstance(self.solution, OneStepSolution):
+                    solution_state_history = np.array(self.solution.get_state_history())[:, self.ng:-self.ng]
+                elif self.weno_solution is not None and self.weno_solution.is_recording_state():
+                    solution_state_history = np.array(self.weno_solution.get_state_history())[:, self.ng:-self.ng]
+                else:
+                    solution_state_history = None
 
             if solution_state_history is not None:
                 assert len(state_history) == len(solution_state_history), "History mismatch."
@@ -606,10 +647,11 @@ class AbstractBurgersEnv(gym.Env):
             true = None
 
         if plot_error:
-            if not self.solution.is_recording_state():
-                raise Exception("Cannot plot evolution of error if solution state is not available.")
-            solution_state_history = np.array(self.solution.get_state_history())[:, self.ng:-self.ng]
-            state_history = np.abs(solution_state_history - state_history)
+            if not override_history:
+                if not self.solution.is_recording_state():
+                    raise Exception("Cannot plot evolution of error if solution state is not available.")
+                solution_state_history = np.array(self.solution.get_state_history())[:, self.ng:-self.ng]
+                state_history = np.abs(solution_state_history - state_history)
 
         if not plot_error:
             init = plt.plot(x_values, state_history[0], ls='--', color=start_rgb)

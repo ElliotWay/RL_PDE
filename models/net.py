@@ -134,5 +134,5 @@ class FunctionWrapper(Layer):
             modified_output = self.output_fn(output_tensor)
         else:
             modified_output = output_tensor
-        return output_tensor
+        return modified_output
 

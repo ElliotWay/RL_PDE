@@ -86,10 +86,10 @@ class GlobalBackpropModel(GlobalModel):
         params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="policy")
         self.policy_params = params
         gradients = tf.gradients(self.loss, params)
-        grads = list(zip(gradients, params))
+        self.grads = list(zip(gradients, params))
 
         self.optimizer = get_optimizer(args)
-        self.train_policy = self.optimizer.apply_gradients(grads)
+        self.train_policy = self.optimizer.apply_gradients(self.grads)
 
         tf.global_variables_initializer().run(session=self.session)
 
@@ -106,9 +106,85 @@ class GlobalBackpropModel(GlobalModel):
     def train(self, initial_state):
         feed_dict = {self.initial_state_ph:initial_state}
 
-        _, loss, rewards = self.session.run([self.train_policy, self.loss, self.rewards], feed_dict=feed_dict)
-        #TODO do something with states, actions, rewards as a debug output?
-        return {"loss":loss, "rewards":rewards}
+        _, grads, loss, rewards, actions, states = self.session.run(
+                [self.train_policy, self.grads, self.loss, self.rewards, self.actions, self.states],
+                feed_dict=feed_dict)
+
+        extra_info = {}
+
+        # rewards, actions, states are [timestep, initial_condition, ...]
+
+        debug_mode = True
+        training_plot_freq = 50
+        if debug_mode:
+            #print("loss", loss)
+            nans_in_grads = np.sum([np.sum(np.isnan(grad)) for grad in grads])
+            if nans_in_grads > 0:
+                print("{} NaNs in grads".format(nans_in_grads))
+
+            for param in self.policy_params:
+                nans_in_param = tf.reduce_any(tf.is_nan(param))
+                if self.session.run(nans_in_param):
+                    print("NaNs detected in " + param.name)
+            
+            if not hasattr(self, 'iteration'):
+                self.iteration = 0
+            else:
+                self.iteration += 1
+
+            safe_state = states[np.logical_not(np.isnan(states).any(axis=(1,2)))]
+            #if len(safe_state) == 0:
+                #raise Exception("All timesteps NaN. Stopping")
+
+            num_samples = 3
+            ep_length = actions.shape[0]
+            num_inits = actions.shape[1]
+            spatial_width = actions.shape[2]
+            sample_rewards = np.sum(rewards[:, np.random.randint(num_inits, size=num_samples),
+                np.random.randint(spatial_width, size=num_samples)], axis=0)
+            for i, reward in enumerate(sample_rewards):
+                extra_info["train_r"+str(i+1)] = reward
+            sample_actions = actions[np.random.randint(ep_length, size=num_samples),
+                    np.random.randint(num_inits, size=num_samples),
+                    np.random.randint(spatial_width, size=num_samples)]
+            for i, action in enumerate(sample_actions):
+                extra_info["train_a"+str(i+1)] = action.round(decimals=3)
+
+            if self.iteration % training_plot_freq == 0:
+                for initial_condition_index in range(states.shape[1]):
+                    state_history = states[:, initial_condition_index]
+                    suffix = "_train_iter{}_init{}".format(self.iteration, initial_condition_index)
+                    self.env.plot_state_evolution(state_history=state_history,
+                            no_true=True, suffix=suffix)
+
+            if np.isnan(actions).any():
+                print("NaN in actions during training")
+                print("action shape", actions.shape)
+                print("timesteps with NaN:", np.isnan(actions).any(axis=(1,2,3,4)))
+                #print("episodes with NaN:", np.isnan(actions).any(axis=(0,2,3,4)))
+                #print("locations with NaN:", np.isnan(actions).any(axis=(0,1,3,4)))
+                print(actions[:27, 0, 65])
+            if np.isnan(rewards).any():
+                print("NaN in rewards during training")
+                #print("reward shape", rewards.shape)
+                #print("timesteps with NaN:", np.isnan(rewards).any(axis=(1,2)))
+                #print("episodes with NaN:", np.isnan(rewards).any(axis=(0,2)))
+                #print("locations with NaN:", np.isnan(rewards).any(axis=(0,1)))
+            if np.isnan(states).any():
+                print("NaN in states during training")
+                #print("state shape", states.shape)
+                #print("timesteps with NaN:", np.isnan(states).any(axis=(1,2)))
+                #print("episodes with NaN:", np.isnan(states).any(axis=(0,2)))
+                #print("locations with NaN:", np.isnan(states).any(axis=(0,1)))
+            if np.isnan(states).any() or np.isnan(actions).any() or np.isnan(states).any():
+                print("NaNs detected this round :(")
+                raise Exception()
+            #else:
+                #print("No NaNs this round :)")
+
+        output_info = {"loss":loss, "rewards":rewards}
+        output_info.update(extra_info)
+        return output_info
 
     def predict(self, state, deterministic=True):
         if not deterministic:
