@@ -80,7 +80,6 @@ SLEEP_TIME = 0.25 # seconds
 
 ON_POSIX = 'posix' in sys.builtin_module_names
 
-num_errors = 0
 arg_matrix = []
 def build_command_list(index, arg_list, log_dir):
     if index == len(values_table):
@@ -131,6 +130,8 @@ def check_procs(procs, queues):
             # Expected
             pass
 
+    num_errors = 0
+
     # Check for finished procs.
     for index in list(procs):
         proc = procs[index]
@@ -142,6 +143,8 @@ def check_procs(procs, queues):
                 num_errors += 1
             del procs[index]
             del queues[index]
+
+    return num_errors
 
 def main():
     parser = argparse.ArgumentParser(
@@ -194,11 +197,13 @@ def main():
 
     try:
         commands_started = 0
+        commands_with_errors = 0
         while len(running_procs) > 0 or commands_started < len(arg_matrix):
             while (len(running_procs) >= MAX_PROCS 
                     or (commands_started == len(arg_matrix) and len(running_procs) > 0)):
                 time.sleep(SLEEP_TIME)
-                check_procs(running_procs, output_queues)
+                num_errors = check_procs(running_procs, output_queues)
+                commands_with_errors += num_errors
 
             if commands_started < len(arg_matrix):
                 # Check that git repo hasn't changed before starting a new proc.
@@ -312,8 +317,8 @@ def main():
         print("{}{}/{} processes were never started.{}".format(
             colors.WARNING, len(arg_matrix) - commands_started, len(arg_matrix),
             colors.ENDC))
-    if num_errors > 0:
-        print("{}{}/{} processes had nonzero return values.".format(
+    if commands_with_errors > 0:
+        print("{}{}/{} processes had nonzero return values.{}".format(
             colors.FAIL, num_errors, len(arg_matrix), colors.ENDC))
 
 
