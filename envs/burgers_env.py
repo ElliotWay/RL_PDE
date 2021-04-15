@@ -617,7 +617,7 @@ class AbstractBurgersEnv(gym.Env):
 
         # Plot the true solution first so it appears under the RL solution.
         if not plot_error and not no_true:
-            if solution_state_history is not None:
+            if not override_history:
                 if not isinstance(self.solution, OneStepSolution) and self.solution.is_recording_state():
                 #if isinstance(self.solution, OneStepSolution):
                     solution_state_history = np.array(self.solution.get_state_history())[:, self.ng:-self.ng]

@@ -137,12 +137,44 @@ def destring_value(string):
     except Exception:
         return string
 
-def load_to_namespace(meta_filename, args_ns, override_args=None):
-    " override_args defaults to the command line arguments. Doesn't work if dest arg was used for parser. Assumes bools are default-false flags. "
+def load_to_namespace(meta_filename, args_ns, ignore_list=[], override_args=None):
+    """
+    Load a meta file into a namespace, i.e. the args created by an ArgumentParser.
+
+    Arguments in the meta file can be overridden with explicitly specified values. Explicitly
+    specified values are loaded from the command line arguments by default, but can be specified
+    with override_args. 
+
+    Arguments in the meta file can also be ignored with ignore_list.
+
+    This is a bit of a hack right now - it works because of assumptions I've made about how
+    arguments are formatted. Two such assumptions are:
+    - bool arguments are all False by default and they are set to true by passing them as flags,
+      e.g. --use-thing.
+    - the dest argument is never used in ArgumentParser.add_argument(), as this would override the
+      default name of the argument in the namespace.
+
+    Parameters
+    ----------
+    meta_filename : string
+        String containing the path to the meta file.
+    args_ns : Namespace
+        Namespace to load the meta file into, i.e. the args created by the ArgumentParser.
+    ignore_list : iterable of string
+        List of parameters to NOT load. These paremeters remain None, even if they had
+        no explicit overriding value.
+    override_args : dict
+        Dictionary of arguments to keep, overriding any value that could be loaded from the meta
+        file. By default, use the arguments passed on the command line instead.   
+
+    """
     # TODO find a way to get around some of this stuff? Might not be possible.
 
     print("M Loading from meta file: {}".format(meta_filename))
     print("TODO Clean this up so you don't see a lot of irrelevant information.")
+
+    ALWAYS_IGNORE = ['y', 'n']
+    ignore_list += ALWAYS_IGNORE
 
     # Note that this is not a deep copy - changes to the dict will also change the namespace.
     arg_dict = vars(args_ns)
@@ -170,6 +202,8 @@ def load_to_namespace(meta_filename, args_ns, override_args=None):
     for arg in arg_dict:
         if arg not in meta_dict:
             print("M {} not found in meta file - using default/explicit value ({}).".format(arg, arg_dict[arg]))
+        elif arg in ignore_list:
+            print("M Ignoring {} parameter. (Was {}.)".format(arg, meta_dict[arg]))
         elif arg in explicit_args:
             print("M Explicit {} overriding parameter in {}.".format(arg, meta_filename))
         else:

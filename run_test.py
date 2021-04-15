@@ -149,6 +149,10 @@ def main():
                         help="Adjustment function to observation. Compute Z score along the last"
                         + " dimension (the stencil) with 'z_score_last', the Z score along every"
                         + " dimension with 'z_score_all', or leave them the same with 'none'.")
+    parser.add_argument('--action-scale', '--action_scale', type=str, default=None,
+                        help="Adjustment function to action. Default depends on environment."
+                        + " 'softmax' computes softmax, 'rescale_from_tanh' scales to [0,1] then"
+                        + " divides by the sum of the weights, 'none' does nothing.")
     parser.add_argument('--log-dir', type=str, default=None,
                         help="Directory to place log file and other results. Default is test/env/agent/timestamp.")
     parser.add_argument('--ep-length', type=int, default=500,
@@ -209,6 +213,22 @@ def main():
         env_arg_parser.print_help()
         sys.exit(0)
 
+    # If an agent is specified, load parameters from its meta file.
+    # This only overrides arguments that were not explicitly specified.
+    #TODO: Find more reliable way of doing this so we are robust to argument changes.
+    if args.agent not in (
+            "default", "none", "stationary", "equal", "middle", "left", "right", "random"):
+        if not os.path.isfile(args.agent):
+            raise Exception("Agent file \"{}\" not found.".format(args.agent))
+
+        model_file = os.path.abspath(args.agent)
+        model_directory = os.path.dirname(model_file)
+        meta_file = os.path.join(model_directory, "meta.txt")
+        if not os.path.isfile(meta_file):
+            raise Exception("Meta file \"{}\" for agent not found.".format(meta_file))
+
+        metadata.load_to_namespace(meta_file, args, ignore_list=['log_dir', 'ep_length'])
+
     set_global_seed(args.seed)
 
     if args.memoize is None:
@@ -240,17 +260,6 @@ def main():
     elif args.agent == "random":
         agent = RandomAgent(order=args.order, mode=mode)
     else:
-        # Load model params from meta file.
-        # TODO: find more reliable way of doing this so
-        # we are more robust to argument changes
-        model_file = os.path.abspath(args.agent)
-        model_directory = os.path.dirname(model_file)
-        meta_file = os.path.join(model_directory, "meta.txt")
-        if not os.path.isfile(meta_file):
-            raise Exception("Meta file \"{}\" for model not found.")
-
-        metadata.load_to_namespace(meta_file, args)
-
         obs_adjust = numpy_fn(args.obs_scale)
         action_adjust = numpy_fn(args.action_scale)
 
