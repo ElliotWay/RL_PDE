@@ -298,6 +298,30 @@ class Grid1d(GridBase):
                 self.boundary = "periodic"
             self.u[:] = 0
 
+        elif self.init_type == "flat":
+            if boundary is None:
+                self.boundary = "outflow"
+            if 'a' in params:
+                a = params['a']
+            else:
+                a = 2.0
+            self.init_params['a'] = a
+            self.u[:] = a
+
+        elif self.init_type == "line":
+            if boundary is None:
+                self.boundary = "first"
+            if 'a' in params:
+                a = params['a']
+            else:
+                a = 2.0
+            self.init_params['a'] = a
+            if 'b' in params:
+                b = params['b']
+            else:
+                b = -0.5
+            self.init_params['b'] = b
+            self.u = a + b * self.x
         else:
             raise Exception("Initial condition type \"" + str(self.init_type) + "\" not recognized.")
 
@@ -323,12 +347,15 @@ class Grid1d(GridBase):
         Update the ghost cells based on the value of the Grid.boundary field.
         You should not need to call this - Grid.set calls this method.
         """
+        # Periodic - copying from the opposite end, as if the space wraps around
         if self.boundary == "periodic":
             self.u[0:self.ilo] = self.u[self.ihi - self.ng + 1:self.ihi + 1]
             self.u[self.ihi + 1:] = self.u[self.ilo:self.ilo + self.ng]
+        # Outflow - copy the edge values into the boundaries
         elif self.boundary == "outflow":
             self.u[0:self.ilo] = self.u[self.ilo]
             self.u[self.ihi + 1:] = self.u[self.ihi]
+        # First - assume the first derivative stays constant based on the 2 edge values
         elif self.boundary == "first":
             left_d = self.u[self.ilo] - self.u[self.ilo+1]
             self.u[0:self.ilo] = (self.u[self.ilo] + (1 + np.arange(self.ng))*left_d)[::-1]
