@@ -238,6 +238,10 @@ def main():
         env = build_env(args.env, args, test=True)
     else:
         args.analytical = True
+        if 'one-step' in args.reward_mode:
+            print("TODO: compute error with analytical solution when training with one-step error.")
+            print("(Currently forcing the error to change to full instead.)")
+            args.reward_mode = 'full'
         CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]
         envs = []
         for nx in CONVERGENCE_PLOT_GRID_RANGE:

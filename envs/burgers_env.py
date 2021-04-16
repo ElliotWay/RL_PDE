@@ -394,7 +394,7 @@ class AbstractBurgersEnv(gym.Env):
         error_or_state = "error" if plot_error else "state"
 
         if location is None and timestep is None:
-            if state_history is None:
+            if not override_history:
                 state_history = self.grid.get_full().copy()
                 solution_state_history = self.solution.get_full().copy()
                 if self.weno_solution is not None:
@@ -414,7 +414,7 @@ class AbstractBurgersEnv(gym.Env):
             if suffix is None:
                 suffix = ("_step{:0" + str(self._step_precision) + "}").format(num_steps)
         else:
-            if state_history is None:
+            if not override_history:
                 state_history = np.array(self.state_history)
                 solution_state_history = self.solution.get_state_history().copy() \
                         if self.solution.is_recording_state() else None
@@ -504,8 +504,17 @@ class AbstractBurgersEnv(gym.Env):
             weno_label = "WENO"
         else:
             if weno_state_history is not None:
-                true_label = "WENO (order={}, res={})".format(self.precise_weno_order, self.precise_nx)
-                weno_label = "WENO (order={}, res={})".format(self.weno_order, self.nx)
+                if self.precise_weno_order != self.weno_order or self.precise_nx != self.nx:
+                    true_label = "WENO (order={}, res={})".format(self.precise_weno_order, self.precise_nx)
+                    weno_label = "WENO (order={}, res={})".format(self.weno_order, self.nx)
+                elif isinstance(self.solution, OneStepSolution):
+                    true_label = "WENO (one-step)"
+                    weno_label = "WENO (full)"
+                else:
+                    print("Why do we have both a solution and a WENO solution?"
+                            + " I don't know what labels to use.")
+                    true_label = "WENO"
+                    weno_label = "WENO"
             else:
                 true_label = "WENO"
         if solution_state_history is not None:
