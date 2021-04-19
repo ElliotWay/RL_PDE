@@ -319,7 +319,7 @@ class Grid1d(GridBase):
             if 'b' in params:
                 b = params['b']
             else:
-                b = -0.0001
+                b = -0.1
             self.init_params['b'] = b
             self.u = a + b * self.x
         else:

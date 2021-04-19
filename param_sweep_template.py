@@ -110,7 +110,9 @@ def build_command_list(index, arg_list, log_dir):
             # Right now the log_dir creates subdirectories for each parameter. #
             # Make changes in here if you need such changes.                   #
             ####################################################################
-            new_log_dir = os.path.join(log_dir, "{}_{}".format(stripped_keyword, value))
+            clean_value = ''.join(x if x not in "\0\ \t\n\\/:=.*\"\'<>|?" else '_'
+                                    for x in str(value))
+            new_log_dir = os.path.join(log_dir, "{}_{}".format(stripped_keyword, clean_value))
             build_command_list(index + 1, new_arg_list, new_log_dir)
 
 def enqueue_output(out, q):
