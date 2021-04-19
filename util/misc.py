@@ -2,6 +2,7 @@ import os
 import argparse
 import subprocess
 import random
+import re
 import numpy as np
 import tensorflow as tf
 
@@ -58,6 +59,23 @@ def nonnegative_int(value):
     if ivalue < 0:
         raise argparse.ArgumentTypeError("{} is not non-negative".format(ivalue))
     return ivalue
+
+def float_dict(string_dict):
+    pairs = string_dict.split(sep=',')
+    # empty string returns empty dict
+    if len(pairs) <= 1 and len(pairs[0]) == 0:
+        return {}
+    output_dict = {}
+    for pair in pairs:
+        match = re.fullmatch("([^=]+)=([^=]+)", pair)
+        if not match:
+            raise argparse.ArgumentTypeError("In \"{}\", \'{}\' must be key=value.".format(
+                string_dict, pair))
+        else:
+            key = match.group(1)
+            value = float(match.group(2))
+            output_dict[key] = value
+    return output_dict
 
 def rescale(values, source, target):
     source_low, source_high = source

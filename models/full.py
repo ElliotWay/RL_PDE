@@ -72,6 +72,8 @@ class GlobalBackpropModel(GlobalModel):
 
         #TODO possibly restrict num_steps to something smaller?
         # We'd then need to sample timesteps from a WENO trajectory.
+        #NOTE 4/14 - apparently it works okay with the full episode! We may still want to restrict
+        # this if resource constraints become an issue with more complex environments.
 
         states, actions, rewards = rnn(self.initial_state_ph, num_steps=args.ep_length)
         self.states = states

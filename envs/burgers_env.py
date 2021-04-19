@@ -112,6 +112,7 @@ class AbstractBurgersEnv(gym.Env):
 
     def __init__(self,
             xmin=0.0, xmax=1.0, nx=128, boundary=None, init_type="smooth_sine",
+            init_params=None,
             fixed_step=0.0005, C=None, #C=0.5,
             weno_order=3, state_order=None, eps=0.0, srca=0.0, episode_length=300,
             analytical=False, precise_weno_order=None, precise_scale=1,
@@ -178,6 +179,7 @@ class AbstractBurgersEnv(gym.Env):
         self.grid = Grid1d(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng,
                            boundary=boundary, init_type=init_type,
                            deterministic_init=self.test)
+        self.init_params = init_params
 
         if srca > 0.0:
             self.source = RandomSource(grid=self.grid, amplitude=srca)
@@ -1163,7 +1165,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         Initial state.
 
         """
-        self.grid.reset()
+        self.grid.reset(params=self.init_params)
         if self.source is not None:
             self.source.reset()
         self.solution.reset(self.grid.init_params)
@@ -1703,7 +1705,7 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
         Initial state.
 
         """
-        self.grid.reset()
+        self.grid.reset(params=self.init_params)
         if self.source is not None:
             self.source.reset()
         self.solution.reset(**self.grid.init_params)
@@ -1857,7 +1859,7 @@ class FluxBurgersEnv(AbstractBurgersEnv):
         Initial state.
 
         """
-        self.grid.reset()
+        self.grid.reset(params=self.init_params)
         if self.source is not None:
             self.source.reset()
         self.solution.reset(**self.grid.init_params)

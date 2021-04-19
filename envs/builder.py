@@ -1,6 +1,6 @@
 import argparse
 
-from util.misc import positive_int, nonnegative_float, positive_float
+from util.misc import positive_int, nonnegative_float, positive_float, float_dict
 from envs import WENOBurgersEnv, SplitFluxBurgersEnv, FluxBurgersEnv
 
 
@@ -34,6 +34,13 @@ def get_env_arg_parser():
                         help="Shape of the initial state.")
     parser.add_argument('--boundary', '--bc', type=str, default=None,
                         help="The default boundary conditions depend on the init_type. Use --boundary if you want them to be something in particular.")
+    parser.add_argument('--init-params',  '--init_params', type=float_dict, default=None,
+                        help="Some initial conditions accept parameters. For example, smooth_sine"
+                        + " accepts A for the amplitude of the wave. Pass these parameters as a"
+                        + " comma-separated list, e.g. \"a=1.0,b=2.5\". Note that this overrides"
+                        + " any random sampling that might exist for a given parameters. Dig into"
+                        + " envs/grid.py for information on which parameters are available. Omit"
+                        + " spaces!",)
     parser.add_argument('--eps', type=nonnegative_float, default=0.0,
                         help="Viscosity parameter. Higher eps means more viscous.")
     parser.add_argument('--srca', type=nonnegative_float, default=0.0,
@@ -83,6 +90,7 @@ def build_env(env_name, args, test=False):
                 'xmax': args.xmax,
                 'nx': args.nx,
                 'init_type': args.init_type,
+                'init_params': args.init_params,
                 'boundary': args.boundary,
                 'C': args.C,
                 'fixed_step': args.timestep,
