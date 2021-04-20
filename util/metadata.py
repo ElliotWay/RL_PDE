@@ -59,7 +59,7 @@ def create_meta_file(log_dir, args):
     arg_dict = vars(args)
     meta_file.write("\nARGUMENTS:\n")
     for k, v in arg_dict.items():
-        if k == 'init_params':
+        if k == 'init_params' and v is not None:
             v = ','.join(["{}={}".format(key, value) for key, value in v.items()])
         meta_file.write("{}: {}\n".format(str(k), str(v)))
 

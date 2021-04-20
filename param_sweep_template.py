@@ -298,7 +298,8 @@ def main():
         try:
             while len(running_procs) > 0:
                 time.sleep(SLEEP_TIME)
-                check_procs(running_procs, output_queues)
+                num_errors = check_procs(running_procs, output_queues)
+                commands_with_errors += num_errors
         except KeyboardInterrupt:
             print(("{}2nd interrupt signal received. Forwarding interrupt to runs."
                 + " Sending an interrupt AGAIN will interrupt this process;"
@@ -309,7 +310,9 @@ def main():
 
             while len(running_procs) > 0:
                 time.sleep(SLEEP_TIME)
-                check_procs(running_procs, output_queues)
+                num_errors = check_procs(running_procs, output_queues)
+                # They probably WILL have errors, namely interrupt signal received errors.
+                commands_with_errors += num_errors
 
     print("{}Done! {}/{} processes finished in {}.{}".format(
         colors.OKGREEN, commands_started, len(arg_matrix),

@@ -154,6 +154,8 @@ class Grid1d(GridBase):
         The format of this dict is the same as the dict in init_params, which includes
         things like randomly generated numeric constants as well as the init_type.
         """
+        if params is None:
+            params = {}
 
         if 'init_type' in params:
             self.init_type = params['init_type']
