@@ -3,6 +3,10 @@ import shutil
 import sys
 import time
 import numpy as np
+import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 
 from stable_baselines import logger
 
@@ -69,6 +73,75 @@ def rollout(env, policy, num_rollouts=1, rk4=False, deterministic=False, every_s
 
     return states, actions, rewards, dones, next_states
 
+def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs):
+    #TODO This is a hack. Consider adapting the SB logger class to our own purposes
+    # so we can fetch this file name instead of hardcoding it here.
+    csv_file = os.path.join(log_dir, "progress.csv")
+    csv_df = pd.read_csv(csv_file, comment='#')
+
+    train_color = 'k'
+    eval_color = 'tab:orange'
+    envs_colors = ['b', 'r', 'g', 'm', 'c', 'y']
+
+    episodes = csv_df['episodes']
+
+    reward_fig = plt.figure()
+    ax = reward_fig.gca()
+    train_reward = csv_df['avg_train_reward']
+    ax.plot(episodes, train_reward, color=train_color, label="train")
+    avg_eval_reward = csv_df['avg_eval_reward']
+    ax.plot(episodes, avg_eval_reward, color=eval_color, label="eval avg")
+    if num_eval_envs > 1:
+        for i in range(num_eval_envs):
+            eval_reward = csv_df['eval{}_reward'.format(i+1)]
+            ax.plot(episodes, eval_reward,
+                    color=envs_colors[i], ls='--', label="eval env{}".format(i+1))
+
+    reward_fig.legend()
+    ax.set_xlim((0, total_episodes))
+    ax.set_title("Total Reward per Episode")
+    ax.set_xlabel('episodes')
+    ax.set_ylabel('reward')
+
+    reward_filename = os.path.join(summary_plot_dir, "rewards.png")
+    reward_fig.savefig(reward_filename)
+    plt.close(reward_fig)
+
+    l2_fig = plt.figure()
+    ax = l2_fig.gca()
+    train_l2 = csv_df['avg_train_end_l2']
+    ax.plot(episodes, train_l2, color=train_color, label="train")
+    avg_eval_l2 = csv_df['avg_eval_end_l2']
+    ax.plot(episodes, avg_eval_l2, color=eval_color, label="eval avg")
+    if num_eval_envs > 1:
+        for i in range(num_eval_envs):
+            eval_l2 = csv_df['eval{}_end_l2'.format(i+1)]
+            ax.plot(episodes, eval_l2,
+                    color=envs_colors[i], ls='--', label="eval env{}".format(i+1))
+
+    l2_fig.legend()
+    ax.set_xlim((0, total_episodes))
+    ax.set_title("L2 Error with WENO at End of Episode")
+    ax.set_xlabel('episodes')
+    ax.set_ylabel('L2 error')
+
+    l2_filename = os.path.join(summary_plot_dir, "l2.png")
+    l2_fig.savefig(l2_filename)
+    plt.close(l2_fig)
+
+    loss_fig = plt.figure()
+    ax = reward_fig.gca()
+    loss = csv_df['loss']
+    ax.plot(episodes, loss, color='k')
+    ax.set_xlim((0, total_episodes))
+    ax.set_title("Loss Function")
+    ax.set_xlabel('episodes')
+    ax.set_ylabel('loss')
+
+    loss_filename = os.path.join(summary_plot_dir, "loss.png")
+    loss_fig.savefig(loss_filename)
+    plt.close(loss_fig)
+
 def train(env, eval_envs, emi, args):
 
     action_snapshot.declare_standard_envs(args)
@@ -77,6 +150,9 @@ def train(env, eval_envs, emi, args):
 
     ep_precision = int(np.ceil(np.log(1+args.total_episodes) / np.log(10)))
     log_dir = logger.get_dir()
+
+    summary_plot_dir = os.path.join(log_dir, "summary_plots")
+    os.makedirs(summary_plot_dir)
 
     training_rewards = []
     training_l2 = []
@@ -140,11 +216,18 @@ def train(env, eval_envs, emi, args):
             logger.logkv("avg_train_end_l2", average_train_l2)
             logger.logkv("avg_eval_reward", average_eval_reward)
             logger.logkv("avg_eval_end_l2", average_eval_l2)
+            if len(eval_envs) > 1:
+                for i in range(len(eval_envs)):
+                    logger.logkv("eval{}_reward".format(i+1), eval_rewards[i])
+                    logger.logkv("eval{}_end_l2".format(i+1), eval_l2[i])
             logger.logkv('time_elapsed', int(time.time() - start_time))
             logger.logkv("total_timesteps", total_timesteps)
             for key, value in other_stats.items():
                 logger.logkv(key, value)
             logger.dumpkvs()
+
+            #write_summary_plots(log_dir=log_dir, summary_plot_dir=summary_plot_dir,
+                    #total_episodes=args.total_episodes, num_eval_envs=len(eval_envs))
 
             # Save model.
             model_file_name = os.path.join(log_dir, "model" + ep_string)
