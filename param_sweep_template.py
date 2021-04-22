@@ -2,6 +2,8 @@
 # This is a template for creating a parameter sweep. Make a copy, don't edit this file directly. #
 ##################################################################################################
 
+#TODO: handle SIGKILL'd child processes. Right now it seems like it thinks they're still running.
+
 import os
 import signal
 import sys
@@ -11,6 +13,8 @@ import threading
 from queue import Queue, Empty
 import time
 import argparse
+
+import psutil # external library used for debugging, sorry, pip install psutil
 
 from util.misc import get_git_commit_id, is_clean_git_repo
 from util.misc import human_readable_time_delta
@@ -134,7 +138,7 @@ def check_procs(procs, queues):
 
     num_errors = 0
 
-    # Check for finished procs.
+    # Check for finished procs. #TODO: also check for dead procs
     for index in list(procs):
         proc = procs[index]
         ret_val = proc.poll()
@@ -145,6 +149,20 @@ def check_procs(procs, queues):
                 num_errors += 1
             del procs[index]
             del queues[index]
+        else:
+            pid = proc.pid
+            if not psutil.pid_exists(pid):
+                print("{}{}: {}Process no longer exists!!!{}".format(
+                    colors.SEQUENCE[index], index, colors.FAIL, colors.ENDC))
+                del procs[index]
+                del queues[index]
+            else:
+                process = psutil.Process(pid)
+                status = process.status()
+                if not status == psutil.STATUS_RUNNING:
+                    print(("{}{}: {}Process is not running! I can't kill it though, what if it's"
+                            + " just asleep? Status is {}.{}").format(
+                                colors.SEQUENCE[index], index, colors.FAIL, status, colors.ENDC))
 
     return num_errors
 
