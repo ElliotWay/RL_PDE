@@ -14,7 +14,7 @@ from queue import Queue, Empty
 import time
 import argparse
 
-import psutil # external library used for debugging, sorry, pip install psutil
+#import psutil # external library used for debugging, sorry, pip install psutil
 
 from util.misc import get_git_commit_id, is_clean_git_repo
 from util.misc import human_readable_time_delta
@@ -150,19 +150,20 @@ def check_procs(procs, queues):
             del procs[index]
             del queues[index]
         else:
-            pid = proc.pid
-            if not psutil.pid_exists(pid):
-                print("{}{}: {}Process no longer exists!!!{}".format(
-                    colors.SEQUENCE[index], index, colors.FAIL, colors.ENDC))
-                del procs[index]
-                del queues[index]
-            else:
-                process = psutil.Process(pid)
-                status = process.status()
-                if not status == psutil.STATUS_RUNNING:
-                    print(("{}{}: {}Process is not running! I can't kill it though, what if it's"
-                            + " just asleep? Status is {}.{}").format(
-                                colors.SEQUENCE[index], index, colors.FAIL, status, colors.ENDC))
+            #pid = proc.pid
+            #if not psutil.pid_exists(pid):
+                #print("{}{}: {}Process no longer exists!!!{}".format(
+                    #colors.SEQUENCE[index], index, colors.FAIL, colors.ENDC))
+                #del procs[index]
+                #del queues[index]
+            #else:
+                #process = psutil.Process(pid)
+                #status = process.status()
+                #if not status == psutil.STATUS_RUNNING:
+                    #print(("{}{}: {}Process is not running! I can't kill it though, what if it's"
+                            #+ " just asleep? Status is {}.{}").format(
+                                #colors.SEQUENCE[index], index, colors.FAIL, status, colors.ENDC))
+            pass
 
     return num_errors
 
