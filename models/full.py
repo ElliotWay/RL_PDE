@@ -97,7 +97,6 @@ class GlobalBackpropModel(GlobalModel):
 
         self.setup_loading()
 
-
         # Declare this once - otherwise we add to the graph every time,
         # and it won't be garbage collected.
         # Also needs to be before we finalize the graph.
@@ -105,6 +104,8 @@ class GlobalBackpropModel(GlobalModel):
                                     for param in self.policy_params}
 
         self.session.graph.finalize()
+
+        self.log_freq = args.log_freq
 
     def setup_loading(self):
         self.load_op = {}
@@ -126,7 +127,7 @@ class GlobalBackpropModel(GlobalModel):
         # rewards, actions, states are [timestep, initial_condition, ...]
 
         debug_mode = True
-        training_plot_freq = 50
+        training_plot_freq = self.log_freq * 5
         if debug_mode:
             #print("loss", loss)
             nans_in_grads = np.sum([np.sum(np.isnan(grad)) for grad in grads])

@@ -38,7 +38,8 @@ class EMI:
         Not obligated to train, could just collect samples.
         Doesn't HAVE to be one episode either; could be deceptive.
         Return a dict with information. That dict should have
-        'avg_reward', 'timesteps'.
+        'reward', 'timesteps'. 'reward' should be the average undiscounted return - might
+        be just one value, not an average.
         """
         raise NotImplementedError
     def get_policy(self):
@@ -71,7 +72,7 @@ class TestEMI(EMI):
         self.action_shape = env.action_space.shape
     def training_episode(self, env):
         print("Test EMI is pretending to train.")
-        fake_info = {'avg_reward': np.random.random()*2-1, 'timesteps':100}
+        fake_info = {'reward': np.random.random()*2-1, 'timesteps':100}
         return fake_info
     def predict(self, obs, deterministic=False):
         if obs.shape == self.obs_shape:
@@ -165,10 +166,12 @@ class StandardEMI(EMI):
 
         extra_info = self._model.train(s, a, r, s2, done)
 
-        avg_reward = np.mean(r)
+        # Take mean over any remaining dimensions, even though we're acting like r must be only 1
+        # dimensional here.
+        total_reward = np.mean(np.sum(r, axis=0))
         timesteps = len(s)
 
-        info_dict = {'avg_reward': avg_reward, 'timesteps':timesteps}
+        info_dict = {'reward': total_reward, 'timesteps':timesteps}
         info_dict.update(extra_info)
         return info_dict
 
@@ -298,9 +301,9 @@ class BatchEMI(EMI):
         extra_info = self._model.train(unbatched_state, unbatched_action, unbatched_reward,
                 unbatched_new_state, unbatched_done)
 
-        avg_reward = np.mean(reward)
+        avg_total_reward = np.mean(np.sum(reward, axis=0))
         timesteps = len(state)
-        info_dict = {'avg_reward': avg_reward, 'timesteps':timesteps}
+        info_dict = {'reward': avg_total_reward, 'timesteps':timesteps}
         info_dict.update(extra_info)
         return info_dict
 
@@ -348,9 +351,9 @@ class HomogenousMARL_EMI(BatchEMI):
         new_state = partial_flatten(new_state)
         extra_info = self._model.train(state, action, reward, new_state, unbatched_done)
 
-        avg_reward = np.mean(reward)
+        avg_total_reward = np.mean(np.sum(reward, axis=0))
         timesteps = len(state)
-        info_dict = {'avg_reward': avg_reward, 'timesteps':timesteps}
+        info_dict = {'reward': avg_total_reward, 'timesteps':timesteps}
         info_dict.update(extra_info)
         return info_dict
 
@@ -401,7 +404,7 @@ class BatchGlobalEMI(EMI):
         # Note that information coming from the model
         # has dimensions [timestep, initial_condition, ...], so reducing across time is reducing
         # across axis 0.
-        info_dict['avg_reward'] = np.mean(np.sum(rewards, axis=0), axis=0)
+        info_dict['reward'] = np.mean(np.sum(rewards, axis=0), axis=0)
         info_dict['timesteps'] = num_inits * self.args.ep_length
         info_dict.update(extra_info)
         return info_dict

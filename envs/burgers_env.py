@@ -330,6 +330,22 @@ class AbstractBurgersEnv(gym.Env):
                 - self.get_solution_state(timestep, location, full))
 
     def compute_l2_error(self, timestep=None):
+        """
+        Compute the L2 error between the solution and the state at a given timestep.
+        By default, the current timestep is used.
+
+        Parameters
+        ----------
+        timestep : int (or string)
+            Timestep for which to calculate the L2 error. Passing "all" for timestep will instead
+            calculate the L2 error at every timestep, and return them as a list.
+
+
+        Returns
+        -------
+        l2_error : float (or list of float)
+            The L2 error, or list of errors if "all" is passed to timestep.
+        """
         if timestep == "all":
             l2_errors = []
             for step in range(len(self.state_history)):

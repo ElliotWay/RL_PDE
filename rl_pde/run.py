@@ -87,9 +87,9 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs
 
     reward_fig = plt.figure()
     ax = reward_fig.gca()
-    train_reward = csv_df['avg_train_reward']
+    train_reward = csv_df['avg_train_total_reward']
     ax.plot(episodes, train_reward, color=train_color, label="train")
-    avg_eval_reward = csv_df['avg_eval_reward']
+    avg_eval_reward = csv_df['avg_eval_total_reward']
     ax.plot(episodes, avg_eval_reward, color=eval_color, label="eval avg")
     if num_eval_envs > 1:
         for i in range(num_eval_envs):
@@ -97,11 +97,13 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs
             ax.plot(episodes, eval_reward,
                     color=envs_colors[i], ls='--', label="eval env{}".format(i+1))
 
-    reward_fig.legend()
+    reward_fig.legend(loc="lower right")
     ax.set_xlim((0, total_episodes))
     ax.set_title("Total Reward per Episode")
     ax.set_xlabel('episodes')
     ax.set_ylabel('reward')
+    ax.grid(True)
+    ax.set_yscale('symlog', linthreshy=0.25)
 
     reward_filename = os.path.join(summary_plot_dir, "rewards.png")
     reward_fig.savefig(reward_filename)
@@ -119,28 +121,35 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs
             ax.plot(episodes, eval_l2,
                     color=envs_colors[i], ls='--', label="eval env{}".format(i+1))
 
-    l2_fig.legend()
+    l2_fig.legend(loc="upper right")
     ax.set_xlim((0, total_episodes))
     ax.set_title("L2 Error with WENO at End of Episode")
     ax.set_xlabel('episodes')
     ax.set_ylabel('L2 error')
+    ax.grid(True)
+    ax.set_yscale('symlog', linthreshy=0.005)
 
     l2_filename = os.path.join(summary_plot_dir, "l2.png")
     l2_fig.savefig(l2_filename)
     plt.close(l2_fig)
 
     loss_fig = plt.figure()
-    ax = reward_fig.gca()
+    ax = loss_fig.gca()
     loss = csv_df['loss']
     ax.plot(episodes, loss, color='k')
     ax.set_xlim((0, total_episodes))
     ax.set_title("Loss Function")
     ax.set_xlabel('episodes')
     ax.set_ylabel('loss')
+    low, high = ax.get_ylim()
+    if low > 0:
+        ax.set_ylim(bottom=0.0)
 
     loss_filename = os.path.join(summary_plot_dir, "loss.png")
     loss_fig.savefig(loss_filename)
     plt.close(loss_fig)
+
+    print("Summary plots updated in {}.".format(summary_plot_dir))
 
 def train(env, eval_envs, emi, args):
 
@@ -168,8 +177,9 @@ def train(env, eval_envs, emi, args):
         # when there is a SIGINT, but not in the middle of training.
         train_info = emi.training_episode(env)
 
-        training_rewards.append(train_info['avg_reward'])
-        training_l2.append(env.compute_l2_error())
+        training_rewards.append(train_info['reward'])
+        training_l2.append(env.compute_l2_error()) # This won't work with the full model, which
+                                                    # only uses the env for meta information.
         total_timesteps += train_info['timesteps']
 
         if ep % args.log_freq == 0:
@@ -188,7 +198,8 @@ def train(env, eval_envs, emi, args):
             eval_plots = []
             for eval_index, eval_env in enumerate(eval_envs):
                 _, _, rewards, _, _ = rollout(eval_env, emi.get_policy(), deterministic=True)
-                eval_rewards.append(np.mean(rewards))
+                avg_total_reward = np.mean(np.sum(rewards, axis=0))
+                eval_rewards.append(avg_total_reward)
                 eval_l2.append(eval_env.compute_l2_error())
 
                 eval_suffix = "_ep_" + ep_string
@@ -208,13 +219,13 @@ def train(env, eval_envs, emi, args):
             average_eval_reward = np.mean(eval_rewards)
             average_eval_l2 = np.mean(eval_l2)
             other_stats = dict(train_info)
-            del other_stats['avg_reward']
+            del other_stats['reward']
             del other_stats['timesteps']
             #TODO calculate KL?
             logger.logkv("episodes", ep)
-            logger.logkv("avg_train_reward", average_train_reward)
+            logger.logkv("avg_train_total_reward", average_train_reward)
             logger.logkv("avg_train_end_l2", average_train_l2)
-            logger.logkv("avg_eval_reward", average_eval_reward)
+            logger.logkv("avg_eval_total_reward", average_eval_reward)
             logger.logkv("avg_eval_end_l2", average_eval_l2)
             if len(eval_envs) > 1:
                 for i in range(len(eval_envs)):
