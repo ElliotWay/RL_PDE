@@ -148,19 +148,21 @@ class GlobalBackpropModel(GlobalModel):
             #if len(safe_state) == 0:
                 #raise Exception("All timesteps NaN. Stopping")
 
-            num_samples = 3
+            num_samples = 1
             ep_length = actions.shape[0]
             num_inits = actions.shape[1]
             spatial_width = actions.shape[2]
             sample_rewards = np.sum(rewards[:, np.random.randint(num_inits, size=num_samples),
                 np.random.randint(spatial_width, size=num_samples)], axis=0)
             for i, reward in enumerate(sample_rewards):
-                extra_info["train_r"+str(i+1)] = reward
+                extra_info["sample_r"+str(i+1)] = reward
             sample_actions = actions[np.random.randint(ep_length, size=num_samples),
                     np.random.randint(num_inits, size=num_samples),
                     np.random.randint(spatial_width, size=num_samples)]
             for i, action in enumerate(sample_actions):
-                extra_info["train_a"+str(i+1)] = action.round(decimals=3)
+                csv_string = '"'+(np.array2string(action, separator=',', precision=3)
+                                    .replace('\n', '').replace(' ', '')) + '"'
+                extra_info["sample_a"+str(i+1)] = csv_string
 
             if self.iteration % training_plot_freq == 0:
                 for initial_condition_index in range(states.shape[1]):

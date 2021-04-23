@@ -226,8 +226,8 @@ def train(env, eval_envs, emi, args):
                 logger.logkv(key, value)
             logger.dumpkvs()
 
-            #write_summary_plots(log_dir=log_dir, summary_plot_dir=summary_plot_dir,
-                    #total_episodes=args.total_episodes, num_eval_envs=len(eval_envs))
+            write_summary_plots(log_dir=log_dir, summary_plot_dir=summary_plot_dir,
+                    total_episodes=args.total_episodes, num_eval_envs=len(eval_envs))
 
             # Save model.
             model_file_name = os.path.join(log_dir, "model" + ep_string)
