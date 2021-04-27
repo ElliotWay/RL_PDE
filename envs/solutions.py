@@ -345,13 +345,13 @@ class MemoizedSolution(SolutionBase):
 
     def get_state_history(self):
         if self.isSavedSolution:
-            return self.master_state_dict[self.params_str][:self.time_index]
+            return self.master_state_dict[self.params_str][:self.time_index+1]
         else:
             return self.inner_solution.get_state_history()
 
     def get_action_history(self):
         if self.isSavedSolution:
-            return self.master_action_dict[self.params_str][:self.time_index]
+            return self.master_action_dict[self.params_str][:self.time_index+1]
         else:
             return self.inner_solution.get_action_history()
 
@@ -386,7 +386,7 @@ class MemoizedSolution(SolutionBase):
         else:
             self.isSavedSolution = False
             self.inner_solution.reset(init_params)
-            self.time_index = -1
+            self.time_index = -2
 
 class OneStepSolution(SolutionBase):
     """
