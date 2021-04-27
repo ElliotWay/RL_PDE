@@ -197,7 +197,7 @@ class GlobalBackpropModel(GlobalModel):
             #else:
                 #print("No NaNs this round :)")
 
-        output_info = {"loss":loss, "rewards":rewards}
+        output_info = {"loss":loss, "states": states, "actions":actions, "rewards":rewards}
         output_info.update(extra_info)
         return output_info
 

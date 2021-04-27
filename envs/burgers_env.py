@@ -299,6 +299,23 @@ class AbstractBurgersEnv(gym.Env):
         if "action" in mode:
             return self.plot_action(**kwargs)
 
+    def force_state(self, state_grid):
+        """
+        Override the current state with something else.
+
+        You should have a unusual reason for doing this, like if you need to copy the state from a
+        different environment.
+        state and action history will not make sense after calling this.
+
+        Parameters
+        ----------
+        state_grid : ndarray
+            Array of new state values. Should not include ghost values.
+        """
+        self.grid.set(state_grid)
+        # Rewrite recent history.
+        self.state_history[-1] = self.grid.get_full().copy()
+
     def get_state(self, timestep=None, location=None, full=True):
         assert timestep is None or location is None
 
@@ -314,6 +331,9 @@ class AbstractBurgersEnv(gym.Env):
 
     def get_solution_state(self, timestep=None, location=None, full=True):
         assert timestep is None or location is None
+
+        #TODO: Does it make sense to return the self.weno_solution state instead if using a
+        # one-step reward? (That is, a OneStepSolution?)
 
         if timestep is None and location is None:
             state = self.solution.get_full() if full else self.solution.get_real()
@@ -343,7 +363,7 @@ class AbstractBurgersEnv(gym.Env):
 
         Returns
         -------
-        l2_error : float (or list of float)
+        l2_error : float (or list of floats)
             The L2 error, or list of errors if "all" is passed to timestep.
         """
         if timestep == "all":
@@ -1073,7 +1093,15 @@ class AbstractBurgersEnv(gym.Env):
         self.solution = None
 
     def evolve(self):
-        """ Evolve the environment using the solution, instead of passing actions. """
+        """
+        Evolve the environment using the solution, instead of passing actions.
+
+        The state will be an identical copy of the solution's state.
+        Does not work with the 'one-step' error - this makes the solution dependent on the state,
+        but evolving this way requires the state to depend on the solution.
+        """
+        assert (not isinstance(self.solution, OneStepSolution)), \
+            "Can't evolve with one-step solution."
 
         while self.steps < self.episode_length:
             

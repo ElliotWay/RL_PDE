@@ -1,8 +1,11 @@
 import numpy as np
+from argparse import Namespace
 
 import gym
 
 from rl_pde.run import rollout
+from envs import build_env
+from envs.solutions import MemoizedSolution
 
 # We need refs to environments and models to define default interactions between them.
 #from models import SACModel
@@ -38,8 +41,9 @@ class EMI:
         Not obligated to train, could just collect samples.
         Doesn't HAVE to be one episode either; could be deceptive.
         Return a dict with information. That dict should have
-        'reward', 'timesteps'. 'reward' should be the average undiscounted return - might
-        be just one value, not an average.
+        'reward', 'l2_error', and 'timesteps'. 'reward' should be the undiscounted return,
+        'l2_error' should the l2_error of the final state. They may be averages, instead
+        of just one value, if you're actually running multiple episodes.
         """
         raise NotImplementedError
     def get_policy(self):
@@ -72,7 +76,7 @@ class TestEMI(EMI):
         self.action_shape = env.action_space.shape
     def training_episode(self, env):
         print("Test EMI is pretending to train.")
-        fake_info = {'reward': np.random.random()*2-1, 'timesteps':100}
+        fake_info = {'reward': np.random.random()*2-1, 'l2_error': 0.0, 'timesteps':100}
         return fake_info
     def predict(self, obs, deterministic=False):
         if obs.shape == self.obs_shape:
@@ -169,9 +173,10 @@ class StandardEMI(EMI):
         # Take mean over any remaining dimensions, even though we're acting like r must be only 1
         # dimensional here.
         total_reward = np.mean(np.sum(r, axis=0))
+        l2_error = env.compute_l2_error()
         timesteps = len(s)
 
-        info_dict = {'reward': total_reward, 'timesteps':timesteps}
+        info_dict = {'reward':total_reward, 'l2_error':l2_error, 'timesteps':timesteps}
         info_dict.update(extra_info)
         return info_dict
 
@@ -302,8 +307,9 @@ class BatchEMI(EMI):
                 unbatched_new_state, unbatched_done)
 
         avg_total_reward = np.mean(np.sum(reward, axis=0))
+        l2_error = env.compute_l2_error()
         timesteps = len(state)
-        info_dict = {'reward': avg_total_reward, 'timesteps':timesteps}
+        info_dict = {'reward':avg_total_reward, 'l2_error':l2_error, 'timesteps':timesteps}
         info_dict.update(extra_info)
         return info_dict
 
@@ -352,8 +358,9 @@ class HomogenousMARL_EMI(BatchEMI):
         extra_info = self._model.train(state, action, reward, new_state, unbatched_done)
 
         avg_total_reward = np.mean(np.sum(reward, axis=0))
+        l2_error = env.compute_l2_error()
         timesteps = len(state)
-        info_dict = {'reward': avg_total_reward, 'timesteps':timesteps}
+        info_dict = {'reward':avg_total_reward, 'l2_error':l2_error, 'timesteps':timesteps}
         info_dict.update(extra_info)
         return info_dict
 
@@ -384,27 +391,63 @@ class BatchGlobalEMI(EMI):
 
         self.args = args # Not ideal. This EMI has too much visibility if it keeps the whole args.
 
+        # To record the "full" error, that is, the difference between the solution following the
+        # agent and the solution following WENO from the beginning, we need to keep a separate copy
+        # of the WENO solution.
+        args_copy = Namespace(**vars(args))
+        if args_copy.reward_mode is not None:
+            args_copy.reward_mode = args_copy.reward_mode.replace('one-step', 'full')
+        args_copy.memoize = True # Memoizing means we don't waste time and memory recomputing the
+                                 # solution each time.
+        args_copy.analytical = False
+
+        self.weno_solution_env = build_env(args_copy.env, args_copy)
+
     def training_episode(self, env):
         num_inits = self.args.inits_per_ep
         initial_conditions = []
+        init_params = []
         for _ in range(num_inits):
             rl_state = env.reset()
             # Important to use copy - grid.get_real returns the writable grid cells, which are
             # changed by the environment.
             phys_state = np.copy(env.grid.get_real())
             initial_conditions.append(phys_state)
+            init_params.append(env.grid.init_params) # This is starting to smell.
         initial_conditions = np.array(initial_conditions)
 
         extra_info = self._model.train(initial_conditions)
 
+        states = extra_info['states']
+        del extra_info['states']
+        actions = extra_info['actions']
+        del extra_info['actions']
         rewards = extra_info['rewards']
         del extra_info['rewards']
+
+        # Compute the L2 error of the final state with the final state of the WENO solution.
+        l2_errors = []
+        for init_params, final_state in zip(init_params, states[-1]):
+            # Using init_params instead of copying the state directly allows the solution to use
+            # memoization.
+            self.weno_solution_env.init_params = init_params
+            self.weno_solution_env.reset()
+            
+            # env.evolve() evolves the state using the internal solution (WENO in this case).
+            self.weno_solution_env.evolve()
+            # Note that it effectively has 2 copies: the state and the solution state this means
+            # when we overwrite the state with the state from the agent, it has still has the
+            # solution copy with which to compute the error.
+            self.weno_solution_env.force_state(final_state)
+            l2_errors.append(self.weno_solution_env.compute_l2_error())
+        avg_l2_error = np.mean(l2_errors)
 
         info_dict = {}
         # Note that information coming from the model
         # has dimensions [timestep, initial_condition, ...], so reducing across time is reducing
         # across axis 0.
         info_dict['reward'] = np.mean(np.sum(rewards, axis=0), axis=0)
+        info_dict['l2_error'] = avg_l2_error
         info_dict['timesteps'] = num_inits * self.args.ep_length
         info_dict.update(extra_info)
         return info_dict

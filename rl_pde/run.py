@@ -7,6 +7,7 @@ import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.ticker import SymmetricalLogLocator
 
 from stable_baselines import logger
 
@@ -103,7 +104,13 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs
     ax.set_xlabel('episodes')
     ax.set_ylabel('reward')
     ax.grid(True)
-    ax.set_yscale('symlog', linthreshy=0.25)
+    linthresh=0.1
+    ax.set_yscale('symlog', linthreshy=linthresh)
+    ax.yaxis.set_minor_locator(SymmetricalLogLocator(base=10, linthresh=linthresh,
+                                                        subs=[1.0, 0.75, 0.5, 0.25]))
+    low, high = ax.get_ylim()
+    if high < 0:
+        ax.set_ylim(top=0.0)
 
     reward_filename = os.path.join(summary_plot_dir, "rewards.png")
     reward_fig.savefig(reward_filename)
@@ -127,7 +134,13 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs
     ax.set_xlabel('episodes')
     ax.set_ylabel('L2 error')
     ax.grid(True)
-    ax.set_yscale('symlog', linthreshy=0.005)
+    linthresh=0.001
+    ax.set_yscale('symlog', linthreshy=linthresh)
+    ax.yaxis.set_minor_locator(SymmetricalLogLocator(base=10, linthresh=linthresh,
+                                                        subs=[1.0, 0.75, 0.5, 0.25]))
+    low, high = ax.get_ylim()
+    if low > 0:
+        ax.set_ylim(bottom=0.0)
 
     l2_filename = os.path.join(summary_plot_dir, "l2.png")
     l2_fig.savefig(l2_filename)
@@ -141,6 +154,7 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs
     ax.set_title("Loss Function")
     ax.set_xlabel('episodes')
     ax.set_ylabel('loss')
+    ax.grid(True)
     low, high = ax.get_ylim()
     if low > 0:
         ax.set_ylim(bottom=0.0)
@@ -178,8 +192,7 @@ def train(env, eval_envs, emi, args):
         train_info = emi.training_episode(env)
 
         training_rewards.append(train_info['reward'])
-        training_l2.append(env.compute_l2_error()) # This won't work with the full model, which
-                                                    # only uses the env for meta information.
+        training_l2.append(train_info['l2_error'])
         total_timesteps += train_info['timesteps']
 
         if ep % args.log_freq == 0:
@@ -220,6 +233,7 @@ def train(env, eval_envs, emi, args):
             average_eval_l2 = np.mean(eval_l2)
             other_stats = dict(train_info)
             del other_stats['reward']
+            del other_stats['l2_error']
             del other_stats['timesteps']
             #TODO calculate KL?
             logger.logkv("episodes", ep)

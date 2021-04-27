@@ -49,9 +49,9 @@ class GlobalModel(AbstractModel):
     def train(self, initial_state):
         """
         Train using a set of initial_states.
-        Returns a dict of information. Unlike the standard model, this dict must contain at least a
-        key 'rewards' containing the reward values in a 2D structure (1st axis is batch, 2nd axis
-        is timestep).
+        Returns a dict of information. Unlike the standard model, this dict must contain at least
+        'states', 'actions', and 'rewards', each containing their respective values in a structure
+        where the 1st axis is the timestep, and the 2nd axis is the batch.
         """
         raise NotImplementedError
 
