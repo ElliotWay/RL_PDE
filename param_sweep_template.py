@@ -343,7 +343,7 @@ def main():
             colors.ENDC))
     if commands_with_errors > 0:
         print("{}{}/{} processes had nonzero return values.{}".format(
-            colors.FAIL, num_errors, len(arg_matrix), colors.ENDC))
+            colors.FAIL, commands_with_errors, len(arg_matrix), colors.ENDC))
 
 
 if __name__ == "__main__":

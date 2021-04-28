@@ -148,7 +148,12 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs
 
     loss_fig = plt.figure()
     ax = loss_fig.gca()
-    loss = csv_df['loss']
+    if 'loss' in csv_df:
+        loss = csv_df['loss']
+    elif 'policy_loss' in csv_df:
+        loss = csv_df['policy_loss']
+    else:
+        raise Exception("Can't find loss in progress.csv file.")
     ax.plot(episodes, loss, color='k')
     ax.set_xlim((0, total_episodes))
     ax.set_title("Loss Function")
