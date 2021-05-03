@@ -38,84 +38,126 @@ class GlobalBackpropModel(GlobalModel):
 
         self.session = tf.Session()
 
-        #TODO This is the kind of thing that ought to be handled by the EMI.
-        # Can we extract this responsibility from the global model?
-        action_shape = env.action_space.shape[1:]
+        self._policy_ready = False
+        self._training_ready = False
+        self._loading_ready = False
 
-        #TODO Use ReLU? A field in args with ReLU as the default might make sense.
-        with tf.variable_scope("policy", reuse=False):
-            self.policy = PolicyNet(layers=args.layers, action_shape=action_shape,
-                    activation_fn=tf.nn.relu)
-        # Direct policy input and output used in predict() method during inference.
-        self.policy_input_ph = tf.placeholder(dtype=dtype,
-                shape=(None,) + env.observation_space.shape[1:], name="policy_input")
-        self.policy_output = self.policy(self.policy_input_ph)
+        # Construction for this model is now lazy. The model is not set up to train until train()
+        # is called, the policy is not built until predict() or train() is called, and the model is
+        # not ready to load until load() or train() is called. Lazy construction like this is
+        # useful for testing in particular - this means that we can construct only the part of the
+        # model needed for testing without building in all of the details needed to build the
+        # entire model, e.g. nx and episode_length.
 
-        obs_adjust = tensorflow_fn(args.obs_scale)
-        action_adjust = tensorflow_fn(args.action_scale)
-        self.wrapped_policy = FunctionWrapper(layer=self.policy, input_fn=obs_adjust,
-                output_fn=action_adjust)
+        self.preloaded = False
 
-        cell = IntegrateCell(
-                prep_state_fn=env.tf_prep_state,
-                policy_net=self.wrapped_policy,
-                integrate_fn=env.tf_integrate,
-                reward_fn=env.tf_calculate_reward,
-                )
-        rnn = IntegrateRNN(cell)
+        self.args = args # Not good to save global copy of args, but we need it to do lazy model
+                         # construction.
 
-        # initial_state_ph is the REAL physical initial state
-        # (It should not contain ghost cells - those should be handled by the prep_state function
-        # that converts real state to rl state.)
-        self.initial_state_ph = tf.placeholder(dtype=dtype,
-                shape=(None, args.nx), name="init_real_state")
+        if 'log_freq' in args:
+        # if args.log_freq doesn't exist, we're probably in testing so doesn't matter.
+            self.log_freq = args.log_freq
+        else:
+            self.log_freq = None
 
-        #TODO possibly restrict num_steps to something smaller?
-        # We'd then need to sample timesteps from a WENO trajectory.
-        #NOTE 4/14 - apparently it works okay with the full episode! We may still want to restrict
-        # this if resource constraints become an issue with more complex environments.
+    def setup_training(self):
+        if not self._policy_ready:
+            self.setup_policy()
+        if not self._loading_ready:
+            self.setup_loading()
 
-        states, actions, rewards = rnn(self.initial_state_ph, num_steps=args.ep_length)
-        self.states = states
-        self.actions = actions
-        self.rewards = rewards
+        if not self._training_ready:
+            obs_adjust = tensorflow_fn(self.args.obs_scale)
+            action_adjust = tensorflow_fn(self.args.action_scale)
+            self.wrapped_policy = FunctionWrapper(layer=self.policy, input_fn=obs_adjust,
+                    output_fn=action_adjust)
 
-        assert len(self.rewards.shape) == 3
-        # Sum over the length of the trajectory, then average over each location,
-        # and average over the batch.
-        self.loss = -tf.reduce_mean(tf.reduce_sum(rewards, axis=2))
+            cell = IntegrateCell(
+                    prep_state_fn=self.env.tf_prep_state,
+                    policy_net=self.wrapped_policy,
+                    integrate_fn=self.env.tf_integrate,
+                    reward_fn=self.env.tf_calculate_reward,
+                    )
+            rnn = IntegrateRNN(cell)
 
-        params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="policy")
-        self.policy_params = params
-        gradients = tf.gradients(self.loss, params)
-        self.grads = list(zip(gradients, params))
+            # initial_state_ph is the REAL physical initial state
+            # (It should not contain ghost cells - those should be handled by the prep_state function
+            # that converts real state to rl state.)
+            self.initial_state_ph = tf.placeholder(dtype=self.dtype,
+                    shape=(None, self.args.nx), name="init_real_state")
 
-        self.optimizer = get_optimizer(args)
-        self.train_policy = self.optimizer.apply_gradients(self.grads)
+            #TODO possibly restrict num_steps to something smaller?
+            # We'd then need to sample timesteps from a WENO trajectory.
+            #NOTE 4/14 - apparently it works okay with the full episode! We may still want to restrict
+            # this if resource constraints become an issue with more complex environments.
 
-        tf.global_variables_initializer().run(session=self.session)
+            states, actions, rewards = rnn(self.initial_state_ph, num_steps=self.args.ep_length)
+            self.states = states
+            self.actions = actions
+            self.rewards = rewards
 
-        self.setup_loading()
+            assert len(self.rewards.shape) == 3
+            # Sum over the length of the trajectory, then average over each location,
+            # and average over the batch.
+            #TODO is axis=2 correct? I think it should be axis 1, need to check.
+            self.loss = -tf.reduce_mean(tf.reduce_sum(rewards, axis=2))
 
-        # Declare this once - otherwise we add to the graph every time,
-        # and it won't be garbage collected.
-        # Also needs to be before we finalize the graph.
-        self.params_nan_check = {param.name: tf.reduce_any(tf.is_nan(param))
-                                    for param in self.policy_params}
+            gradients = tf.gradients(self.loss, self.policy_params)
+            self.grads = list(zip(gradients, self.policy_params))
 
-        self.session.graph.finalize()
+            # Declare this once - otherwise we add to the graph every time,
+            # and it won't be garbage collected.
+            # Also needs to be before we finalize the graph.
+            self.params_nan_check = {param.name: tf.reduce_any(tf.is_nan(param))
+                                        for param in self.policy_params}
 
-        self.log_freq = args.log_freq
+            self.optimizer = get_optimizer(self.args)
+            self.train_policy = self.optimizer.apply_gradients(self.grads)
+
+            if not self.preloaded:
+                tf.global_variables_initializer().run(session=self.session)
+           
+            self.session.graph.finalize()
+
+            self._training_ready = True
+
+    def setup_policy(self):
+        if not self._policy_ready:
+            #TODO This is the kind of thing that ought to be handled by the EMI.
+            # Can we extract this responsibility from the global model?
+            action_shape = self.env.action_space.shape[1:]
+
+            #TODO Use ReLU? A field in args with ReLU as the default might make sense.
+            with tf.variable_scope("policy", reuse=False):
+                self.policy = PolicyNet(layers=self.args.layers, action_shape=action_shape,
+                        activation_fn=tf.nn.relu)
+            # Direct policy input and output used in predict() method during testing.
+            self.policy_input_ph = tf.placeholder(dtype=self.dtype,
+                    shape=(None,) + self.env.observation_space.shape[1:], name="policy_input")
+            self.policy_output = self.policy(self.policy_input_ph)
+
+            self.policy_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="policy")
+
+            self._policy_ready = True
 
     def setup_loading(self):
-        self.load_op = {}
-        self.load_ph = {}
-        for param in self.policy_params:
-            placeholder = tf.placeholder(dtype=param.dtype, shape=param.shape)
-            self.load_op[param] = param.assign(placeholder)
-            self.load_ph[param] = placeholder
+        if not self._policy_ready:
+            self.setup_policy()
+
+        if not self._loading_ready:
+            self.load_op = {}
+            self.load_ph = {}
+            for param in self.policy_params:
+                placeholder = tf.placeholder(dtype=param.dtype, shape=param.shape)
+                self.load_op[param] = param.assign(placeholder)
+                self.load_ph[param] = placeholder
+
+            self._loading_ready = True
 
     def train(self, initial_state):
+        if not self._training_ready:
+            self.setup_training()
+
         feed_dict = {self.initial_state_ph:initial_state}
 
         _, grads, loss, rewards, actions, states = self.session.run(
@@ -202,6 +244,9 @@ class GlobalBackpropModel(GlobalModel):
         return output_info
 
     def predict(self, state, deterministic=True):
+        if not self._policy_ready or (not self._training_ready and not self.preloaded):
+            raise Exception("No policy to predict with yet!")
+
         if not deterministic:
             print("Note: this model is strictly deterministic so using deterministic=False will"
             " have no effect.")
@@ -240,6 +285,9 @@ class GlobalBackpropModel(GlobalModel):
 
         Based on StableBaselines save structure.
         """
+        if not self._policy_ready or (not self._training_ready and not self.preloaded):
+            raise Exception("No policy to save yet!")
+
         # I don't think we need to save any extra data? Loading requires loading the meta file
         # anyway, which contains all of the settings used here.
         extra_data = {}
@@ -250,6 +298,9 @@ class GlobalBackpropModel(GlobalModel):
         return save_to_zip(path, data=extra_data, params=param_dict)
 
     def load(self, path):
+        if not self._loading_ready:
+            self.setup_loading()
+
         data, param_dict = load_from_zip(path)
         if len(data) > 0:
             raise Exception("Miscellaneous data in GlobalBackpropModel was not empty."
@@ -266,6 +317,8 @@ class GlobalBackpropModel(GlobalModel):
         self.session.run(self.load_op, feed_dict=feed_dict)
         print("Model loaded from {}".format(path))
         print("I'm not 100% sure loading works correctly, in case it looks completely wrong.")
+
+        self.preloaded = True
 
 class IntegrateRNN(Layer):
     def __init__(self, cell, dtype=tf.float32, swap_to_cpu=True):

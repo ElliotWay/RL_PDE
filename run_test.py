@@ -239,7 +239,7 @@ def main():
     else:
         args.analytical = True
         if 'one-step' in args.reward_mode:
-            print("TODO: compute error with analytical solution when training with one-step error.")
+            print("TODO: compute error with analytical solution when using one-step error.")
             print("(Currently forcing the error to change to full instead.)")
             args.reward_mode = 'full'
         CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]
@@ -247,6 +247,7 @@ def main():
         for nx in CONVERGENCE_PLOT_GRID_RANGE:
             args.nx = nx
             envs.append(build_env(args.env, args, test=True))
+        env = envs[0]
 
     # TODO: create standard agent lookup function in agents.py.
     if args.agent == "default" or args.agent == "none":
@@ -327,7 +328,8 @@ def main():
                 os.makedirs(sub_dir)
                 logger.configure(folder=sub_dir, format_strs=['stdout'])  # ,tensorboard'
 
-                error.append(do_test(env, agent, args))
+                l2_error = do_test(env, agent, args)
+                error.append(l2_error)
 
                 x_vals.append(env.grid.real_x)
                 error_vals.append(np.abs(env.grid.get_real() - env.solution.get_real()))
