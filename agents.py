@@ -216,7 +216,8 @@ class RandomAgent():
             random_logits = np.random.normal(size=action_shape)
             exp_logits = np.exp(random_logits)
 
-            return exp_logits / (np.sum(exp_logits, axis=-1)[..., None]), None
+            action = exp_logits / (np.sum(exp_logits, axis=-1)[..., None])
+            return action, None
         elif self.mode == "split_flux" or self.mode == "flux": 
             # e^(order - 1) is chosen ad-hoc to vaguely relate to the max weights in WENO that increase with order.
             return np.random.normal(size=state.shape, scale=(np.exp(self.order - 1))), None

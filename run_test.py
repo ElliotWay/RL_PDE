@@ -217,7 +217,7 @@ def main():
     # This only overrides arguments that were not explicitly specified.
     #TODO: Find more reliable way of doing this so we are robust to argument changes.
     if args.agent not in (
-            "default", "none", "stationary", "equal", "middle", "left", "right", "random"):
+            "default", "none", "weno", "std", "stationary", "equal", "middle", "left", "right", "random"):
         if not os.path.isfile(args.agent):
             raise Exception("Agent file \"{}\" not found.".format(args.agent))
 
@@ -238,9 +238,10 @@ def main():
         env = build_env(args.env, args, test=True)
     else:
         args.analytical = True
-        if 'one-step' in args.reward_mode:
+        if args.reward_mode is not None and 'one-step' in args.reward_mode:
             print("TODO: compute error with analytical solution when using one-step error.")
-            print("(Currently forcing the error to change to full instead.)")
+            print("(Currently forcing the error to change to full instead, error is still with"
+                    + "analytical.)")
             args.reward_mode = 'full'
         CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]
         envs = []
@@ -250,7 +251,8 @@ def main():
         env = envs[0]
 
     # TODO: create standard agent lookup function in agents.py.
-    if args.agent == "default" or args.agent == "none":
+    if (args.agent == "default" or args.agent == "none"
+        or args.agent == "weno" or args.agent == "std"):
         agent = StandardWENOAgent(order=args.order, mode=mode)
     elif args.agent == "stationary":
         agent = StationaryAgent(order=args.order, mode=mode)
