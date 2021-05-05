@@ -15,6 +15,7 @@ from agents import StandardWENOAgent
 from util import action_snapshot
 from util.misc import human_readable_time_delta
 
+#@profile
 def rollout(env, policy, num_rollouts=1, rk4=False, deterministic=False, every_step_hook=None):
     """
     Collect a rollout.
@@ -74,6 +75,7 @@ def rollout(env, policy, num_rollouts=1, rk4=False, deterministic=False, every_s
 
     return states, actions, rewards, dones, next_states
 
+#@profile
 def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs):
     #TODO This is a hack. Consider adapting the SB logger class to our own purposes
     # so we can fetch this file name instead of hardcoding it here.
@@ -189,8 +191,13 @@ def train(env, eval_envs, emi, args):
 
     #TODO run eval step before any training?
 
+    # leak
+    #print("Starting.")
+    #breakpoint()
+
     start_time = time.time()
     for ep in np.arange(args.total_episodes)+1:
+
 
         # TODO wrap train step in signal catcher so we can save the model
         # when there is a SIGINT, but not in the middle of training.
@@ -201,6 +208,11 @@ def train(env, eval_envs, emi, args):
         total_timesteps += train_info['timesteps']
 
         if ep % args.log_freq == 0:
+
+            # leak
+            #print("About to log.")
+            #breakpoint()
+
             ep_string = ("{:0" + str(ep_precision) + "}").format(ep)
 
             if args.emi != "std":
@@ -259,6 +271,7 @@ def train(env, eval_envs, emi, args):
             write_summary_plots(log_dir=log_dir, summary_plot_dir=summary_plot_dir,
                     total_episodes=args.total_episodes, num_eval_envs=len(eval_envs))
 
+            """
             # Save model.
             model_file_name = os.path.join(log_dir, "model" + ep_string)
             # probably changes file name by adding e.g. ".zip".
@@ -288,6 +301,7 @@ def train(env, eval_envs, emi, args):
                     old_model = best_models.pop()
                     os.remove(old_model["file_name"])
                     print("{} removed.".format(old_model["file_name"]))
+            """
         #endif logging
     #endfor episodes
 

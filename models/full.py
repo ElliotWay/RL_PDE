@@ -154,6 +154,7 @@ class GlobalBackpropModel(GlobalModel):
 
             self._loading_ready = True
 
+    #@profile
     def train(self, initial_state):
         if not self._training_ready:
             self.setup_training()
@@ -168,7 +169,7 @@ class GlobalBackpropModel(GlobalModel):
 
         # rewards, actions, states are [timestep, initial_condition, ...]
 
-        debug_mode = True
+        debug_mode = False
         training_plot_freq = self.log_freq * 5
         if debug_mode:
             #print("loss", loss)
