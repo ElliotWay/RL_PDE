@@ -407,13 +407,16 @@ class BatchGlobalEMI(EMI):
         num_inits = self.args.inits_per_ep
         initial_conditions = []
         init_params = []
-        for _ in range(num_inits):
-            rl_state = env.reset()
-            # Important to use copy - grid.get_real returns the writable grid cells, which are
-            # changed by the environment.
-            phys_state = np.copy(env.grid.get_real())
-            initial_conditions.append(phys_state)
+        env.analytical_solution._reset({'init_type': 'accelshock'})
+        for i in range(num_inits):
+            _ = env.reset()
+            # # Important to use copy - grid.get_real returns the writable grid cells, which are
+            # # changed by the environment.
+            # phys_state = np.copy(env.grid.get_real())
+            # # initial_conditions.append(phys_state)
             init_params.append(env.grid.init_params) # This is starting to smell.
+            env.analytical_solution._update(env.dt, env.episode_length * i * env.dt)
+            initial_conditions.append(env.analytical_solution.get_real())
         initial_conditions = np.array(initial_conditions)
 
         extra_info = self._model.train(initial_conditions)
@@ -427,12 +430,12 @@ class BatchGlobalEMI(EMI):
 
         # Compute the L2 error of the final state with the final state of the WENO solution.
         l2_errors = []
-        for init_params, final_state in zip(init_params, states[-1]):
+        for init_params, final_state, initial_state in zip(init_params, states[-1], initial_conditions):
             # Using init_params instead of copying the state directly allows the solution to use
             # memoization.
             self.weno_solution_env.init_params = init_params
             self.weno_solution_env.reset()
-            
+            self.weno_solution_env.force_state(initial_state)
             # env.evolve() evolves the state using the internal solution (WENO in this case).
             self.weno_solution_env.evolve()
             # Note that it effectively has 2 copies: the state and the solution state this means

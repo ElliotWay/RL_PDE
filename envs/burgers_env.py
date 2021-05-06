@@ -186,6 +186,7 @@ class AbstractBurgersEnv(gym.Env):
         else:
             self.source = None
 
+        self.analytical_solution = AnalyticalSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng, init_type='accelshock')
         self.analytical = analytical
         if analytical:
             self.solution = AnalyticalSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng, init_type=init_type)

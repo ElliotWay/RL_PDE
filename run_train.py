@@ -54,7 +54,7 @@ def main():
     parser.add_argument('--log-dir', '--log_dir', type=str, default=None,
                         help="Directory to place log file and other results. Default is"
                         + " log/env/model/timestamp.")
-    parser.add_argument('--ep-length', '--ep_length', type=int, default=250,
+    parser.add_argument('--ep-length', '--ep_length', type=int, default=10,
                         help="Number of timesteps in an episode.")
     parser.add_argument('--total-episodes', '--total_episodes', type=int, default=1000,
                         help="Total number of episodes to train.")

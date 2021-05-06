@@ -46,7 +46,7 @@ def get_model_arg_parser():
             help="(PG) Style of returns for estimating Q(s,a). Default depends on Model."
             + " 'full' uses (or tries to use) the entire return. 'myopic' uses only the"
             + " immediate reward, as if gamma was set to 0.0.")
-    parser.add_argument('--inits-per-ep', '--inits_per_ep', type=positive_int, default=10,
+    parser.add_argument('--inits-per-ep', '--inits_per_ep', type=positive_int, default=25,
             help="(Full) Number of initial conditions to pass as a batch. Handled as the number of"
             + " over initial conditions in an 'episode'.")
  
