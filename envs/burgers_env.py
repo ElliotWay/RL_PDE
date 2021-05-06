@@ -258,7 +258,30 @@ class AbstractBurgersEnv(gym.Env):
         raise NotImplementedError()
 
     def reset(self):
-        raise NotImplementedError()
+        """
+        Reset the environment.
+
+        This is the abstract class version. In a subclass, the overriding function should call this
+        version, then return the initial state based on how the subclass is configured.
+
+        Returns
+        -------
+        Nothing! However, the subclass versions should return the initial state.
+
+        """
+        self.grid.reset(params=self.init_params)
+        if self.source is not None:
+            self.source.reset()
+        self.solution.reset(self.grid.init_params)
+        if self.weno_solution is not None:
+            self.weno_solution.reset(self.grid.init_params)
+
+        self.state_history = [self.grid.get_full().copy()]
+        self.action_history = []
+
+        self.t = 0.0
+        self.steps = 0
+        self.previous_error = np.zeros_like(self.grid.get_full())
 
     def burgers_flux(self, q):
         # This is the only thing unique to Burgers, could we make this a general class with this as a parameter?
@@ -1209,20 +1232,9 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         Initial state.
 
         """
-        self.grid.reset(params=self.init_params)
-        if self.source is not None:
-            self.source.reset()
-        self.solution.reset(self.grid.init_params)
-        if self.weno_solution is not None:
-            self.weno_solution.reset(self.grid.init_params)
-
-        self.state_history = [self.grid.get_full().copy()]
+        super().reset()
 
         self.rk_state = 1
-
-        self.t = 0.0
-        self.steps = 0
-        self.previous_error = np.zeros_like(self.grid.get_full())
 
         return self.prep_state()
 
@@ -1749,16 +1761,7 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
         Initial state.
 
         """
-        self.grid.reset(params=self.init_params)
-        if self.source is not None:
-            self.source.reset()
-        self.solution.reset(**self.grid.init_params)
-        if self.weno_solution is not None:
-            self.weno_solution.reset(**self.grid.init_params)
-
-        self.t = 0.0
-        self.steps = 0
-        self.previous_error = np.zeros_like(self.grid.get_full())
+        super().reset()
 
         return self.prep_state()
 
@@ -1903,16 +1906,7 @@ class FluxBurgersEnv(AbstractBurgersEnv):
         Initial state.
 
         """
-        self.grid.reset(params=self.init_params)
-        if self.source is not None:
-            self.source.reset()
-        self.solution.reset(**self.grid.init_params)
-        if self.weno_solution is not None:
-            self.weno_solution.reset(**self.grid.init_params)
-
-        self.t = 0.0
-        self.steps = 0
-        self.previous_error = np.zeros_like(self.grid.get_full())
+        super().reset()
 
         return self.prep_state()
 
