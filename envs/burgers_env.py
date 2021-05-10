@@ -1116,7 +1116,7 @@ class AbstractBurgersEnv(gym.Env):
         self.grid = None
         self.solution = None
 
-    def evolve(self):
+    def evolve(self, starting_time=0):
         """
         Evolve the environment using the solution, instead of passing actions.
 
@@ -1127,9 +1127,10 @@ class AbstractBurgersEnv(gym.Env):
         assert (not isinstance(self.solution, OneStepSolution)), \
             "Can't evolve with one-step solution."
 
+        dt = self.timestep()
+        self.t = starting_time * dt
         while self.steps < self.episode_length:
             
-            dt = self.timestep()
             self.t += dt
 
             if self.source is not None:

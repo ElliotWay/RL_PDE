@@ -430,14 +430,13 @@ class BatchGlobalEMI(EMI):
 
         # Compute the L2 error of the final state with the final state of the WENO solution.
         l2_errors = []
-        for init_params, final_state, initial_state in zip(init_params, states[-1], initial_conditions):
+        for i, (init_params, final_state, initial_state) in enumerate(zip(init_params, states[-1], initial_conditions)):
             # Using init_params instead of copying the state directly allows the solution to use
             # memoization.
             self.weno_solution_env.init_params = init_params
             self.weno_solution_env.reset()
-            self.weno_solution_env.force_state(initial_state)
             # env.evolve() evolves the state using the internal solution (WENO in this case).
-            self.weno_solution_env.evolve()
+            self.weno_solution_env.evolve(env.episode_length * i)
             # Note that it effectively has 2 copies: the state and the solution state this means
             # when we overwrite the state with the state from the agent, it has still has the
             # solution copy with which to compute the error.
