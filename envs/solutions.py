@@ -1,6 +1,7 @@
 import json
 import numpy as np
 from scipy.optimize import fixed_point
+from scipy.optimize import brentq
 
 import envs.weno_coefficients as weno_coefficients
 from envs.grid import GridBase, Grid1d
@@ -432,7 +433,7 @@ class OneStepSolution(SolutionBase):
     def __getattr__(self, attr):
         return getattr(self.inner_solution, attr)
 
-available_analytical_solutions = ["smooth_sine", "smooth_rare", "accelshock"]
+available_analytical_solutions = ["smooth_sine", "smooth_rare", "accelshock", "gaussian"]
 #TODO account for xmin, xmax in case they're not 0 and 1.
 class AnalyticalSolution(SolutionBase):
     def __init__(self, nx, ng, xmin, xmax, init_type="schedule"):
@@ -473,6 +474,22 @@ class AnalyticalSolution(SolutionBase):
             index = x_values > shock_location
             new_u[index] = (u_R*(x_values[index] - 1)) / (1 + u_R*time)
             self.grid.set(new_u)
+
+        elif init_type == "gaussian":
+            # Copied from
+            # github.com/python-hydro/hydro_examples/blob/master/burgers/weno_burgers.py#burgers_sin_exact
+            # (Yes, their implementation of the exact Gaussian solution is called
+            # "burgers_sin_exact".)
+            # I'm not really sure how it works.
+            def initial_gaussian(x):
+                return 1.0 + np.exp(-60.0*(x - 0.5)**2)
+            def residual(x_at_t_0_guess, x_at_t):
+                q = initial_gaussian(x_at_t_0_guess)
+                return x_at_t_0_guess + q*time - x_at_t
+
+            updated_u = [initial_gaussian(brentq(residual, -2, 2, args=(x,))) for x in x_values]
+            self.grid.set(updated_u)
+
 
     def _reset(self, params):
         if 'init_type' in params and not params['init_type'] in available_analytical_solutions:
