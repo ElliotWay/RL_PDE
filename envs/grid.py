@@ -267,10 +267,17 @@ class Grid1d(GridBase):
         elif self.init_type == "accelshock":
             if boundary is None:
                 self.boundary = "outflow"
-            index = self.x > 0.25
-            #self.u = np.full_like(self.x, 3)
-            self.u[:] = 3
-            self.u[index] = 3 * (self.x[index] - 1)
+
+            offset = params['offset'] if 'offset' in params else 0.25
+            self.init_params['offset'] = offset
+            u_L = params['u_L'] if 'u_L' in params else 3.0
+            self.init_params['u_L'] = u_L
+            u_R = params['u_R'] if 'u_R' in params else 3.0
+            self.init_params['u_R'] = u_R
+
+            index = self.x > offset
+            self.u = np.full_like(self.x, u_L)
+            self.u[index] = u_R * (self.x[index] - 1)
 
         elif self.init_type == "tophat":
             if boundary is None:
