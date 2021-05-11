@@ -81,7 +81,7 @@ def build_env(env_name, args, test=False):
         args.C = None
 
     if args.memoize is None:
-        if args.init_type in ['random', 'schedule', 'sample']:
+        if args.init_type in ['random', 'random-many-shocks', 'schedule', 'sample']:
             args.memoize = False
         else:
             args.memoize = True

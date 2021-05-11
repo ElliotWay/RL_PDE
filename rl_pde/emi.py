@@ -397,8 +397,12 @@ class BatchGlobalEMI(EMI):
         args_copy = Namespace(**vars(args))
         if args_copy.reward_mode is not None:
             args_copy.reward_mode = args_copy.reward_mode.replace('one-step', 'full')
-        args_copy.memoize = True # Memoizing means we don't waste time and memory recomputing the
-                                 # solution each time.
+        if not "random" in args.init_type:
+            args_copy.memoize = True # Memoizing means we don't waste time and memory recomputing
+                                     # the solution each time.
+        else:
+            args_copy.memoize = False # Unfortunately we HAVE to recompute each time if the
+                                      # environment is randomized.
         args_copy.analytical = False
 
         self.weno_solution_env = build_env(args_copy.env, args_copy)
