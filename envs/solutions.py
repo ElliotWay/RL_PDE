@@ -1,6 +1,7 @@
 import json
 import numpy as np
 from scipy.optimize import fixed_point
+from scipy.optimize import brentq
 
 import envs.weno_coefficients as weno_coefficients
 from envs.grid import GridBase, Grid1d
@@ -432,33 +433,34 @@ class OneStepSolution(SolutionBase):
     def __getattr__(self, attr):
         return getattr(self.inner_solution, attr)
 
-available_analytical_solutions = ["smooth_sine", "smooth_rare", "accelshock"]
-#TODO Make this have a Grid1d, the reset methods have so much overlap.
+available_analytical_solutions = ["smooth_sine", "smooth_rare", "accelshock", "gaussian"]
 #TODO account for xmin, xmax in case they're not 0 and 1.
 class AnalyticalSolution(SolutionBase):
     def __init__(self, nx, ng, xmin, xmax, init_type="schedule"):
         super().__init__(nx=nx, ng=ng, xmin=xmin, xmax=xmax)
 
-        if init_type == "schedule" or init_type == "sample":
-            self._fixed_init = None
-        elif init_type in available_analytical_solutions:
-            self._fixed_init = init_type
-        else:
+        if (not init_type in available_analytical_solutions 
+                and not init_type in ['schedule', 'sample']):
             raise Exception("Invalid analytical type \"{}\", available options are {}.".format(init_type, available_analytical_solutions))
 
-        self.init_params = None
+        self.grid = Grid1d(nx=nx, ng=ng, xmin=xmin, xmax=xmax, init_type=init_type)
 
     def _update(self, dt, time):
-        params = self.init_params
+        # Assume that Grid1d.reset() is still setting the correct parameters.
+        params = self.grid.init_params
         init_type = params['init_type']
+
+        x_values = self.grid.real_x
+
         if init_type in ["smooth_sine", "smooth_rare"]:
             if init_type == "smooth_sine":
-                iterate_func = lambda old_u, time: params['A'] * np.sin(2 * np.pi * (self.x - old_u * time))
+                iterate_func = lambda old_u, time: params['A'] * np.sin(2 * np.pi * (x_values - old_u * time))
             elif init_type == "smooth_rare":
-                iterate_func = lambda old_u, time: params['A'] * np.tanh(params['k'] * (self.x - 0.5 - old_u*time))
+                iterate_func = lambda old_u, time: params['A'] * np.tanh(params['k'] * (x_values - 0.5 - old_u*time))
 
             try:
-                self.u = fixed_point(iterate_func, self.u, args=(time,))
+                updated_u = fixed_point(iterate_func, self.grid.get_real(), args=(time,))
+                self.grid.set(updated_u)
             except Exception:
                 print("failed to converge")
                 #TODO handle this better
@@ -468,60 +470,37 @@ class AnalyticalSolution(SolutionBase):
             u_L = params['u_L']
             u_R = params['u_R']
             shock_location = (u_L/u_R + 1) * (1 - np.sqrt(1 + u_R*time)) + u_L*time + offset*np.sqrt(u_R*time+1)
-            new_u = np.full_like(self.x, u_L)
-            index = self.x > shock_location
-            new_u[index] = (u_R*(self.x[index] - 1)) / (1 + u_R*time)
-            self.u = new_u
+            new_u = np.full_like(x_values, u_L)
+            index = x_values > shock_location
+            new_u[index] = (u_R*(x_values[index] - 1)) / (1 + u_R*time)
+            self.grid.set(new_u)
+
+        elif init_type == "gaussian":
+            # Copied from
+            # github.com/python-hydro/hydro_examples/blob/master/burgers/weno_burgers.py#burgers_sin_exact
+            # (Yes, their implementation of the exact Gaussian solution is called
+            # "burgers_sin_exact".)
+            # I'm not really sure how it works.
+            def initial_gaussian(x):
+                return 1.0 + np.exp(-60.0*(x - 0.5)**2)
+            def residual(x_at_t_0_guess, x_at_t):
+                q = initial_gaussian(x_at_t_0_guess)
+                return x_at_t_0_guess + q*time - x_at_t
+
+            updated_u = [initial_gaussian(brentq(residual, -2, 2, args=(x,))) for x in x_values]
+            self.grid.set(updated_u)
+
 
     def _reset(self, params):
-        if self._fixed_init is not None:
-            init_type = self._fixed_init
-        else:
-            init_type = params['init_type']
-            if not init_type in available_analytical_solutions:
+        if 'init_type' in params and not params['init_type'] in available_analytical_solutions:
                 raise Exception("Invalid analytical type \"{}\", available options are {}.".format(init_type, available_analytical_solutions))
 
-        self.init_params = {'init_type': init_type}
-
-        if init_type == "smooth_sine":
-            if 'A' in params:
-                A = params['A']
-            else:
-                A = 1.0 / (2.0 * np.pi * 0.1)
-            self.init_params['A'] = A
-
-            self.u = A*np.sin(2 * np.pi * self.x)
-
-        elif init_type == "smooth_rare":
-            if 'A' in params:
-                A = params['A']
-            else:
-                A = 1.0
-            self.init_params['A'] = A
-            if 'k' in params:
-                k = params['k']
-            else:
-                k = np.random.uniform(20, 100)
-            self.init_params['k'] = k
-
-            self.u = A * np.tanh(k * (self.x - 0.5))
-
-        elif init_type == "accelshock":
-            offset = params['offset'] if 'offset' in params else 0.25
-            self.init_params['offset'] = offset
-            u_L = params['u_L'] if 'u_L' in params else 3.0
-            self.init_params['u_L'] = u_L
-            u_R = params['u_R'] if 'u_R' in params else 3.0
-            self.init_params['u_R'] = u_R
-
-            index = self.x > offset
-            self.u = np.full_like(self.x, u_L)
-            self.u[index] = u_R * (self.x[index] - 1)
+        self.grid.reset(params)
 
     def get_full(self):
-        return self.u
+        return self.grid.get_full()
     def get_real(self):
-        return self.u[self.ng:-self.ng]
+        return self.grid.get_real()
 
     def set(self, real_values):
         raise Exception("An analytical solution cannot be set.")

@@ -109,7 +109,7 @@ def do_test(env, agent, args):
     if args.plot_actions:
         env.plot_action(**render_args)
     if args.evolution_plot:
-        env.plot_state_evolution(num_states=10, full_true=False, no_true=False)
+        env.plot_state_evolution(num_states=10, full_true=False, no_true=False, plot_weno=False)
         if args.plot_error:
             env.plot_state_evolution(num_states=10, plot_error=True)
 

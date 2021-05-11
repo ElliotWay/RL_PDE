@@ -41,11 +41,11 @@ def rollout(env, policy, num_rollouts=1, rk4=False, deterministic=False, every_s
     (states, actions, rewards, dones, next_states)
     Each is a list.
     """
-    states = []
-    actions = []
-    rewards = []
-    dones = []
-    next_states = []
+    state_list = []
+    action_list = []
+    reward_list = []
+    done_list = []
+    next_state_list = []
     for _ in range(num_rollouts):
         state = env.reset()
         done = False
@@ -58,21 +58,23 @@ def rollout(env, policy, num_rollouts=1, rk4=False, deterministic=False, every_s
                 action, _ = policy.predict(state, deterministic=deterministic)
                 next_state, reward, done, _ = env.step(action)
             else:
+                rk4_substep_state = state
                 for _ in range(4):
-                    action, _ = policy.predict(state)
+                    action, _ = policy.predict(rk4_substep_state)
                     # Only the 4th reward and done are recorded.
-                    state, reward, done = env.rk4_step(actions)
+                    rk4_substep_state, reward, done = env.rk4_step(action)
+                next_state = rk4_substep_state
 
-            states.append(state)
-            actions.append(action)
-            rewards.append(reward)
-            dones.append(done)
-            next_states.append(next_state)
+            state_list.append(state)
+            action_list.append(action)
+            reward_list.append(reward)
+            done_list.append(done)
+            next_state_list.append(next_state)
 
             state = next_state
             steps += 1
 
-    return states, actions, rewards, dones, next_states
+    return state_list, action_list, reward_list, done_list, next_state_list
 
 def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs):
     #TODO This is a hack. Consider adapting the SB logger class to our own purposes
