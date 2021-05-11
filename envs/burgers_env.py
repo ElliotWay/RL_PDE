@@ -518,7 +518,8 @@ class AbstractBurgersEnv(gym.Env):
         plt.close(fig)
         return filename
 
-    def plot_state_evolution(self, num_states=10, full_true=False, no_true=False, plot_error=False, suffix="", title=None):
+    def plot_state_evolution(self, num_states=10,
+            full_true=False, no_true=False, plot_weno=False, plot_error=False, suffix="", title=None):
         """
         Plot the evolution of the state over time on a single plot.
         Ghost cells are not plotted.
@@ -542,6 +543,9 @@ class AbstractBurgersEnv(gym.Env):
             Set False by default, which plots the true solution. Set True to
             ONLY plot the RL solution, if you don't care about the true solution.
             Also useful to plot evolution of the true solution itself.
+        plot_weno : bool
+            Plot the separate WENO solution, if it exists and it is appropriate to do so.
+            Set False by default.
         suffix : string
             The plot will be saved to burgers_evolution_state{suffix}.png
             (or burgers_evolution_error{suffix}.png). There is no suffix by
@@ -555,6 +559,8 @@ class AbstractBurgersEnv(gym.Env):
         x_values = self.grid.x[self.ng:-self.ng]
 
         state_history = np.array(self.state_history)[:, self.ng:-self.ng]
+        solution_state_history = None
+        weno_state_history = None
 
         # Indexes into the state history. There are num_states+1 indices, where the first
         # is always 0m the last is always len(state_history)-1, and the rest are evenly
@@ -572,14 +578,20 @@ class AbstractBurgersEnv(gym.Env):
         start_rgb = (0.9, 0.9, 0.9) #light grey
 
         # Plot the true solution first so it appears under the RL solution.
+        true = None
+        weno = None
         if not plot_error and not no_true:
             if not isinstance(self.solution, OneStepSolution) and self.solution.is_recording_state():
             #if isinstance(self.solution, OneStepSolution):
                 solution_state_history = np.array(self.solution.get_state_history())[:, self.ng:-self.ng]
+                if (plot_weno and self.weno_solution is not None and
+                                self.weno_solution.is_recording_state()):
+                    weno_state_history = np.array(
+                            self.weno_solution.get_state_history())[:, self.ng:-self.ng]
+
+
             elif self.weno_solution is not None and self.weno_solution.is_recording_state():
                 solution_state_history = np.array(self.weno_solution.get_state_history())[:, self.ng:-self.ng]
-            else:
-                solution_state_history = None
 
             if solution_state_history is not None:
                 assert len(state_history) == len(solution_state_history), "History mismatch."
@@ -596,10 +608,21 @@ class AbstractBurgersEnv(gym.Env):
                 else:
                     true = plt.plot(x_values, solution_state_history[-1], 
                                     ls='-', linewidth=4, color=self.true_color)
-            else:
-                true = None
-        else:
-            true = None
+
+                if weno_state_history is not None:
+                    assert len(state_history) == len(weno_state_history), "History mismatch."
+                    if full_true:
+                        weno_rgb = matplotlib.colors.to_rgb(self.weno_color)
+                        weno_color_sequence = color_sequence(start_rgb, weno_rgb, num_states)
+                        sliced_solution_history = weno_state_history[slice_indexes]
+                        
+                        for state_values, color in zip(sliced_solution_history[1:-1], weno_color_sequence[1:-1]):
+                            plt.plot(x_values, state_values, ls='-', linewidth=1, color=color)
+                        weno = plt.plot(x_values, weno_state_history[-1],
+                                        ls='-', linewidth=1, color=self.weno_color)
+                    else:
+                        weno = plt.plot(x_values, weno_state_history[-1], 
+                                        ls='-', linewidth=4, color=self.weno_color)
 
         if plot_error:
             if not self.solution.is_recording_state():
@@ -634,6 +657,9 @@ class AbstractBurgersEnv(gym.Env):
                     labels.append("Analytical")
                 else:
                     labels.append("WENO")
+            if weno is not None:
+                plots.append(weno[0])
+                labels.append("WENO")
         ax.legend(plots, labels)
 
         if title is not None:
@@ -1078,6 +1104,8 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         
         Regardless of the internal state, the action should always be based on the previously returned state.
 
+        action and state are only recorded on the 4th call.
+
         Returns
         -------
         state: np array
@@ -1117,10 +1145,14 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         else:
             assert self.rk_state == 4
 
+            self.action_history.append(action)
+
             k4 = self.dt * self.rk_substep_weno(action)
             step = (self.k1 + 2*(self.k2 + self.k3) + k4) / 6
 
             state, reward, done = self._finish_step(step, self.dt, prev=self.u_start)
+
+            self.state_history.append(self.grid.get_full().copy())
 
             self.rk_state = 1
             self.k1 = self.k2 = self.k3 = self.u_start = self.dt = None
