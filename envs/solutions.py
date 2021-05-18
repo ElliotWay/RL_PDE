@@ -86,6 +86,11 @@ class PreciseWENOSolution(SolutionBase):
         self.record_actions = record_actions
         self.action_history = []
 
+        self.use_rk4 = False
+
+    def set_rk4(self, use_rk4):
+        self.use_rk4 = use_rk4
+
     def is_recording_actions(self):
         return (self.record_actions is not None)
     def set_record_actions(self, record_mode):
@@ -179,8 +184,10 @@ class PreciseWENOSolution(SolutionBase):
 
         # get the solution data
         g = self.precise_grid
+        g.update_boundary()
 
-        # comput flux at each point
+
+        # compute flux at each point
         f = self.flux_function(g.u)
 
         # get maximum velocity
@@ -258,11 +265,26 @@ class PreciseWENOSolution(SolutionBase):
         return lapu
 
     def _update(self, dt, time):
-        # Do Euler step, though rk_substep is separated so this can be converted to RK4.
-        self.t = time
-        euler_step = dt * self.rk_substep()
+        if self.use_rk4:
+            u_start = np.array(self.precise_grid.get_full())
+            
+            k1 = dt * self.rk_substep()
+            self.precise_grid.u = u_start + (k1 / 2)
 
-        self.precise_grid.u += euler_step
+            k2 = dt * self.rk_substep()
+            self.precise_grid.u = u_start + (k2 / 2)
+
+            k3 = dt * self.rk_substep()
+            self.precise_grid.u = u_start + k3
+
+            k4 = dt * self.rk_substep()
+            k4_step = (k1 + 2*(k2 + k3) + k4) / 6
+            self.precise_grid.u = u_start + k4_step
+
+        else:
+            euler_step = dt * self.rk_substep()
+            self.precise_grid.u += euler_step
+
         self.precise_grid.update_boundary()
 
     def get_full(self):

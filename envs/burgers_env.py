@@ -1341,7 +1341,17 @@ class WENOBurgersEnv(AbstractBurgersEnv):
             k4 = self.dt * self.rk_substep_weno(action)
             step = (self.k1 + 2*(self.k2 + self.k3) + k4) / 6
 
+            if isinstance(self.solution, PreciseWENOSolution):
+                self.solution.set_rk4(True)
+            if self.weno_solution is not None:
+                self.weno_solution.set_rk4(True)
+
             state, reward, done = self._finish_step(step, self.dt, prev=self.u_start)
+
+            if isinstance(self.solution, PreciseWENOSolution):
+                self.solution.set_rk4(False)
+            if self.weno_solution is not None:
+                self.weno_solution.set_rk4(False)
 
             self.state_history.append(self.grid.get_full().copy())
 
