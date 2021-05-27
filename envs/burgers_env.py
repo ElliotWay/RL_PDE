@@ -345,11 +345,11 @@ class AbstractBurgersEnv(gym.Env):
         if timestep is None and location is None:
             state = self.grid.get_full() if full else self.grid.get_real()
         elif timestep is not None:
-            state = self.state_history[timestep, :]
+            state = np.array(self.state_history)[timestep, :]
             if not full:
                 state = state[self.ng:-self.ng]
         else:
-            state = self.state_history[:, location]
+            state = np.array(self.state_history)[:, location]
         return state
 
     def get_solution_state(self, timestep=None, location=None, full=True):
@@ -361,11 +361,11 @@ class AbstractBurgersEnv(gym.Env):
         if timestep is None and location is None:
             state = self.solution.get_full() if full else self.solution.get_real()
         elif timestep is not None:
-            state = self.solution.get_state_history()[timestep, :]
+            state = np.array(self.solution.get_state_history())[timestep, :]
             if not full:
                 state = state[self.ng:-self.ng]
         else:
-            state = self.solution.get_state_history()[:, location]
+            state = np.array(self.solution.get_state_history())[:, location]
         return state
 
     def get_error(self, timestep=None, location=None, full=True):
@@ -399,6 +399,31 @@ class AbstractBurgersEnv(gym.Env):
             error = self.get_error(timestep=timestep, full=False)
             l2_error = np.sqrt(self.grid.dx * np.sum(np.square(error)))
             return l2_error
+
+    def get_action(self, timestep=None, location=None):
+        assert timestep is None or location is None
+
+        action_history = np.array(self.action_history)
+        if timestep is None and location is None:
+            action = action_history[-1]
+        elif timestep is not None:
+            action = action_history[timestep]
+        else:
+            action = action_history[:, location]
+        return action
+
+    def get_solution_action(self, timestep=None, location=None):
+        assert self.solution.is_recording_actions()
+        assert timestep is None or location is None
+
+        solution_action_history = np.array(self.solution.get_action_history())
+        if timestep is None and location is None:
+            action = solution_action_history[-1]
+        elif timestep is not None:
+            action = solution_action_history[timestep]
+        else:
+            action = solution_action_history[:, location]
+        return action
 
     def plot_state(self,
             timestep=None, location=None,
@@ -625,7 +650,7 @@ class AbstractBurgersEnv(gym.Env):
     def plot_state_evolution(self,
             num_states=10, full_true=False, no_true=False, plot_error=False, plot_weno=False,
             suffix="", title=None,
-            state_history=None, solution_state_history=None,
+            state_history=None, solution_state_history=None, weno_state_history=None,
             ):
         """
         Plot the evolution of the state over time on a single plot.
