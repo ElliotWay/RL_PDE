@@ -71,6 +71,14 @@ class GlobalBackpropModel(GlobalModel):
             action_adjust = tensorflow_fn(self.args.action_scale)
             self.wrapped_policy = FunctionWrapper(layer=self.policy, input_fn=obs_adjust,
                     output_fn=action_adjust)
+            # TODO: make function wrapping more sane
+            # You may be wondering why we apply the normalizing functions here for the RNN,
+            # but not when self.policy is declared, meaning that calling predict does not
+            # normalize the state and returned action. The discrepancy is in that the EMI
+            # handles input and output to the policy during testing, so the normalizing functions
+            # are applied there instead of in setup_policy.
+            # This does not make a lot of sense and should be changed. Ideally, this behavior
+            # is entirely controlled by the EMI - but how do we move it there?
 
             cell = IntegrateCell(
                     prep_state_fn=self.env.tf_prep_state,
@@ -97,10 +105,9 @@ class GlobalBackpropModel(GlobalModel):
             self.rewards = rewards
 
             assert len(self.rewards.shape) == 3
-            # Sum over the length of the trajectory, then average over each location,
-            # and average over the batch.
-            #TODO is axis=2 correct? I think it should be axis 1, need to check.
-            self.loss = -tf.reduce_mean(tf.reduce_sum(rewards, axis=2))
+            # Sum over the timesteps in the trajectory (axis 0),
+            # then average over each location and the batch (axes 2 and 1).
+            self.loss = -tf.reduce_mean(tf.reduce_sum(rewards, axis=0))
 
             gradients = tf.gradients(self.loss, self.policy_params)
             self.grads = list(zip(gradients, self.policy_params))
@@ -116,7 +123,7 @@ class GlobalBackpropModel(GlobalModel):
 
             if not self.preloaded:
                 tf.global_variables_initializer().run(session=self.session)
-           
+
             self.session.graph.finalize()
 
             self._training_ready = True
@@ -128,15 +135,20 @@ class GlobalBackpropModel(GlobalModel):
             action_shape = self.env.action_space.shape[1:]
 
             #TODO Use ReLU? A field in args with ReLU as the default might make sense.
-            with tf.variable_scope("policy", reuse=False):
-                self.policy = PolicyNet(layers=self.args.layers, action_shape=action_shape,
-                        activation_fn=tf.nn.relu)
+            # Note: passing a name to the constructor of a Keras Layer has the effect
+            # of putting everything in that layer in the scope of that name.
+            # tf.variable_scope does not play well with Keras.
+            self.policy = PolicyNet(layers=self.args.layers, action_shape=action_shape,
+                    activation_fn=tf.nn.relu, name="policy")
+
+
             # Direct policy input and output used in predict() method during testing.
             self.policy_input_ph = tf.placeholder(dtype=self.dtype,
                     shape=(None,) + self.env.observation_space.shape[1:], name="policy_input")
             self.policy_output = self.policy(self.policy_input_ph)
+            # See note in setup_training for why we do not apply normalizing functions here.
 
-            self.policy_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope="policy")
+            self.policy_params = self.policy.weights
 
             self._policy_ready = True
 
