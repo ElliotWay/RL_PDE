@@ -394,8 +394,9 @@ class MemoizedSolution(SolutionBase):
             if len(self.master_state_dict) < self.MAX_MEMOS:
                 state_history = self.inner_solution.get_state_history().copy()
                 self.master_state_dict[self.params_str] = state_history
-                action_history = self.inner_solution.get_action_history().copy()
-                self.master_action_dict[self.params_str] = action_history
+                if self.inner_solution.is_recording_actions():
+                    action_history = self.inner_solution.get_action_history().copy()
+                    self.master_action_dict[self.params_str] = action_history
             else:
                 print(("MemoizedSolution: maximum number ({}) of saved solutions reached!"
                         + " Check that no parameters come from a continuous range.")
