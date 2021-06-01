@@ -114,9 +114,10 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs
     #if high < 0:
         #ax.set_ylim(top=0.0)
     ax.set_yscale('symlog')
-    ax.yaxis.set_minor_locator(SymmetricalLogLocator(base=10, linthresh=0.0,
-            subs=[0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
-                2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]))
+    min_scale = 1e-10
+    ax.yaxis.set_minor_locator(SymmetricalLogLocator(base=10, linthresh=min_scale,
+            subs=[0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 2.0, 3.0, 4.0]))
+    #ax.set_ymargin(min_scale)
 
     reward_filename = os.path.join(summary_plot_dir, "rewards.png")
     reward_fig.savefig(reward_filename)
@@ -168,9 +169,9 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs
     ax.set_ylabel('loss')
     ax.grid(True)
     ax.set_yscale('log')
-    low, high = ax.get_ylim()
-    if low > 0:
-        ax.set_ylim(bottom=0.0)
+    #low, high = ax.get_ylim()
+    #if low > 0:
+        #ax.set_ylim(bottom=0.0)
 
     loss_filename = os.path.join(summary_plot_dir, "loss.png")
     loss_fig.savefig(loss_filename)
