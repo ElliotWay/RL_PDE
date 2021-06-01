@@ -106,13 +106,17 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs
     ax.set_xlabel('episodes')
     ax.set_ylabel('reward')
     ax.grid(True)
-    linthresh=0.1
-    ax.set_yscale('symlog', linthreshy=linthresh)
-    ax.yaxis.set_minor_locator(SymmetricalLogLocator(base=10, linthresh=linthresh,
-                                                        subs=[1.0, 0.75, 0.5, 0.25]))
-    low, high = ax.get_ylim()
-    if high < 0:
-        ax.set_ylim(top=0.0)
+    #linthresh=0.1
+    #ax.set_yscale('symlog', linthreshy=linthresh)
+    #ax.yaxis.set_minor_locator(SymmetricalLogLocator(base=10, linthresh=linthresh,
+                                                        #subs=[1.0, 0.75, 0.5, 0.25]))
+    #low, high = ax.get_ylim()
+    #if high < 0:
+        #ax.set_ylim(top=0.0)
+    ax.set_yscale('symlog')
+    ax.yaxis.set_minor_locator(SymmetricalLogLocator(base=10, linthresh=0.0,
+            subs=[0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+                2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]))
 
     reward_filename = os.path.join(summary_plot_dir, "rewards.png")
     reward_fig.savefig(reward_filename)
@@ -136,13 +140,14 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs
     ax.set_xlabel('episodes')
     ax.set_ylabel('L2 error')
     ax.grid(True)
-    linthresh=0.001
-    ax.set_yscale('symlog', linthreshy=linthresh)
-    ax.yaxis.set_minor_locator(SymmetricalLogLocator(base=10, linthresh=linthresh,
-                                                        subs=[1.0, 0.75, 0.5, 0.25]))
-    low, high = ax.get_ylim()
-    if low > 0:
-        ax.set_ylim(bottom=0.0)
+    #linthresh=0.001
+    #ax.set_yscale('symlog', linthreshy=linthresh)
+    #ax.yaxis.set_minor_locator(SymmetricalLogLocator(base=10, linthresh=linthresh,
+                                                        #subs=[1.0, 0.75, 0.5, 0.25]))
+    #low, high = ax.get_ylim()
+    #if low > 0:
+        #ax.set_ylim(bottom=0.0)
+    ax.set_yscale('log')
 
     l2_filename = os.path.join(summary_plot_dir, "l2.png")
     l2_fig.savefig(l2_filename)
@@ -153,7 +158,7 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs
     if 'loss' in csv_df:
         loss = csv_df['loss']
     elif 'policy_loss' in csv_df:
-        loss = csv_df['policy_loss']
+        loss = -csv_df['policy_loss']
     else:
         raise Exception("Can't find loss in progress.csv file.")
     ax.plot(episodes, loss, color='k')
@@ -162,6 +167,7 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs
     ax.set_xlabel('episodes')
     ax.set_ylabel('loss')
     ax.grid(True)
+    ax.set_yscale('log')
     low, high = ax.get_ylim()
     if low > 0:
         ax.set_ylim(bottom=0.0)
@@ -171,6 +177,46 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs
     plt.close(loss_fig)
 
     print("Summary plots updated in {}.".format(summary_plot_dir))
+
+def write_final_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs):
+    """ Create final plots that are different from the summary plots in some way. """ 
+    csv_file = os.path.join(log_dir, "progress.csv")
+    csv_df = pd.read_csv(csv_file, comment='#')
+
+    train_color = 'k'
+    eval_color = 'tab:orange'
+    envs_colors = ['b', 'r', 'g', 'm', 'c', 'y']
+
+    episodes = csv_df['episodes']
+
+    l2_fig = plt.figure()
+    ax = l2_fig.gca()
+    # Don't plot training L2 or average testing L2.
+    #train_l2 = csv_df['avg_train_end_l2']
+    #ax.plot(episodes, train_l2, color=train_color, label="train")
+    #avg_eval_l2 = csv_df['avg_eval_end_l2']
+    #ax.plot(episodes, avg_eval_l2, color=eval_color, label="eval avg")
+    assert num_eval_envs == 3
+    eval_names = ['smooth_sine', 'smooth_rare', 'accelshock']
+    for i in range(num_eval_envs):
+        eval_l2 = csv_df['eval{}_end_l2'.format(i+1)]
+        label = eval_names[i]
+        # Use solid lines instead of dashed lines for this version.
+        ax.plot(episodes, eval_l2,
+                color=envs_colors[i], ls='-', label=label)
+
+    l2_fig.legend(loc="upper right")
+    ax.set_xlim((0, total_episodes))
+    ax.set_title("L2 Error with WENO at End of Episode")
+    ax.set_xlabel('episodes')
+    ax.set_ylabel('L2 error')
+    ax.grid(True)
+    ax.set_yscale('log')
+
+    l2_filename = os.path.join(summary_plot_dir, "final_l2.png")
+    l2_fig.savefig(l2_filename)
+    plt.close(l2_fig)
+    print("Final plots created in {}.".format(summary_plot_dir))
 
 def train(env, eval_envs, emi, args):
 
@@ -294,6 +340,10 @@ def train(env, eval_envs, emi, args):
                     print("{} removed.".format(old_model["file_name"]))
         #endif logging
     #endfor episodes
+    write_summary_plots(log_dir=log_dir, summary_plot_dir=summary_plot_dir,
+            total_episodes=args.total_episodes, num_eval_envs=len(eval_envs))
+    write_final_plots(log_dir=log_dir, summary_plot_dir=summary_plot_dir,
+            total_episodes=args.total_episodes, num_eval_envs=len(eval_envs))
 
     print("Training complete!")
     print("Training took {}, and {} timesteps.".format(
