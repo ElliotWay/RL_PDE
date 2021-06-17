@@ -19,7 +19,7 @@ from stable_baselines import logger
 
 from rl_pde.run import rollout
 from rl_pde.emi import BatchEMI, StandardEMI, TestEMI
-from envs import get_env_arg_parser, build_env
+from envs import builder as env_builder
 from agents import StandardWENOAgent, StationaryAgent, EqualAgent, MiddleAgent, LeftAgent, RightAgent, RandomAgent
 from models import get_model_arg_parser
 from models import SACModel, PolicyGradientModel, TestModel
@@ -185,8 +185,9 @@ def main():
 
     main_args, rest = parser.parse_known_args()
 
-    env_arg_parser = get_env_arg_parser()
+    env_arg_parser = env_builder.get_env_arg_parser()
     env_args, rest = env_arg_parser.parse_known_args(rest)
+    env_builder.set_contingent_env_defaults(main_args, env_args)
 
     # run_test.py has model arguments that can be overidden, if desired,
     # but are intended to be loaded from a meta file.
@@ -238,7 +239,7 @@ def main():
         args.memoize = False
 
     if not args.convergence_plot:
-        env = build_env(args.env, args, test=True)
+        env = env_builder.build_env(args.env, args, test=True)
     else:
         args.analytical = True
         if args.reward_mode is not None and 'one-step' in args.reward_mode:
@@ -250,7 +251,7 @@ def main():
         envs = []
         for nx in CONVERGENCE_PLOT_GRID_RANGE:
             args.nx = nx
-            envs.append(build_env(args.env, args, test=True))
+            envs.append(env_builder.build_env(args.env, args, test=True))
         env = envs[0]
 
     # TODO: create standard agent lookup function in agents.py.

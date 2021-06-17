@@ -1,3 +1,4 @@
+from envs.burgers_env import AbstractBurgersEnv
 from envs.burgers_env import WENOBurgersEnv
 from envs.burgers_env import SplitFluxBurgersEnv
 from envs.burgers_env import FluxBurgersEnv

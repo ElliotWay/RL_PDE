@@ -167,7 +167,10 @@ class AbstractBurgersEnv(gym.Env):
         """
 
         self.test = test
+        
         self.reward_mode = self.fill_default_reward_mode(reward_mode)
+        if reward_mode != self.reward_mode:
+            print("Reward mode updated to '{}'.".format(self.reward_mode))
 
         self.nx = nx
         self.weno_order = weno_order
@@ -942,7 +945,8 @@ class AbstractBurgersEnv(gym.Env):
         plt.close(fig)
         return filename
 
-    def fill_default_reward_mode(self, reward_mode_arg):
+    @staticmethod
+    def fill_default_reward_mode(reward_mode_arg):
         reward_mode = "" if reward_mode_arg is None else reward_mode_arg
 
         if (not "full" in reward_mode

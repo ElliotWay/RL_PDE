@@ -20,7 +20,7 @@ from stable_baselines import logger
 #from stable_baselines.ddpg.noise import AdaptiveParamNoiseSpec, OrnsteinUhlenbeckActionNoise, NormalActionNoise
 
 from rl_pde.run import train
-from envs import get_env_arg_parser, build_env
+from envs import builder as env_builder
 from models import get_model_arg_parser
 from util import metadata, action_snapshot
 from util.function_dict import numpy_fn
@@ -76,12 +76,14 @@ def main():
     parser.add_argument('-y', '--y', default=False, action='store_true',
                         help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
     parser.add_argument('-n', '--n', default=False, action='store_true',
-                        help="Choose no for any questions, namely overwriting existing files. Useful for scripts. Overrides the -y option.")
+                        help="Choose no for any questions, namely overwriting existing files."
+                        + " Useful for scripts. Overrides the -y option.")
 
     main_args, rest = parser.parse_known_args()
 
-    env_arg_parser = get_env_arg_parser()
+    env_arg_parser = env_builder.get_env_arg_parser()
     env_args, rest = env_arg_parser.parse_known_args(rest)
+    env_builder.set_contingent_env_defaults(main_args, env_args)
 
     model_arg_parser = get_model_arg_parser()
     model_args, rest = model_arg_parser.parse_known_args(rest)
@@ -115,7 +117,7 @@ def main():
 
     set_global_seed(args.seed)
 
-    env = build_env(args.env, args)
+    env = env_builder.build_env(args.env, args)
 
     eval_env_args = Namespace(**vars(args))
     eval_env_args.follow_solution = False # Doesn't make sense for eval envs to do that.
@@ -124,20 +126,20 @@ def main():
         smooth_sine_args = Namespace(**vars(eval_env_args))
         smooth_sine_args.init_type = "smooth_sine"
         smooth_sine_args.ep_length = 500
-        eval_envs.append(build_env(args.env, smooth_sine_args, test=True))
+        eval_envs.append(env_builder.build_env(args.env, smooth_sine_args, test=True))
         smooth_rare_args = Namespace(**vars(eval_env_args))
         smooth_rare_args.init_type = "smooth_rare"
         smooth_rare_args.ep_length = 500
-        eval_envs.append(build_env(args.env, smooth_rare_args, test=True))
+        eval_envs.append(env_builder.build_env(args.env, smooth_rare_args, test=True))
         accelshock_args = Namespace(**vars(eval_env_args))
         accelshock_args.init_type = "accelshock"
         accelshock_args.ep_length = 500
-        eval_envs.append(build_env(args.env, accelshock_args, test=True))
+        eval_envs.append(env_builder.build_env(args.env, accelshock_args, test=True))
     elif args.eval_env == "long":
         eval_env_args.ep_length = 500
-        eval_envs = [build_env(args.env, eval_env_args, test=True)]
+        eval_envs = [env_builder.build_env(args.env, eval_env_args, test=True)]
     elif args.eval_env == "same" or args.eval_env is None:
-        eval_envs = [build_env(args.env, eval_env_args, test=True)]
+        eval_envs = [env_builder.build_env(args.env, eval_env_args, test=True)]
     else:
         raise Exception("eval env type \"{}\" not recognized.".format(args.eval_env))
 

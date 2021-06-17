@@ -1,7 +1,7 @@
 import argparse
 
 from util.misc import positive_int, nonnegative_float, positive_float, float_dict
-from envs import WENOBurgersEnv, SplitFluxBurgersEnv, FluxBurgersEnv
+from envs import AbstractBurgersEnv, WENOBurgersEnv, SplitFluxBurgersEnv, FluxBurgersEnv
 
 
 # Could pass name of env, and only have relevant parameters instead of allowing all of them?
@@ -33,7 +33,9 @@ def get_env_arg_parser():
     parser.add_argument('--init_type', '--init-type', type=str, default="sine",
                         help="Shape of the initial state.")
     parser.add_argument('--boundary', '--bc', type=str, default=None,
-                        help="The default boundary conditions depend on the init_type. Use --boundary if you want them to be something in particular.")
+                        help="The default boundary conditions depend on the init-type, which may"
+                        + " vary if using e.g. the schedule init-type. Set --boundary if you want"
+                        + " boundary conditions to be something in particular.")
     parser.add_argument('--init-params',  '--init_params', type=float_dict, default=None,
                         help="Some initial conditions accept parameters. For example, smooth_sine"
                         + " accepts A for the amplitude of the wave. Pass these parameters as a"
@@ -56,9 +58,10 @@ def get_env_arg_parser():
     parser.add_argument('--reward-adjustment', type=nonnegative_float, default=1000.0,
                         help="Constant that affects the relative importance of small errors compared to big errors."
                         + " Larger values mean that smaller errors are still important compared to big errors.")
+    default_reward_mode = AbstractBurgersEnv.fill_default_reward_mode("")
     parser.add_argument('--reward-mode', '--reward_mode', type=str, default=None,
-                        help="String that controls how the reward is calculated. The default"
-                        + " depends on the current implementation in burgers_env.py."
+                        help="String that controls how the reward is calculated."
+                        + " The curent default is '{}'.".format(default_reward_mode)
                         + " This argument may contain multiple parts, so 'stencil-L2dist-nosquash'"
                         + " will use the L2 distance of the stencil with no squash function"
                         + " applied as the reward. It need not contain every part, so 'stencil'"
@@ -76,15 +79,24 @@ def get_env_arg_parser():
 
     return parser
 
-def build_env(env_name, args, test=False):
-    if args.fixed_timesteps:
-        args.C = None
+def set_contingent_env_defaults(main_args, env_args):
+    if env_args.fixed_timesteps:
+        env_args.C = None
 
-    if args.memoize is None:
-        if args.init_type in ['random', 'random-many-shocks', 'schedule', 'sample']:
-            args.memoize = False
+    if env_args.memoize is None:
+        if env_args.init_type in ['random', 'random-many-shocks', 'schedule', 'sample']:
+            env_args.memoize = False
         else:
-            args.memoize = True
+            env_args.memoize = True
+
+    if main_args.model == "full" and env_args.reward_mode is None:
+        print("Reward mode forced to use 'one-step' to work with 'full' model.")
+        env_args.reward_mode = "one-step"
+    
+    env_args.reward_mode = AbstractBurgersEnv.fill_default_reward_mode(env_args.reward_mode)
+    print("Full reward mode is '{}'.".format(env_args.reward_mode))
+
+def build_env(env_name, args, test=False):
 
     kwargs = {  'xmin': args.xmin,
                 'xmax': args.xmax,
