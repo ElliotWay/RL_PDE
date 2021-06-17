@@ -323,12 +323,22 @@ class GlobalBackpropModel(GlobalModel):
         feed_dict = {}
         for param in self.policy_params:
             placeholder = self.load_ph[param]
-            param_value = param_dict[param.name]
+            try:
+                param_value = param_dict[param.name]
+            except KeyError:
+                print("{} not in saved model.".format(param.name))
+                policy_net_name = param.name.replace("policy", "policy_net", 1)
+                if policy_net_name in param_dict:
+                    print("Assuming older model that used \"policy_net\".")
+                    param_value = param_dict[policy_net_name]
+                else:
+                    raise Exception("\"{}\" is either corrupted or not a GlobalBackprop model."
+                        .format(path))
+
             feed_dict[placeholder] = param_value
 
         self.session.run(self.load_op, feed_dict=feed_dict)
         print("Model loaded from {}".format(path))
-        print("I'm not 100% sure loading works correctly, in case it looks completely wrong.")
 
         self.preloaded = True
 
