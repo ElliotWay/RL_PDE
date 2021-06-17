@@ -37,8 +37,8 @@ def main():
                         help="Do not train and show the environment parameters not listed here.")
     parser.add_argument('--help-model', default=False, action='store_true',
                         help="Do not train and show the model training parameters not listed here.")
-    parser.add_argument('--model', type=str, default='sac',
-                        help="Type of model to train. Options are 'sac' and nothing else.")
+    parser.add_argument('--model', type=str, default='full',
+                        help="Type of model to train. Options are 'full', 'sac', and 'pg'.")
     parser.add_argument('--env', type=str, default="weno_burgers",
                         help="Name of the environment in which to train the agent.")
     parser.add_argument('--emi', type=str, default='batch',
@@ -87,6 +87,7 @@ def main():
 
     model_arg_parser = get_model_arg_parser()
     model_args, rest = model_arg_parser.parse_known_args(rest)
+    # TODO Create separate model contingent defaults too, probably.
      
     if main_args.env.startswith("weno"):
         mode = "weno"
