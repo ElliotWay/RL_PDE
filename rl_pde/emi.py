@@ -408,7 +408,7 @@ class BatchGlobalEMI(EMI):
         self.weno_solution_env = build_env(args_copy.env, args_copy)
 
     def training_episode(self, env):
-        num_inits = self.args.inits_per_ep
+        num_inits = self.args.batch_size
         initial_conditions = []
         init_params = []
         for _ in range(num_inits):

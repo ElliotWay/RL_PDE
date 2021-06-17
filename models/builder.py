@@ -23,8 +23,9 @@ def get_model_arg_parser():
     parser.add_argument('--buffer-size', '--buffer_size', type=int, default=None,
             help="Size of the replay buffer. The default is 10000 for std EMI, and 500000"
             + " otherwise.")
-    parser.add_argument('--batch-size', '--batch_size', type=int, default=64,
-            help="Size of batch samples from replay buffer.")
+    parser.add_argument('--batch-size', '--batch_size', type=positive_int, default=None,
+            help="Size of batch samples from replay buffer. Default is 10 for global backprop,"
+            + " and 64 otherwise.")
     parser.add_argument('--train-freq', '--train_freq', type=int, default=None,
             help="(SAC) Ratio between the number of steps and the number of times to train."
             + " The default for std is 1, i.e. train every step. The default otherwise"

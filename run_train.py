@@ -142,6 +142,8 @@ def main():
         args.buffer_size = 10000 if args.emi == "std" else 500000
     if args.train_freq is None:
         args.train_freq = 1 if args.emi == "std" else env.action_space.shape[0]
+    if args.batch_size is None:
+        args.batch_size = 10 if args.model == "full" else 64
 
     if args.replay_style == 'marl':
         if args.emi != 'marl':
