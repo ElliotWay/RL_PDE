@@ -220,7 +220,7 @@ class GlobalBackpropModel(GlobalModel):
                 extra_info["sample_a"+str(i+1)] = csv_string
 
             if self.iteration % training_plot_freq == 0:
-                for initial_condition_index in range(states.shape[1]):
+                for initial_condition_index in [0]:#range(states.shape[1]):
                     state_history = states[:, initial_condition_index]
                     suffix = "_train_iter{}_init{}".format(self.iteration, initial_condition_index)
                     self.env.plot_state_evolution(state_history=state_history,

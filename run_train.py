@@ -51,9 +51,11 @@ def main():
                         help="Adjustment function to action. Default depends on environment."
                         + " 'softmax' computes softmax, 'rescale_from_tanh' scales to [0,1] then"
                         + " divides by the sum of the weights, 'none' does nothing.")
-    parser.add_argument('--eval-env', '--eval_env', default=None,
-                        help="Evaluation env. Default is to use an identical environment to the training environment."
-                        + " Pass 'custom' to use a representative sine/rarefaction/accelshock combination.")
+    parser.add_argument('--eval-env', '--eval_env', default='std',
+                        help="Evaluation env. Pass 'std' for the representative"
+                        + " sine/rarefaction/accelshock combination. Pass 'long' to use the"
+                        + " training environment with 500 timesteps. Pass 'same' to use"
+                        + " an identical copy of the training environment.")
     parser.add_argument('--log-dir', '--log_dir', type=str, default=None,
                         help="Directory to place log file and other results. Default is"
                         + " log/env/model/timestamp.")
@@ -116,11 +118,8 @@ def main():
     env = build_env(args.env, args)
 
     eval_env_args = Namespace(**vars(args))
-    eval_env_args.follow_solution = False
-    if args.eval_env is None:
-        eval_envs = [build_env(args.env, eval_env_args, test=True)]
-    else:
-        assert(args.eval_env == "custom")
+    eval_env_args.follow_solution = False # Doesn't make sense for eval envs to do that.
+    if args.eval_env == "std" or args.eval_env == "custom":
         eval_envs = []
         smooth_sine_args = Namespace(**vars(eval_env_args))
         smooth_sine_args.init_type = "smooth_sine"
@@ -134,6 +133,13 @@ def main():
         accelshock_args.init_type = "accelshock"
         accelshock_args.ep_length = 500
         eval_envs.append(build_env(args.env, accelshock_args, test=True))
+    elif args.eval_env == "long":
+        eval_env_args.ep_length = 500
+        eval_envs = [build_env(args.env, eval_env_args, test=True)]
+    elif args.eval_env == "same" or args.eval_env is None:
+        eval_envs = [build_env(args.env, eval_env_args, test=True)]
+    else:
+        raise Exception("eval env type \"{}\" not recognized.".format(args.eval_env))
 
     action_snapshot.declare_standard_envs(args)
 
