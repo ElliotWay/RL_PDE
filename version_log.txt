@@ -1,3 +1,16 @@
+V46, f58eb7b, 06/18/21
+---------------------------------
+It's been some time since I updated this file - it was just me working on the repo for a long time,
+but now that it's not, it makes sense to update this again.
+
+The global backpropagation algorithm has been implemented, and its branch has been merged into master.
+Most of the standard arguments for running global backprop are now defaults, namely:
+--model full --reward-mode one-step --eval-env custom
+So running global backprop now only requires python run_train.py --init-type smooth_sine.
+--emi batch-global is implied and will be selected when --model full is used (i.e. batch-global is
+selected by default).
+
+
 V45, 0d1b326, 10/30/20
 ---------------------------------
 Major Update: The framework has been restructured. The system now consists of an Env, a Model, and an EMI (environment model interface) that controls interactions between them.
