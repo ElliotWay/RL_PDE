@@ -1487,9 +1487,10 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         # state (the real physical state) does not have ghost cells, but agents operate on a stencil
         # that can spill beyond the boundary, so we need to add ghost cells to create the rl_state.
 
-        bc = "outflow"
+        # TODO: get boundary from initial condition, somehow, as diff inits have diff bounds
+        #  Would need to use tf.cond so graph can handle different boundaries at runtime.
         ghost_size = tf.constant(self.ng, shape=(1,))
-        if bc == "outflow":
+        if self.grid.boundary == "outflow":
             # This implementation assumes that state is a 1-D Tensor of scalars.
             # In the future, if we expand to multiple dimensions, then it won't be, so this will need
             # to be changed (probably use tf.tile instead).
@@ -1497,11 +1498,12 @@ class WENOBurgersEnv(AbstractBurgersEnv):
             left_ghost = tf.fill(ghost_size, state[0])
             right_ghost = tf.fill(ghost_size, state[-1])
             full_state = tf.concat([left_ghost, state, right_ghost], axis=0)
+        elif self.grid.boundary == "periodic":
+            left_ghost = state[-ghost_size[0]:]
+            right_ghost = state[:ghost_size[0]]
+            full_state = tf.concat([left_ghost, state, right_ghost], axis=0)
         else:
             raise NotImplementedError()
-        #TODO if you implement periodic here instead, you should probably also change things in how
-        # reward is computed as well - right now it assumes that errors beyond the boundaries are
-        # irrelevant, but they would be meaningful with a periodic system.
 
         # Compute flux.
         flux = 0.5 * (full_state ** 2)
@@ -1553,8 +1555,6 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         plus_interpolated = tf.reduce_sum(a_mat * plus_sub_stencils, axis=-1)
         minus_interpolated = tf.reduce_sum(a_mat * minus_sub_stencils, axis=-1)
 
-        #TODO: update this to handle batches correctly?
-        # But no, it shouldn't need to, this is being called in a map_fn.
         plus_action = rl_action[:, 0]
         minus_action = rl_action[:, 1]
 
@@ -1565,11 +1565,16 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         derivative_u_t = (reconstructed_flux[:-1] - reconstructed_flux[1:]) / self.grid.dx
 
-        #TODO implement RK4 as well?
+        #TODO implement RK4?
 
         step = self.dt * derivative_u_t
 
         #TODO implement viscosity and random source?
+        if self.eps != 0.0:
+            raise NotImplementedError("Viscosity has not been implemented in global backprop.")
+        if self.source != None:
+            raise NotImplementedError("External source has not been implemented"
+                    + " in global backprop.")
         
         new_state = real_state + step
         return new_state
@@ -1653,22 +1658,36 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         if "clip" in self.reward_mode:
             raise Exception("Reward clipping not implemented in Tensorflow functions.")
 
-        # TODO if we change the boundary condition to periodic, then we should change this to handle
-        # that instead of simply assuming errors past the boundary are all 0.
-        # That would involve extra functions for calculating the ghost cells here.
+        # TODO same thing as in tf_prep_state - need to handle changes to boundary at runtime
 
         # Average of error in two adjacent cells.
         if "adjacent" in self.reward_mode and "avg" in self.reward_mode:
             error = tf.abs(error)
             combined_error = (error[:-1] + error[1:]) / 2
-            # Assume error beyond boundaries is 0, so error at edge interfaces is error at edge cells.
-            combined_error = tf.concat([[error[0] / 2], combined_error, [error[-1] / 2]], axis=0)
+            if self.grid.boundary == "outflow":
+                # Error beyond boundaries will be identical to error at edge, so average error
+                # at edge interfaces is just the error at the edge.
+                combined_error = tf.concat([[error[0]], combined_error, [error[-1]]], axis=0)
+            elif self.grid.boundary == "periodic":
+                # With a periodic environment, the first and last interfaces are actually the
+                # same interface.
+                edge_error = (error[0] + error[-1]) / 2
+                combined_error = tf.concat([[edge_error], combined_error, [edge_error]], axis=0)
+            else:
+                raise NotImplementedError()
         # Combine error across the stencil.
         elif "stencil" in self.reward_mode:
             # This is trickier and we need to expand the error into the ghost cells.
-            # Still assume the error is 0 for convenience.
-            ghost_error = tf.constant([0.0] * self.ng)
-            full_error = tf.concat([ghost_error, error, ghost_error])
+            ghost_size = tf.constant(self.ng, shape=(1,))
+            if self.grid.boundary == "outflow":
+                left_error = tf.fill(ghost_size, error[0])
+                right_error = tf.fill(ghost_size, error[-1])
+            elif self.grid.boundary == "periodic":
+                left_error = error[-ghost_size[0]:]
+                right_error = error[:ghost_size[0]]
+            else:
+                raise NotImplementedError()
+            full_error = tf.concat([left_error, error, right_error])
             
             stencil_indexes = create_stencil_indexes(
                     stencil_size=(self.weno_order * 2 - 1),
