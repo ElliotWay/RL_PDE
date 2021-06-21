@@ -20,6 +20,7 @@ from stable_baselines import logger
 from rl_pde.run import rollout
 from rl_pde.emi import BatchEMI, StandardEMI, TestEMI
 from envs import builder as env_builder
+from envs import AbstractBurgersEnv
 from agents import StandardWENOAgent, StationaryAgent, EqualAgent, MiddleAgent, LeftAgent, RightAgent, RandomAgent
 from models import get_model_arg_parser
 from models import SACModel, PolicyGradientModel, TestModel
@@ -232,6 +233,7 @@ def main():
             raise Exception("Meta file \"{}\" for agent not found.".format(meta_file))
 
         metadata.load_to_namespace(meta_file, args, ignore_list=['log_dir', 'ep_length'])
+    #env_builder.set_contingent_env_defaults(args, args)
 
     set_global_seed(args.seed)
 
@@ -249,9 +251,22 @@ def main():
             args.reward_mode = 'full'
         CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]
         envs = []
+        env_args = []
         for nx in CONVERGENCE_PLOT_GRID_RANGE:
-            args.nx = nx
-            envs.append(env_builder.build_env(args.env, args, test=True))
+            #TODO Handle variable timesteps?
+            if args.C is None:
+                args.C = 0.1
+            eval_env_args = Namespace(**vars(args))
+            time_max = args.timestep * args.ep_length
+            _, dt, ep_length = AbstractBurgersEnv.fill_default_time_vs_space(
+                xmin=args.xmin, xmax=args.xmax, nx=nx,
+                dt=None, C=args.C, ep_length=None, time_max=time_max)
+            eval_env_args.nx = nx
+            eval_env_args.timestep = dt
+            eval_env_args.ep_length = ep_length
+
+            envs.append(env_builder.build_env(eval_env_args.env, eval_env_args, test=True))
+            env_args.append(eval_env_args)
         env = envs[0]
 
     # TODO: create standard agent lookup function in agents.py.
@@ -339,14 +354,15 @@ def main():
             error = []
             x_vals = []
             error_vals = []
-            for nx, env in zip(CONVERGENCE_PLOT_GRID_RANGE, envs):
-                args.nx = nx
+            for env, env_args in zip(envs, env_args):
 
-                sub_dir = os.path.join(args.log_dir, "nx_{}".format(nx))
+                sub_dir = os.path.join(args.log_dir, "nx_{}".format(env_args.nx))
                 os.makedirs(sub_dir)
                 logger.configure(folder=sub_dir, format_strs=['stdout'])  # ,tensorboard'
 
-                l2_error = do_test(env, agent, args)
+                print("Convergence run with {} grid cells and {}s timesteps ({}s total).".format(
+                    env_args.nx, env_args.timestep, env_args.ep_length*env_args.timestep))
+                l2_error = do_test(env, agent, env_args)
                 error.append(l2_error)
 
                 x_vals.append(env.grid.real_x)

@@ -11,8 +11,10 @@ def get_env_arg_parser():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--xmin', type=float, default=0.0)
     parser.add_argument('--xmax', type=float, default=1.0)
-    parser.add_argument('--nx', type=positive_int, default=128,
-                        help="Number of cells into which to discretize x dimension.")
+    parser.add_argument('--nx', type=positive_int, default=None,
+                        help="Number of cells into which to discretize x dimension. The default"
+                        + " depends on the value of --timestep and of --C; if those are both"
+                        + " defaults, then nx defaults to 125.")
     parser.add_argument('--order', type=positive_int, default=2,
                         help="Order of WENO approximation (assuming using WENO environment or agent).")
     parser.add_argument('--state_order', '--state-order', type=positive_int, default=None,
@@ -25,10 +27,16 @@ def get_env_arg_parser():
                         help="Use variable length timesteps.")
     parser.set_defaults(fixed_timesteps=True)
 
-    parser.add_argument('--timestep', '--dt', type=positive_float, default=0.0004,
-                        help="Set fixed timestep length. This value is ignored if --variable-timesteps is enabled.")
+    parser.add_argument('--timestep', '--dt', type=positive_float, default=None,
+                        help="Set fixed timestep length. This value is ignored if"
+                        + " --variable-timesteps is enabled. The default value is 0.0004.")
     parser.add_argument('--C', type=positive_float, default=0.1,
-                        help="Constant used in choosing variable timestep. This value is not used unless --variable-timesteps is enabled.")
+                        help="Constant used in choosing variable timestep if --variable-timesteps"
+                        + " is enabled, or choosing defaults if --timestep and --nx are not both"
+                        + " used.")
+    parser.add_argument('--time-max', '--time_max', '--tmax', type=positive_float, default=None,
+                        help="Set max time of episode. Overrides --ep-length parameter."
+                        + " Only works with --fixed-timesteps.")
 
     parser.add_argument('--init_type', '--init-type', type=str, default="sine",
                         help="Shape of the initial state.")
@@ -80,9 +88,6 @@ def get_env_arg_parser():
     return parser
 
 def set_contingent_env_defaults(main_args, env_args):
-    if env_args.fixed_timesteps:
-        env_args.C = None
-
     if env_args.memoize is None:
         if env_args.init_type in ['random', 'random-many-shocks', 'schedule', 'sample']:
             env_args.memoize = False
@@ -96,7 +101,36 @@ def set_contingent_env_defaults(main_args, env_args):
     env_args.reward_mode = AbstractBurgersEnv.fill_default_reward_mode(env_args.reward_mode)
     print("Full reward mode is '{}'.".format(env_args.reward_mode))
 
+    # Make timestep length depend on grid size or vice versa.
+    # TODO ep_length should probably be an env parameter. Unless we should have a fixed time limit
+    # instead?
+    approximate_max = 2.0
+    if env_args.fixed_timesteps:
+        if env_args.time_max is not None:
+            main_args.ep_length = None
+
+        nx, dt, ep_length = AbstractBurgersEnv.fill_default_time_vs_space(
+                xmin=env_args.xmin, xmax=env_args.xmax, nx=env_args.nx,
+                dt=env_args.timestep, C=env_args.C, ep_length=main_args.ep_length,
+                time_max=env_args.time_max)
+
+        if env_args.nx is None:
+            env_args.nx = nx
+        if env_args.timestep is None:
+            env_args.timestep = dt
+        if main_args.ep_length is None:
+            main_args.ep_length = ep_length
+        print("Using {} cells and {}s timesteps.".format(env_args.nx, env_args.timestep)
+                + " Episode length is {} steps, for a total of {}s.".format(
+                    main_args.ep_length, main_args.ep_length * dt))
+    else:
+        if env_args.nx is None:
+            env_args.nx = 128
+
 def build_env(env_name, args, test=False):
+
+    if args.fixed_timesteps:
+        args.C = None
 
     kwargs = {  'xmin': args.xmin,
                 'xmax': args.xmax,
