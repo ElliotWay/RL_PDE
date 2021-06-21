@@ -27,7 +27,7 @@ class GlobalBackpropModel(GlobalModel):
     The predict method, on the other hand, is the same, as the global must still have the local
     model built in.
     """
-    def __init__(self, env, args, dtype=tf.float32):
+    def __init__(self, env, args, dtype=tf.float64):
         """
         Create the GlobalBackprop Model.
         Note that as of writing this, the env needs to be specifically a WENOBurgersEnv - a general
@@ -139,7 +139,7 @@ class GlobalBackpropModel(GlobalModel):
             # of putting everything in that layer in the scope of that name.
             # tf.variable_scope does not play well with Keras.
             self.policy = PolicyNet(layers=self.args.layers, action_shape=action_shape,
-                    activation_fn=tf.nn.relu, name="policy")
+                    activation_fn=tf.nn.relu, name="policy", dtype=self.dtype)
 
 
             # Direct policy input and output used in predict() method during testing.
@@ -343,7 +343,7 @@ class GlobalBackpropModel(GlobalModel):
         self.preloaded = True
 
 class IntegrateRNN(Layer):
-    def __init__(self, cell, dtype=tf.float32, swap_to_cpu=True):
+    def __init__(self, cell, dtype=tf.float64, swap_to_cpu=True):
         """
         Declare the RNN for PDE integration.
         
