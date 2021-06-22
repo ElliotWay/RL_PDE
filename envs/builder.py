@@ -1,4 +1,5 @@
 import argparse
+import sys
 
 from util.misc import positive_int, nonnegative_float, positive_float, float_dict
 from envs import AbstractBurgersEnv, WENOBurgersEnv, SplitFluxBurgersEnv, FluxBurgersEnv
@@ -114,15 +115,25 @@ def set_contingent_env_defaults(main_args, env_args):
                 dt=env_args.timestep, C=env_args.C, ep_length=main_args.ep_length,
                 time_max=env_args.time_max)
 
+
         if env_args.nx is None:
             env_args.nx = nx
         if env_args.timestep is None:
             env_args.timestep = dt
         if main_args.ep_length is None:
             main_args.ep_length = ep_length
-        print("Using {} cells and {}s timesteps.".format(env_args.nx, env_args.timestep)
-                + " Episode length is {} steps, for a total of {}s.".format(
-                    main_args.ep_length, main_args.ep_length * dt))
+
+        just_defaults = (env_args.nx is None and env_args.timestep is None
+                and main_args.ep_length is None)
+        if not just_defaults:
+            print("Using {} cells and {}s timesteps.".format(env_args.nx, env_args.timestep)
+                    + " Episode length is {} steps, for a total of {}s.".format(
+                        main_args.ep_length, main_args.ep_length * dt))
+            # Add to argv - if we load an agent later, this prevents the agent's parameters
+            # from overwriting these, at least one of which was explicit.
+            sys.argv += ['--nx', str(nx)]
+            sys.argv += ['--timestep', str(dt)]
+            sys.argv += ['--ep_length', str(ep_length)]
     else:
         if env_args.nx is None:
             env_args.nx = 128
