@@ -113,8 +113,8 @@ class AbstractBurgersEnv(gym.Env):
     def __init__(self,
             xmin=0.0, xmax=1.0, nx=128, boundary=None, init_type="smooth_sine",
             init_params=None,
-            fixed_step=0.0005, C=None, #C=0.5,
-            weno_order=3, state_order=None, eps=0.0, srca=0.0, episode_length=300,
+            fixed_step=0.0004, C=None, #C=0.5,
+            weno_order=3, state_order=None, eps=0.0, srca=0.0, episode_length=250,
             analytical=False, precise_weno_order=None, precise_scale=1,
             reward_adjustment=1000, reward_mode=None,
             memoize=False,
@@ -309,6 +309,27 @@ class AbstractBurgersEnv(gym.Env):
         lapu[ib:ie + 1] = (u[ib - 1:ie] - 2.0 * u[ib:ie + 1] + u[ib + 1:ie + 2]) / gr.dx ** 2
 
         return lapu
+
+    @staticmethod
+    def fill_default_time_vs_space(xmin, xmax, nx, dt, C, ep_length, time_max):
+        approximate_max = 2.0
+        if nx is None:
+            if dt is None:
+                dt = 0.0004
+            dx = dt * approximate_max / C
+            nx = int((xmax - xmin) / dx)
+            #nx = max(nx, 2*order - 1)
+        elif dt is None:
+            dx = (xmax - xmin) / nx
+            dt = C * dx / approximate_max
+
+        if ep_length is None:
+            if time_max is None:
+                ep_length = 500
+            else:
+                ep_length = int(np.ceil(time_max / dt))
+
+        return nx, dt, ep_length
 
     def timestep(self):
         if self.C is None:  # return a constant time step
