@@ -1189,6 +1189,9 @@ class AbstractBurgersEnv(gym.Env):
         # Delete references for easier garbage collection.
         self.grid = None
         self.solution = None
+        self.weno_solution = None
+        self.state_history = []
+        self.action_history = []
 
     def evolve(self):
         """

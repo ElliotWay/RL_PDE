@@ -7,6 +7,7 @@ import signal
 import sys
 import time
 import subprocess
+import gc # manual garbage collection
 
 import matplotlib
 matplotlib.use("Agg")
@@ -36,9 +37,11 @@ def save_convergence_plot(grid_sizes, error, args):
 
     ax = plt.gca()
     ax.set_xlabel("grid size")
-    ax.set_xticks(grid_sizes)
+    #ax.set_xticks(grid_sizes)
+    ax.set_xscale('log')
     ax.set_ylabel("L2 error")
-    ax.set_yticks([0] + error)
+    #ax.set_yticks([0] + error)
+    ax.set_yscale('log')
 
     filename = os.path.join(args.log_dir, "convergence.png")
     plt.savefig(filename)
@@ -243,13 +246,14 @@ def main():
     if not args.convergence_plot:
         env = env_builder.build_env(args.env, args, test=True)
     else:
-        args.analytical = True
+        #args.analytical = True # Compare to analytical solution (preferred)
+        args.analytical = False # Compare to WENO (necessary when WENO isn't accurate either)
         if args.reward_mode is not None and 'one-step' in args.reward_mode:
             print("TODO: compute error with analytical solution when using one-step error.")
             print("(Currently forcing the error to change to full instead, error is still with"
                     + "analytical.)")
             args.reward_mode = 'full'
-        CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]
+        CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]#, 1024, 2048, 4096, 8192]
         envs = []
         env_args = []
         for nx in CONVERGENCE_PLOT_GRID_RANGE:
@@ -367,6 +371,14 @@ def main():
 
                 x_vals.append(env.grid.real_x)
                 error_vals.append(np.abs(env.grid.get_real() - env.solution.get_real()))
+
+                # Some of these trajectories can get big, so clean them out when we don't need
+                # them.
+                #TODO Make sure it's actually freeing them.
+                env.close()
+                gc.collect()
+
+            envs = []
 
             save_convergence_plot(CONVERGENCE_PLOT_GRID_RANGE, error, args)
             save_error_plot(x_vals, error_vals, CONVERGENCE_PLOT_GRID_RANGE, args)
