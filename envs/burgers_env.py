@@ -208,7 +208,7 @@ class AbstractBurgersEnv(gym.Env):
             if memoize:
                 print("Note: can't memoize solution when using one-step reward.")
         elif memoize:
-            self.solution = MemoizedSolution(self.solution)
+            self.solution = MemoizedSolution(self.solution, episode_length)
 
         show_separate_weno = (self.analytical
                               or self.precise_weno_order != self.weno_order
@@ -221,7 +221,7 @@ class AbstractBurgersEnv(gym.Env):
                                                      flux_function=self.burgers_flux,
                                                      source=self.source, eps=eps)
             if memoize:
-                self.weno_solution = MemoizedSolution(self.weno_solution)
+                self.weno_solution = MemoizedSolution(self.weno_solution, episode_length)
         else:
             self.weno_solution = None
 

@@ -126,15 +126,15 @@ def main():
         eval_envs = []
         smooth_sine_args = Namespace(**vars(eval_env_args))
         smooth_sine_args.init_type = "smooth_sine"
-        smooth_sine_args.ep_length = 500
+        smooth_sine_args.ep_length = args.ep_length * 2
         eval_envs.append(env_builder.build_env(args.env, smooth_sine_args, test=True))
         smooth_rare_args = Namespace(**vars(eval_env_args))
         smooth_rare_args.init_type = "smooth_rare"
-        smooth_rare_args.ep_length = 500
+        smooth_rare_args.ep_length = args.ep_length * 2
         eval_envs.append(env_builder.build_env(args.env, smooth_rare_args, test=True))
         accelshock_args = Namespace(**vars(eval_env_args))
         accelshock_args.init_type = "accelshock"
-        accelshock_args.ep_length = 500
+        accelshock_args.ep_length = args.ep_length * 2
         eval_envs.append(env_builder.build_env(args.env, accelshock_args, test=True))
     elif args.eval_env == "long":
         eval_env_args.ep_length = 500
