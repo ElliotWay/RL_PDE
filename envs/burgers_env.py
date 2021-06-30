@@ -1541,9 +1541,13 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         # Maybe if this whole thing actually works.
 
         plus_indexes = create_stencil_indexes(
-                        stencil_size=(self.weno_order * 2 - 1),
-                        num_stencils=(self.nx + 1),
-                        offset=(self.ng - self.weno_order))
+                        stencil_size=self.state_order * 2 - 1,
+                        num_stencils=self.nx + 1,
+                        offset=self.ng - self.state_order)
+        #plus_indexes = create_stencil_indexes(
+                        #stencil_size=(self.weno_order * 2 - 1),
+                        #num_stencils=(self.nx + 1),
+                        #offset=(self.ng - self.weno_order))
         minus_indexes = plus_indexes + 1
         minus_indexes = np.flip(minus_indexes, axis=-1)
 
