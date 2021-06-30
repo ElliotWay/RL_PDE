@@ -318,13 +318,15 @@ class MemoizedSolution(SolutionBase):
     of the same parameters.
     Wastes memory for solutions that change every episode.
     """
-    def __init__(self, solution):
+    def __init__(self, solution, ep_length):
         assert not isinstance(solution, OneStepSolution), ("Memoized solutions are not compatible"
         + " with one-step solutions. (Memoized solutions stay the same whereas one-step solutions"
         + " always change).")
         super().__init__(nx=solution.nx, ng=solution.ng, xmin=solution.xmin, xmax=solution.xmax,
                 # The inner solution should record the state history, not this wrapper.
                 record_state=False)
+
+        self.correct_solution_history_length = ep_length + 1
 
         self.inner_solution = solution
         self.inner_solution.set_record_state(True)
@@ -348,6 +350,11 @@ class MemoizedSolution(SolutionBase):
     def _update(self, dt, time):
         if self.isSavedSolution:
             self.time_index += 1
+            if self.time_index >= len(self.get_state_history()):
+                raise Exception("MemoizedSolution: too many updates!"
+                        + " The saved solution is not long enough to account for the number"
+                        + " of update calls. This likely occured because you called update()"
+                        + " more times than the expected episode length.")
         else:
             if self.dt is None:
                 self.dt = dt
@@ -390,7 +397,9 @@ class MemoizedSolution(SolutionBase):
     def _reset(self, init_params):
         # If time_index is -1, then this is the first call to reset,
         # and we don't have a potential solution to save.
-        if not self.isSavedSolution and self.time_index != -1:
+        if (not self.isSavedSolution and self.time_index != -1
+                and not len(self.inner_solution.get_state_history())
+                    < self.correct_solution_history_length):
             if len(self.master_state_dict) < self.MAX_MEMOS:
                 state_history = self.inner_solution.get_state_history().copy()
                 self.master_state_dict[self.params_str] = state_history
