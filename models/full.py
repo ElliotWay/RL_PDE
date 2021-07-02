@@ -94,15 +94,27 @@ class GlobalBackpropModel(GlobalModel):
             self.initial_state_ph = tf.placeholder(dtype=self.dtype,
                     shape=(None, self.args.nx), name="init_real_state")
 
+            self.env.reset()
+            cell2 = IntegrateCell(
+                    prep_state_fn=self.env.tf_prep_state,
+                    policy_net=self.wrapped_policy,
+                    integrate_fn=self.env.tf_integrate,
+                    reward_fn=self.env.tf_calculate_reward,
+                    )
+            rnn2 = IntegrateRNN(cell2)
+            self.initial_state_ph_outflow = tf.placeholder(dtype=self.dtype, shape=(None, self.args.nx),
+                                                           name="init_real_state_outflow")
+
             #TODO possibly restrict num_steps to something smaller?
             # We'd then need to sample timesteps from a WENO trajectory.
             #NOTE 4/14 - apparently it works okay with the full episode! We may still want to restrict
             # this if resource constraints become an issue with more complex environments.
 
             states, actions, rewards = rnn(self.initial_state_ph, num_steps=self.args.ep_length)
-            self.states = states
-            self.actions = actions
-            self.rewards = rewards
+            states2, actions2, rewards2 = rnn2(self.initial_state_ph_outflow, num_steps=self.args.ep_length)
+            self.states = tf.concat([states, states2], axis=1)
+            self.actions = tf.concat([actions, actions2], axis=1)
+            self.rewards = tf.concat([rewards, rewards2], axis=1)
 
             assert len(self.rewards.shape) == 3
             # Sum over the timesteps in the trajectory (axis 0),
@@ -166,11 +178,11 @@ class GlobalBackpropModel(GlobalModel):
 
             self._loading_ready = True
 
-    def train(self, initial_state):
+    def train(self, initial_state, initial_conditions_outflow):
         if not self._training_ready:
             self.setup_training()
 
-        feed_dict = {self.initial_state_ph:initial_state}
+        feed_dict = {self.initial_state_ph:initial_state, self.initial_state_ph_outflow:initial_conditions_outflow}
 
         _, grads, loss, rewards, actions, states = self.session.run(
                 [self.train_policy, self.grads, self.loss, self.rewards, self.actions, self.states],
@@ -193,7 +205,7 @@ class GlobalBackpropModel(GlobalModel):
             if any(param_nans.values()):
                 print("NaNs detected in " +
                         str([name for name, is_nan in param_nans.items() if is_nan]))
-            
+
             if not hasattr(self, 'iteration'):
                 self.iteration = 0
             else:
@@ -413,7 +425,7 @@ class IntegrateCell(Layer):
         self.policy_net = policy_net
         self.integrate_fn = integrate_fn
         self.reward_fn = reward_fn
-        
+
     def build(self, input_size):
         super().build(input_size)
 

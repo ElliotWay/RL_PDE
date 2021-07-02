@@ -410,17 +410,25 @@ class BatchGlobalEMI(EMI):
     def training_episode(self, env):
         num_inits = self.args.batch_size
         initial_conditions = []
+        initial_conditions_outflow = []
         init_params = []
+        init_params_outflow = []
         for _ in range(num_inits):
             rl_state = env.reset()
             # Important to use copy - grid.get_real returns the writable grid cells, which are
             # changed by the environment.
             phys_state = np.copy(env.grid.get_real())
-            initial_conditions.append(phys_state)
-            init_params.append(env.grid.init_params) # This is starting to smell.
+            if env.grid.boundary == 'periodic':
+                initial_conditions.append(phys_state)
+                init_params.append(env.grid.init_params)  # This is starting to smell.
+            else:
+                initial_conditions_outflow.append(phys_state)
+                init_params_outflow.append(env.grid.init_params)  # This is starting to smell.
         initial_conditions = np.array(initial_conditions)
+        initial_conditions_outflow = np.array(initial_conditions_outflow)
+        init_params += init_params_outflow
 
-        extra_info = self._model.train(initial_conditions)
+        extra_info = self._model.train(initial_conditions, initial_conditions_outflow)
 
         states = extra_info['states']
         del extra_info['states']
