@@ -1468,7 +1468,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         if self.eps > 0.0:
             R = self.eps * self.lap()
-            step += dt * R[g.ilo:g.ihi+1]
+            step += dt * R[self.grid.ilo:self.grid.ihi+1]
         if self.source is not None:
             self.source.update(dt, self.t + dt)
             step += dt * self.source.get_real()
@@ -1529,7 +1529,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         else:
             raise NotImplementedError()
 
-        # Compute flux.
+        # Compute flux. Burgers specific!!!
         flux = 0.5 * (full_state ** 2)
 
         alpha = tf.reduce_max(tf.abs(flux))
@@ -1595,11 +1595,23 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         #TODO implement viscosity and random source?
         if self.eps != 0.0:
-            raise NotImplementedError("Viscosity has not been implemented in global backprop.")
+            # Compute the Laplacian. This involves the first ghost cell past the boundary.
+            central_lap = (real_state[:-2] - 2.0*real_state[1:-1] + real_state[2:]) / (self.grid.dx**2)
+            if self.grid.boundary == "outflow":
+                left_lap = (-real_state[0] + real_state[1]) / (self.grid.dx**2) # X-2X+Y = -X+Y
+                right_lap = (real_state[-2] - real_state[-1]) / (self.grid.dx**2) # X-2Y+Y = X-Y
+            elif self.grid.boundary == "periodic":
+                left_lap = (real_state[-1] - 2.0*real_state[0] + real_state[1]) / (self.grid.dx**2)
+                right_lap = (real_state[-2] - 2.0*real_state[-1] + real_state[0]) / (self.grid.dx**2)
+            else:
+                raise NotImplementedError()
+            lap = tf.concat([[left_lap], central_lap, [right_lap]], axis=0)
+
+            step += self.dt * self.eps * lap
         if self.source != None:
             raise NotImplementedError("External source has not been implemented"
                     + " in global backprop.")
-        
+
         new_state = real_state + step
         return new_state
 
