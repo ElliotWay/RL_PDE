@@ -119,7 +119,7 @@ class GlobalBackpropModel(GlobalModel):
             assert len(self.rewards.shape) == 3
             # Sum over the timesteps in the trajectory (axis 0),
             # then average over each location and the batch (axes 2 and 1).
-            self.loss = -tf.reduce_mean(tf.reduce_sum(rewards, axis=0))
+            self.loss = -tf.reduce_mean(tf.reduce_sum(self.rewards, axis=0))
 
             gradients = tf.gradients(self.loss, self.policy_params)
             self.grads = list(zip(gradients, self.policy_params))
