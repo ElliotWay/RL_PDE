@@ -36,7 +36,11 @@ class GlobalBackpropModel(GlobalModel):
         self.dtype = dtype
         self.env = env
 
-        self.session = tf.Session()
+        # Stop Tensorflow from eating up the entire GPU (if we're using one).
+        tf_config = tf.ConfigProto()
+        tf_config.gpu_options.allow_growth = True
+
+        self.session = tf.Session(config=tf_config)
 
         self._policy_ready = False
         self._training_ready = False

@@ -1,12 +1,13 @@
 import os
 os.environ['PYTHONHASHSEED'] = "42069"
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = "2"
+os.environ['CUDA_VISIBLE_DEVICES'] = "-1" #Block GPU for now.
 import argparse
+from argparse import Namespace
 import shutil
 import signal
 import sys
 import time
-from argparse import Namespace
 import subprocess
 
 import numpy as np

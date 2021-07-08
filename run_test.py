@@ -1,7 +1,8 @@
-import argparse
-from argparse import Namespace
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = "2"
+os.environ['CUDA_VISIBLE_DEVICES'] = "-1" #Block GPU for now.
+import argparse
+from argparse import Namespace
 import shutil
 import signal
 import sys
