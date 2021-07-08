@@ -108,9 +108,9 @@ _tensorflow_fn_dict[fn_key] = tf.identity
     #return logp_pi
 
 clip_obs = 5.0 # (in stddevs from the mean)
-clip_obs_tf = tf.constant(clip_obs)
+clip_obs_tf = tf.constant(clip_obs, dtype=tf.float64)
 epsilon = 1e-10
-epsilon_tf = tf.constant(epsilon)
+epsilon_tf = tf.constant(epsilon, dtype=tf.float64)
 def z_score_last_dim(obs):
     z_score = (obs - obs.mean(axis=-1)[..., None]) / (obs.std(axis=-1)[..., None] + epsilon)
     return np.clip(z_score, -clip_obs, clip_obs)

@@ -1653,7 +1653,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         beta_fp = tf.reduce_sum(sigma_mat * q_squared_fp, axis=(-2, -1))
         beta_fm = tf.reduce_sum(sigma_mat * q_squared_fm, axis=(-2, -1))
 
-        epsilon = tf.constant(1e-16)
+        epsilon = tf.constant(1e-16, dtype=tf.float64)
         alpha_fp = C_values / (epsilon + beta_fp ** 2)
         alpha_fm = C_values / (epsilon + beta_fm ** 2)
 

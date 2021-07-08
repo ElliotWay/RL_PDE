@@ -77,17 +77,18 @@ def policy_net(state_tensor, action_shape, layers, activation_fn,
     return action
 
 class PolicyNet(Layer):
-    def __init__(self, layers, action_shape, activation_fn=tf.nn.relu, name=None):
+    def __init__(self, layers, action_shape, activation_fn=tf.nn.relu, name=None, dtype=None):
         self.action_shape = action_shape
+        self.data_type = dtype
         flattened_action_shape = np.prod(action_shape)
 
         self.hidden_layers = []
         for i, size in enumerate(layers):
-            fc_layer = Dense(size, activation=activation_fn, name=("fc" + str(i)))
+            fc_layer = Dense(size, activation=activation_fn, name=("fc" + str(i)), dtype=self.data_type)
             self.hidden_layers.append(fc_layer)
 
         # TODO SB uses orth_init for this layer. Is that necessary?
-        self.output_layer = Dense(flattened_action_shape, name="action")
+        self.output_layer = Dense(flattened_action_shape, name="action", dtype=self.data_type)
 
         super().__init__(name=name)
 
