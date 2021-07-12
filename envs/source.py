@@ -1,9 +1,9 @@
 import numpy as np
 
-from envs.grid import GridBase
+from envs.grid import AbstractGrid
 
-class SourceBase(GridBase):
-    """ SourceBase is the same as GridBase but indicates that subclasses are intended to be external sources. """
+class SourceBase(AbstractGrid):
+    """ SourceBase is the same as AbstractGrid but indicates that subclasses are intended to be external sources. """
     pass
 
 class RandomSource(SourceBase):

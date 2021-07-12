@@ -4,10 +4,10 @@ from scipy.optimize import fixed_point
 from scipy.optimize import brentq
 
 import envs.weno_coefficients as weno_coefficients
-from envs.grid import GridBase, Grid1d
+from envs.grid import AbstractGrid, Grid1d
 
 
-class SolutionBase(GridBase):
+class SolutionBase(AbstractGrid):
     """
     Base class for Solutions.
 
