@@ -154,3 +154,50 @@ def human_readable_time_delta(time_delta, sig_units=0):
         return "{:.2f}wk".format(weeks)
 
     return "{:.2f}yr".format(years)
+
+
+class AxisSlice:
+    """
+    Restrict an ndarray to indexing along a particular axis.
+
+    AxisSlice(a, 1)[index] is (supposed to be) equivalent to a[:, index].
+    The advantage of AxisSlice comes when the axis is not known at compile time.
+    
+    Examples
+    --------
+    >>> a = np.arange(12).reshape(3, 4)
+    >>> a
+    array([[0, 1,  2,  3],
+           [4, 5,  6,  7],
+           [8, 9, 10, 11]])
+    >>> axis0_slice = AxisSlice(a, 0)
+    >>> axis0_slice[-2:]
+    array([[4, 5, 6, 7],
+           [8, 9, 10, 11]])
+    >>> axis1_slice = AxisSlice(a, 1)
+    >>> axis1_slice[1]
+    array([1, 5, 9])
+    >>> axis1_slice[(0,3)] = [3,1,4]
+    >>> a
+    array([[3, 1,  2, 3],
+           [1, 5,  6, 1],
+           [4, 9, 10, 4]])
+    """
+    def __init__(self, arr, axis):
+        self.arr = arr
+        self.axis = axis % arr.ndim # Using "% arr.ndim" handles negative axes.
+    def __getitem__(self, indexes):
+        return self.arr[(slice(None),) * self.axis + (indexes,)]
+    def __setitem__(self, indexes, values):
+        # Handle other array-like, but don't make a new copy if already ndarray.
+        values = np.array(values, copy=False)
+
+        # If indexes is NOT a single index, but values is shaped to fit a single index,
+        # then we need to adjust the shape to broadcast correctly.
+        if (not np.issubdtype(type(indexes), np.integer)
+                and values.ndim == self.arr.ndim - 1):
+            values = np.expand_dims(values, axis=self.axis)
+
+        self.arr[(slice(None),) * self.axis + (indexes,)] = values
+
+

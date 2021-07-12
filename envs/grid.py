@@ -1,16 +1,18 @@
-# 1D class adapted from code for Introduction to Computational Astrophysical Hydrodynamics
-# Written by M. Zingale (2013-03-26).
+# The 1D version was originally adapted from code for
+# Introduction to Computational Astrophysical Hydrodynamics
+# by M. Zingale (2013-03-26).
 
 import sys
-
 import numpy as np
 
-class GridBase:
+from util.misc import AxisSlice
+
+class AbstractGrid:
     """
     Abstract base class for Grids.
 
-    A Grid represents a quantity in a physical space that has been discretized
-    into cells. A Grid contains real cells, representing the values within the
+    An AbstractGrid represents a quantity in a physical space that has been discretized
+    into cells. An AbstractGrid contains real cells, representing the values within the
     physical space, and ghost cells, representing values just beyond the
     boundary of the physical space necessary for computing convolutions over
     the phyiscal space.
@@ -18,23 +20,151 @@ class GridBase:
     A grid can be reset to a state specified by a standard parameter dict,
     and set using a list of real values (the ghost cells should be updated
     using some other means).
+
+    How the AbstractGrid represents the physical space is up to the subclass. It may not have any
+    persistent representation, as with an analytical solution, or it may contain a separate
+    AbstractGrid itself.
     """
 
-    def __init__(self, nx, ng, xmin, xmax):
-        self.xmin = xmin
-        self.xmax = xmax
-        self.nx = nx
-        self.ng = ng
+    def __init__(self, num_cells, num_ghosts, min_value, max_value):
+        """
+        Construct a new Grid of arbitrary physical dimensions.
 
-        self.dx = (xmax - xmin) / (nx)
+        num_cells should be an iterable defining the number of cells in the grid, e.g. [5,3,7] for
+        a 5x3x7 grid. num_cells can be a scalar e.g. 5 for a 1-dimensional grid.
+        num_ghosts, min_value, and max_value can each be iterables of the same size as num_cells,
+        giving specific values for each dimension, or scalars, giving the same value for each
+        dimension (useful for square grids).
 
-        # Physical coordinates: cell-centered, left and right edges
-        self.x = xmin + (np.arange(nx + 2 * ng) - ng + 0.5) * self.dx
-        self.real_x = self.x[ng:-ng]
+        Parameters
+        ---------
+        num_cells : [int] OR int
+            List of the number of cells with which to discretize each dimension.
+            Can be a single int if the grid is one dimensional.
+        num_ghosts : [int] OR int
+            The number of ghost cells for each dimension. Either a list that gives the number of
+            each dimension, or a single int to use the same number for each dimension.
+        min_value : [float] OR float
+            The lower bound of the grid for each dimension. Either a list that gives the lower
+            bound for each dimension, or a single float to give each dimension the same lower
+            bound.
+        max_value : [float] OR float
+            The upper bound of the grid for each dimension. Either a list that gives the upper
+            bound for each dimension, or a single float to give each dimension the same upper
+            bound.
+        """
 
-        # Physical coordinates: interfaces, left edges
-        self.inter_x = xmin + (np.arange(nx + 2 * ng) - ng) * self.dx
+        try:
+            iterator = iter(num_cells)
+        except TypeError:
+            self.one_dimensional = True
+        else:
+            self.one_dimensional = False
+        
+        self.num_cells = num_cells
+
+        if not self.one_dimensional:
+            try:
+                if len(num_ghosts) != len(num_cells):
+                    raise ValueError("GridBase: Size of num_ghosts must match size of num_cells"
+                            + " ({} vs {}).".format(len(num_ghosts), len(num_cells)))
+                else:
+                    self.num_ghosts = num_ghosts
+            except TypeError:
+                self.num_ghosts = (num_ghosts,) * len(num_cells)
+
+            try:
+                if len(min_value) != len(num_cells):
+                    raise ValueError("GridBase: Size of min_value must match size of num_cells"
+                            + " ({} vs {}).".format(len(min_value), len(num_cells)))
+                else:
+                    self.min_value = min_value
+            except TypeError:
+                self.min_value = (min_value,) * len(num_cells)
+
+            try:
+                if len(max_value) != len(num_cells):
+                    raise ValueError("GridBase: Size of max_value must match size of num_cells"
+                            + " ({} vs {}).".format(len(max_value), len(num_cells)))
+                else:
+                    self.max_value = max_value
+            except TypeError:
+                self.max_value = (max_value,) * len(num_cells)
+        else:
+            self.num_ghosts = num_ghosts
+            self.min_value = min_value
+            self.max_value = max_value
+
+        if self.one_dimensional:
+            self.dx = (self.max_value - self.min_value) / self.num_cells
+            self.coords = (self.min_value + 
+                (np.arange(self.num_cells + 2 * self.num_ghosts)
+                        - self.num_ghosts + 0.5) * self.dx)
+            self.real_coords = self.coords[self.num_ghosts:-self.num_ghosts]
+            self.interfaces = (self.min_value +
+                (np.arange(self.num_cells + 2 * self.num_ghosts)
+                        - self.num_ghosts) * self.dx)
+        else:
+            # Cell size.
+            self.dx = []
+            # Physical coordinates: cell-centered, left and right edges
+            # Note that for >1 dimension, these are not the coordinates themselves - 
+            # the actual coordinates are the cross product of these,
+            # e.g. coords[0] X coords[1] X coords[2].
+            self.coords = []
+            # cell-centered coordinates, only real cells (not ghosts)
+            self.real_coords = []
+            # Physical coordinates: interfaces, left edges
+            self.interfaces = []
+
+            for nx, ng, xmin, xmax in zip(
+                    self.num_cells, self.num_ghosts, self.min_value, self.max_value):
+                dx = (xmax - xmin) / nx
+                self.dx.append(dx)
+
+                x = xmin + (np.arange(nx + 2 * ng) - ng + 0.5) * dx
+                self.coords.append(x)
+                real_x = x[ng:-ng]
+                self.real_coords.append(real_x)
+                inter_x = xmin + (np.arange(nx + 2 * ng) - ng) * dx
+                self.interfaces.append(inter_x)
+
+    # Old names for compatability.
+    @property
+    def nx(self): return self.num_cells
+    @property
+    def ng(self): return self.num_ghosts
+    @property
+    def xmin(self): return self.min_value
+    @property
+    def xmax(self): return self.max_value
+    @property
+    def inter_x(self): return self.interfaces
+
+    # x, y, and z make for more readable initial conditions.
+    @property
+    def x(self):
+        if self.one_dimensional:
+            return self.coords
+        else:
+            return self.coords[0]
+    @property
+    def real_x(self):
+        if self.one_dimensional:
+            return self.real_coords
+        else:
+            return self.real_coords[0]
+    @property
+    def y(self): return self.coords[1]
+    @property
+    def real_y(self): return self.real_coords[1]
+    @property
+    def z(self): return self.coords[2]
+    @property
+    def real_z(self): return self.real_coords[2]
     
+    #TODO If grids become really big, then we won't be able to read/write them all at once.
+    # Implement __get_item__ and __set_item__ (i.e. the [] operator) if that happens.
     def set(self, real_values):
         raise NotImplementedError()
 
@@ -49,8 +179,102 @@ class GridBase:
 
     def scratch_array(self):
         """ Return a zeroed array dimensioned for this grid. """
-        return np.zeros((self.nx + 2 * self.ng), dtype=np.float64)
+        if self.one_dimensional:
+            return np.zeros((self.nx + 2 * self.ng), dtype=np.float64)
+        else:
+            return np.zeros([len(x) for x in self.coords], dtype=np.float64)
 
+class GridBase(AbstractGrid):
+    """
+    Slightly less abstract Grid class.
+
+    A GridBase uses a Numpy ndarray to represent the phyiscal space. This allows for default
+    implementations of set(), get_real() and get_full().
+
+    The reset() method must still be implemented in the base class, as the potential varieties of
+    parameters with which to initialize the grid typically depend on the dimension.
+
+    set() calls self.update_boundary(). update_boundary() should be overriden in a base class if
+    other boundary conditions are required.
+    """
+
+    def __init__(self, num_cells, num_ghosts, min_value, max_value, boundary="outflow"):
+        super().__init__(num_cells, num_ghosts, min_value, max_value)
+        
+        self.boundary = boundary
+
+        # Storage for the solution.
+        self.space = self.scratch_array()
+
+        if self.one_dimensional:
+            # slice(a,b) is equivalent to a:b.
+            self.real_slice = slice(self.num_ghosts, -self.num_ghosts)
+        else:
+            self.real_slice = tuple([slice(ng, -ng) for ng in self.num_ghosts])
+
+    # Old names for compatability.
+    @property
+    def u(self): return self.space
+
+    def set(self, new_values):
+        """
+        Set the real (non-ghost) values in the grid.
+
+        The ghost cells are also updated by internally calling self.update_boundary().
+
+        Parameters
+        ---------
+        new_values : array-like
+            Array of new values. The values should map to real cells and not ghost cells,
+            so len(new_values) == grid.num_cells.
+        """
+        self.space[self.real_slice] = new_values
+        self.update_boundary()
+
+    def get_real(self):
+        """
+        Get the real (non-ghost) values in the grid.
+        Note that this returns a WRITABLE view on the internal ndarray.
+        """
+        return self.space[self.real_slice]
+    def get_full(self):
+        """
+        Get the full grid, including ghost cells.
+        Note that this returns a WRITABLE view on the internal ndarray.
+        """
+        return self.space
+
+    def update_boundary(self):
+        """
+        Update the ghost cells based on the value of the grid.boundary field.
+
+        Grid.set calls this method, so you need only use this method if accessing the grid by some
+        other means, such as writing directly to grid.space.
+        """
+        # Periodic - copying from the opposite end, as if the space wraps around
+        if self.one_dimensional:
+            if self.boundary == "periodic":
+                self.space[:self.num_ghosts] = self.space[-2*self.num_ghosts : -self.num_ghosts]
+                self.space[-self.num_ghosts:] = self.space[self.num_ghosts : 2*self.num_ghosts]
+            elif self.boundary == "outflow":
+                self.space[:self.num_ghosts] = self.u[self.num_ghosts]
+                self.space[-self.num_ghosts:] = self.u[-self.num_ghosts - 1]
+            else:
+                raise Exception("Boundary type \"" + str(self.boundary) + "\" not recognized.")
+
+        else:
+            #TODO: Could also loop over iterable boundary condition if we want different boundaries
+            # for different axes.
+            for axis, ng in enumerate(self.num_ghosts):
+                axis_slice = AxisSlice(self.space, axis)
+                if self.boundary == "periodic":
+                        axis_slice[:ng] = axis_slice[-2*ng: -ng]
+                        axis_slice[-ng:] = axis_slice[ng: 2*ng]
+                elif self.boundary == "outflow":
+                        axis_slice[:ng] = axis_slice[ng]
+                        axis_slice[-ng:] = axis_slice[-ng - 1]
+                else:
+                    raise Exception("Boundary type \"" + str(self.boundary) + "\" not recognized.")
 
 class Grid1d(GridBase):
     """
@@ -106,7 +330,7 @@ class Grid1d(GridBase):
             condition will vary or be the same, depending on this param.
         """
 
-        super().__init__(nx=nx, ng=ng, xmin=xmin, xmax=xmax)
+        super().__init__(nx, ng, xmin, xmax, boundary)
 
         # _init_type and _boundary do not change, init_type and boundary may
         # change if init_type is scheduled or sampled.
@@ -126,15 +350,6 @@ class Grid1d(GridBase):
         self.ilo = ng
         self.ihi = ng + nx - 1
 
-        # storage for the solution
-        self.u = np.zeros((nx + 2 * ng), dtype=np.float64)
-
-    def get_real(self):
-        """ Get the real (non-ghost) values in the grid. """
-        return self.u[self.ng:-self.ng]
-    def get_full(self):
-        """ Get the full grid, including ghost cells. """
-        return self.u
     def real_length(self):
         """ Return the number of indexes of real (non-ghost) points """
         return self.nx
@@ -165,9 +380,10 @@ class Grid1d(GridBase):
         elif self._init_type == "sample":
             self.init_type = np.random.choice(self._init_sample_types, p=self._init_sample_probs)
 
-        boundary = self._boundary
         if 'boundary' in params:
             boundary = params['boundary']
+        else:
+            boundary = self._boundary
         self.boundary = boundary
 
         self.init_params = {'init_type': self.init_type}
@@ -337,38 +553,89 @@ class Grid1d(GridBase):
         self.init_params['boundary'] = self.boundary
         self.update_boundary()
 
-    def set(self, new_values):
-        """
-        Update the grid with new values.
-        The ghost cells are also updated.
-
-        Parameters
-        ---------
-        new_values : ndarray
-            Array of new values, len(new_values) should be nx,
-            ie it should not include ghost cells.
-        """
-        self.u[self.ng:-self.ng] = new_values
-        self.update_boundary()
-
     def update_boundary(self):
-        """
-        Update the ghost cells based on the value of the Grid.boundary field.
-        You should not need to call this - Grid.set calls this method.
-        """
-        # Periodic - copying from the opposite end, as if the space wraps around
-        if self.boundary == "periodic":
-            self.u[0:self.ilo] = self.u[self.ihi - self.ng + 1:self.ihi + 1]
-            self.u[self.ihi + 1:] = self.u[self.ilo:self.ilo + self.ng]
-        # Outflow - copy the edge values into the boundaries
-        elif self.boundary == "outflow":
-            self.u[0:self.ilo] = self.u[self.ilo]
-            self.u[self.ihi + 1:] = self.u[self.ihi]
-        # First - assume the first derivative stays constant based on the 2 edge values
-        elif self.boundary == "first":
+        if self.boundary == "first":
             left_d = self.u[self.ilo] - self.u[self.ilo+1]
             self.u[0:self.ilo] = (self.u[self.ilo] + (1 + np.arange(self.ng))*left_d)[::-1]
             right_d = self.u[self.ihi] - self.u[self.ihi-1]
             self.u[self.ihi+1:] = (self.u[self.ihi] + (1 + np.arange(self.ng))*right_d)
         else:
-            raise Exception("Boundary type \"" + str(self.boundary) + "\" not recognized.")
+            super().update_boundary()
+
+class Grid2d(GridBase):
+    def __init__(self, num_cells, num_ghosts, min_value, max_value, boundary=None,
+            init_type="gaussian", deterministic_init=False):
+        super().__init__(num_cells, num_ghosts, min_value, max_value, boundary)
+
+        # _init_type and _boundary do not change, init_type and boundary may
+        # change if init_type is scheduled or sampled.
+        self._init_type = init_type
+        self.init_type = init_type
+        self._boundary = boundary
+        self.boundary = boundary
+        self.deterministic_init = deterministic_init
+        self._init_schedule_index = 0
+        self._init_schedule = ["gaussian"]
+        self._init_sample_types = self._init_schedule
+        self._init_sample_probs = [1/len(self._init_sample_types)]*len(self._init_sample_types)
+
+        self.init_params = {}
+
+
+    def reset(self, params={}):
+
+        if 'init_type' in params:
+            self.init_type = params['init_type']
+        elif self._init_type == "schedule":
+            self.init_type = self._init_schedule[self._init_schedule_index]
+            self._init_schedule_index = (self._init_schedule_index + 1) % len(self._init_schedule)
+        elif self._init_type == "sample":
+            self.init_type = np.random.choice(self._init_sample_types, p=self._init_sample_probs)
+
+        if 'boundary' in params:
+            self.boundary = params['boundary']
+        else:
+            self.boundary = self._boundary
+
+        new_params = {'init_type': self.init_type}
+
+        if self.init_type == "custom" or type(self.init_type) is not str:
+            assert callable(self._init_type), "Custom init must have function provided as init type."
+            assert boundary is not None, "Cannot use default boundary with custom init type."
+            new_values, custom_params = self._init_type(params)
+            new_params.update(custom_params)
+            self.space[self.real_slice] = new_values
+
+        elif self.init_type == "gaussian":
+            if self.boundary is None:
+                self.boundary = "outflow"
+
+            if 'a' in params:
+                a = params['a']
+            else:
+                a = 0.0
+            new_params['a'] = a
+            if 'b' in params:
+                b = params['b']
+            else:
+                b = 1.0
+            new_params['b'] = b
+            if 'c' in params:
+                c = params['c']
+            else:
+                c = tuple((max_val - min_val)/2 for max_val, min_val in
+                        zip(self.max_value, self.min_value))
+            new_params['c'] = c
+            if 'sigma' in params:
+                sigma = params['sigma']
+            else:
+                sigma = tuple(0.091 for _ in self.num_cells)
+            new_params['sigma'] = sigma
+            self.space = a + b*np.exp(-(
+                (self.x[:, None] - c[0])**2/(2.0*sigma[0]**2)
+                + (self.y[None, :] - c[1])**2/(2.0*sigma[1]**2)))
+
+        new_params['boundary'] = self.boundary
+        self.init_params = new_params
+        
+        self.update_boundary()
