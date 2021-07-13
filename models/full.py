@@ -80,41 +80,46 @@ class GlobalBackpropModel(GlobalModel):
             # This does not make a lot of sense and should be changed. Ideally, this behavior
             # is entirely controlled by the EMI - but how do we move it there?
 
-            cell = IntegrateCell(
-                    prep_state_fn=self.env.tf_prep_state,
-                    policy_net=self.wrapped_policy,
-                    integrate_fn=self.env.tf_integrate,
-                    reward_fn=self.env.tf_calculate_reward,
-                    )
-            rnn = IntegrateRNN(cell)
+            state_list = []
+            action_list = []
+            reward_list = []
+            ph_list = []
+            for boundary in ['periodic', 'outflow']:
 
-            # initial_state_ph is the REAL physical initial state
-            # (It should not contain ghost cells - those should be handled by the prep_state function
-            # that converts real state to rl state.)
-            self.initial_state_ph = tf.placeholder(dtype=self.dtype,
-                    shape=(None, self.args.nx), name="init_real_state")
+                cell = IntegrateCell(
+                        prep_state_fn=self.env.tf_prep_state,
+                        policy_net=self.wrapped_policy,
+                        integrate_fn=self.env.tf_integrate,
+                        reward_fn=self.env.tf_calculate_reward,
+                        )
+                rnn = IntegrateRNN(cell)
 
-            self.env.reset()
-            cell2 = IntegrateCell(
-                    prep_state_fn=self.env.tf_prep_state,
-                    policy_net=self.wrapped_policy,
-                    integrate_fn=self.env.tf_integrate,
-                    reward_fn=self.env.tf_calculate_reward,
-                    )
-            rnn2 = IntegrateRNN(cell2)
-            self.initial_state_ph_outflow = tf.placeholder(dtype=self.dtype, shape=(None, self.args.nx),
-                                                           name="init_real_state_outflow")
+                # initial_state_ph is the REAL physical initial state
+                # (It should not contain ghost cells - those should be handled by the prep_state function
+                # that converts real state to rl state.)
+                ph = tf.placeholder(dtype=self.dtype,
+                        shape=(None, self.args.nx), name="init_real_state")
+
+                states, actions, rewards = rnn(ph, num_steps=self.args.ep_length)
+
+                state_list.append(states)
+                action_list.append(actions)
+                reward_list.append(rewards)
+                ph_list.append(ph)
+
+                self.env.reset()
+
+            self.initial_state_ph = ph_list[0]
+            self.initial_state_ph_outflow = ph_list[1]
 
             #TODO possibly restrict num_steps to something smaller?
             # We'd then need to sample timesteps from a WENO trajectory.
             #NOTE 4/14 - apparently it works okay with the full episode! We may still want to restrict
             # this if resource constraints become an issue with more complex environments.
 
-            states, actions, rewards = rnn(self.initial_state_ph, num_steps=self.args.ep_length)
-            states2, actions2, rewards2 = rnn2(self.initial_state_ph_outflow, num_steps=self.args.ep_length)
-            self.states = tf.concat([states, states2], axis=1)
-            self.actions = tf.concat([actions, actions2], axis=1)
-            self.rewards = tf.concat([rewards, rewards2], axis=1)
+            self.states = tf.concat(state_list, axis=1)
+            self.actions = tf.concat(action_list, axis=1)
+            self.rewards = tf.concat(reward_list, axis=1)
 
             assert len(self.rewards.shape) == 3
             # Sum over the timesteps in the trajectory (axis 0),
