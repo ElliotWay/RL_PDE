@@ -56,7 +56,6 @@ class SolutionBase(AbstractGrid):
 
 
 class PreciseWENOSolution(SolutionBase):
-    #TODO: should also calculate precise WENO with smaller timesteps.
 
     def __init__(self, nx, ng, xmin, xmax,
                  precise_order, precise_scale, init_type, boundary, flux_function,

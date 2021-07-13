@@ -139,6 +139,8 @@ class AbstractGrid:
     def xmax(self): return self.max_value
     @property
     def inter_x(self): return self.interfaces
+    @property
+    def u(self): return self.space
 
     # x, y, and z make for more readable initial conditions.
     @property
