@@ -166,26 +166,20 @@ class PreciseWENOSolution2D(SolutionBase):
 
         return weights
 
-    def weno_reconstruct(self, q, ng):
+    def weno_reconstruct(self, stencils):
         """
         Compute WENO reconstruction.
 
         Parameters
         ----------
-        q : ndarray (must be 1 dimensional)
-          Scalar data to reconstruct. Probably fluxes.
+        q : ndarray (number of interfaces X stencil size)
+          Stencils of scalar data to reconstruct. Probably fluxes.
 
         Returns
         -------
         Reconstructed data at the interfaces.
 
         """
-        order = self.precise_order
-        stencil_indexes = create_stencil_indexes(stencil_size=order * 2 - 1,
-                                                    num_stencils=len(q) - 2*ng + 1,
-                                                    offset=ng - order)
-        stencils = q[stencil_indexes]
-
         weights = self.weno_weights(stencils)
         sub_stencils = self.weno_sub_stencils(stencils)
 
@@ -195,65 +189,176 @@ class PreciseWENOSolution2D(SolutionBase):
     def rk_substep(self):
         g = self.precise_grid
         g.update_boundary()
+        order = self.precise_order
+        num_x, num_y = g.num_cells
+        num_ghost_x, num_ghost_y = g.num_ghosts
+        cell_size_x, cell_size_y = g.cell_size
 
         # compute flux at each point
         flux = self.flux_function(g.space)
 
-        # Use global max velocity?
-        # get maximum velocity
-        alpha = np.max(abs(g.space))
+        # Recompute flux over every row and every column.
+        vertical_flux_reconstructed = np.zeros((num_x, num_y+1)) # index a,b is actually a,b-1/2
+        horizontal_flux_reconstructed = np.zeros((num_x+1, num_y)) # index a,b is actually a-1/2, b
+        if self.record_actions is not None:
+            vertical_actions = np.zeros((num_x, num_y+1, 2, order))
+            horizontal_actions = np.zeros((num_x+1, num_y, 2, order))
+        #TODO: Vectorize further? weno_reconstruct() is already vectorized,
+        # but could reasonably be extended to apply to the entire space at once.
+        up_stencil_indexes = create_stencil_indexes(stencil_size=order * 2 - 1,
+                                                    num_stencils=num_y + 1,
+                                                    offset=num_ghost_y - order)
+        down_stencil_indexes = np.flip(up_stencil_indexes, axis=-1) + 1
+        for x_index in range(num_x):
+            grid_row = g.space[x_index, :]
+            flux_row = flux[x_index, :]
+            alpha = np.max(grid_row)
 
-        # Lax Friedrichs Flux Splitting
-        fp = (f + alpha * g.space) / 2
-        fm = (f - alpha * g.space) / 2
+            flux_up = (flux_row + alpha * grid_row) / 2
+            flux_down = (flux_row - alpha * grid_row) / 2
 
-        fpr = g.scratch_array()
-        fml = g.scratch_array()
-        flux = g.scratch_array()
+            up_stencils = flux_up[up_stencil_indexes]
+            up_reconstructed, up_weights = weno_reconstruct(up_stencils)
 
-        # compute fluxes at the cell edges
-        # compute f plus to the right
-        fpr[1:], fp_weights = self.weno_new(fp[:-1])
-        # compute f minus to the left
-        # pass the data in reverse order
-        fml[-1::-1], fm_weights = self.weno_new(fm[-1::-1])
+            down_stencils = flux_down[down_stencil_indexes]
+            down_reconstructed, down_weights = weno_reconstruct(down_stencils)
+
+            if self.record_actions is not None:
+                vertical_actions[x_index, :, 0, :] = up_weights
+                vertical_actions[x_index, :, 1, :] = down_weights
+            
+            vertical_flux_reconstructed[x_index, :] = up_reconstructed + down_reconstructed
+
+        right_stencil_indexes = create_stencil_indexes(stencil_size=order * 2 - 1,
+                                                       num_stencils=num_x + 1,
+                                                       offset=num_ghost_x - order)
+        left_stencil_indexes = np.flip(right_stencil_indexes, axis=-1) + 1
+        for y_index in range(num_y):
+            grid_col = g.space[:, y_index]
+            flux_col = flux[:, y_index]
+            # get maximum velocity
+            alpha = np.max(grid_col)
+
+            # Lax Friedrichs Flux Splitting
+            flux_right = (flux_col + alpha * grid_col) / 2
+            flux_left = (flux_col - alpha * grid_col) / 2
+
+            right_stencils = flux_right[right_stencil_indexes]
+            right_reconstructed, right_weights = weno_reconstruct(right_stencils)
+
+            left_stencils = flux_left[left_stencil_indexes]
+            left_reconstructed, left_weights = weno_reconstruct(left_stencils)
+            
+            if self.record_actions is not None:
+                horizontal_actions[:, y_index, 0, :] = right_weights
+                horizontal_actions[:, y_index, 1, :] = left_weights
+
+            horizontal_flux_reconstructed[:, y_index] = right_reconstructed + left_reconstructed
 
         if self.record_actions is not None:
-            action_weights = np.stack((fp_weights[:, self.ng-1:-(self.ng-1)], fm_weights[:, -(self.ng+1):self.ng-2:-1]))
-            # resulting array is (fp, fm) X stencil X location
-            # transpose to location X (fp, fm) X stencil
-            action_weights = action_weights.transpose((2, 0, 1))
-
             if self.record_actions == "weno":
-                self.action_history.append(action_weights)
+                self.action_history.append((vertical_actions, horizontal_actions))
             elif self.record_actions == "coef":
-                # Same as in Standard WENO agent in agents.py.
-                order = self.order
-                a_mat = weno_coefficients.a_all[order]
-                a_mat = np.flip(a_mat, axis=-1)
-                combined_weights = a_mat[None, None, :, :] * action_weights[:, :, :, None]
+                raise NotImplementedError()
+                # This corresponds to e.g. SplitFluxBurgersEnv.
+                # Still need to convert this to 2D.
+                # Related to Standard WENO agent in agents.py.
+                #a_mat = weno_coefficients.a_all[order]
+                #a_mat = np.flip(a_mat, axis=-1)
+                #combined_weights = a_mat[None, None, :, :] * action_weights[:, :, :, None]
 
-                flux_weights = np.zeros((g.real_length() + 1, 2, self.order * 2 - 1))
-                for sub_stencil_index in range(order):
-                    flux_weights[:, :, sub_stencil_index:sub_stencil_index + order] += combined_weights[:, :, sub_stencil_index, :]
-                self.action_history.append(flux_weights)
+                #flux_weights = np.zeros((g.real_length() + 1, 2, self.order * 2 - 1))
+                #for sub_stencil_index in range(order):
+                    #flux_weights[:, :, sub_stencil_index:sub_stencil_index + order] += combined_weights[:, :, sub_stencil_index, :]
+                #self.action_history.append(flux_weights)
             else:
                 raise Exception("Unrecognized action type: '{}'".format(self.record_actions))
 
-        # compute flux from fpr and fml
-        flux[1:-1] = fpr[1:-1] + fml[1:-1]
-        rhs = g.scratch_array()
-
-        if self.eps > 0.0:
-            R = self.eps * self.lap()
-            rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:]) + R[1:-1]
-        else:
-            rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:])
-
-        if self.source is not None:
-            rhs[1:-1] += self.source.get_full()[1:-1]
+        rhs = (  (vertical_flux_reconstructed[:, :-1]
+                    - vertical_flux_reconstructed[:, 1:]) / cell_size_y
+               + (horizontal_flux_reconstructed[:-1, :]
+                    - horizontal_flux_reconstructed[1:, :]) / cell_size_x
+               )
 
         return rhs
+
+    def _update(self, dt, time):
+        u_start = np.array(self.precise_grid.get_real())
+        if self.use_rk4:
+            k1 = dt * self.rk_substep()
+            self.precise_grid.set(u_start + (k1 / 2))
+
+            k2 = dt * self.rk_substep()
+            self.precise_grid.set(u_start + (k2 / 2))
+
+            k3 = dt * self.rk_substep()
+            self.precise_grid.set(u_start + k3)
+
+            k4 = dt * self.rk_substep()
+            full_step = (k1 + 2*(k2 + k3) + k4) / 6
+
+        else: #Euler
+            full_step = dt * self.rk_substep()
+
+        if self.eps > 0.0:
+            if self.use_rk4:
+                self.precise_grid.set(u_start)
+            R = self.eps * self.laplacian()
+            full_step += dt * R[num_ghost_x:-num_ghost_x, num_ghost_y:-num_ghost_y]
+
+        if self.source is not None:
+            step += dt * self.source.get_real()
+
+        self.precise_grid.space = u_start + full_step
+        self.precise_grid.update_boundary()
+
+    def laplacian(self):
+        """
+        Returns the Laplacian of g.u.
+
+        This calculation relies on ghost cells, so make sure they have been filled before calling this.
+        """
+        #TODO: rewrite this for 2D.
+
+        gr = self.precise_grid
+        u = gr.u
+
+        lapu = gr.scratch_array()
+
+        ib = gr.ilo - 1
+        ie = gr.ihi + 1
+
+        lapu[ib:ie + 1] = (u[ib - 1:ie] - 2.0 * u[ib:ie + 1] + u[ib + 1:ie + 2]) / gr.dx ** 2
+
+        return lapu
+
+    def get_full(self):
+        """ Downsample the precise solution to get coarse solution values. """
+
+        grid = self.precise_grid.get_full()
+
+        if any([xg > 0 for xg in self.extra_ghosts]):
+            extra_ghost_slice = tuple([slice(xg, -xg) for xg in self.extra_ghosts])
+            grid = grid[extra_ghost_slice]
+
+        # For each coarse cell, there are precise_scale precise cells, where the middle
+        # cell corresponds to the same location as the coarse cell.
+        middle = int(self.precise_scale / 2)
+        middle_cells_slice = tuple([slice(middle, None, self.precise_scale) for _ in
+            self.num_cells])
+        return grid[middl_cells_slice]
+
+    def get_real(self):
+        real_slice = tuple([slice(ng, -ng) for ng in self.num_ghosts])
+        return self.get_full()[real_slice]
+
+    def _reset(self, init_params):
+        self.precise_grid.reset(init_params)
+        self.action_history = []
+
+    def set(self, real_values):
+        """ Force set the current grid. Will make the state/action history confusing. """
+        self.precise_grid.set(real_values)
 
      
 

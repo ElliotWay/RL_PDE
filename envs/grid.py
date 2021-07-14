@@ -96,7 +96,7 @@ class AbstractGrid:
             self.max_value = max_value
 
         if self.one_dimensional:
-            self.dx = (self.max_value - self.min_value) / self.num_cells
+            self.cell_size = (self.max_value - self.min_value) / self.num_cells
             self.coords = (self.min_value + 
                 (np.arange(self.num_cells + 2 * self.num_ghosts)
                         - self.num_ghosts + 0.5) * self.dx)
@@ -105,8 +105,7 @@ class AbstractGrid:
                 (np.arange(self.num_cells + 2 * self.num_ghosts)
                         - self.num_ghosts) * self.dx)
         else:
-            # Cell size.
-            self.dx = []
+            self.cell_size = []
             # Physical coordinates: cell-centered, left and right edges
             # Note that for >1 dimension, these are not the coordinates themselves - 
             # the actual coordinates are the cross product of these,
@@ -120,7 +119,7 @@ class AbstractGrid:
             for nx, ng, xmin, xmax in zip(
                     self.num_cells, self.num_ghosts, self.min_value, self.max_value):
                 dx = (xmax - xmin) / nx
-                self.dx.append(dx)
+                self.cell_size.append(dx)
 
                 x = xmin + (np.arange(nx + 2 * ng) - ng + 0.5) * dx
                 self.coords.append(x)
@@ -140,6 +139,8 @@ class AbstractGrid:
     def xmax(self): return self.max_value
     @property
     def inter_x(self): return self.interfaces
+    @property
+    def dx(self): return self.cell_size
 
     # x, y, and z make for more readable initial conditions.
     @property
