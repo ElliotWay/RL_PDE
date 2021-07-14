@@ -191,14 +191,14 @@ class AbstractBurgersEnv(gym.Env):
 
         self.analytical = analytical
         if analytical:
-            self.solution = AnalyticalSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng, init_type=init_type)
+            self.solution = AnalyticalSolution(nx, self.ng, xmin, xmax, init_type=init_type)
         else:
             if precise_weno_order is None:
                 precise_weno_order = weno_order
             self.precise_weno_order = precise_weno_order
             self.precise_nx = nx * precise_scale
             self.solution = PreciseWENOSolution(
-                    xmin=xmin, xmax=xmax, nx=nx, ng=self.ng,
+                    nx, self.ng, xmin, xmax,
                     precise_scale=precise_scale, precise_order=precise_weno_order,
                     boundary=boundary, init_type=init_type, flux_function=self.burgers_flux, source=self.source,
                     eps=eps)
@@ -215,7 +215,7 @@ class AbstractBurgersEnv(gym.Env):
                               or self.precise_nx != self.nx
                               or isinstance(self.solution, OneStepSolution))
         if show_separate_weno:
-            self.weno_solution = PreciseWENOSolution(xmin=xmin, xmax=xmax, nx=nx, ng=self.ng,
+            self.weno_solution = PreciseWENOSolution(nx, self.ng, xmin, xmax,
                                                      precise_scale=1, precise_order=weno_order,
                                                      boundary=boundary, init_type=init_type,
                                                      flux_function=self.burgers_flux,

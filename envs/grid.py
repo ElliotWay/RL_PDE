@@ -6,6 +6,7 @@ import numpy as np
 
 from util.misc import AxisSlice
 
+
 class AbstractGrid:
     """
     Abstract base class for Grids.
@@ -65,7 +66,7 @@ class AbstractGrid:
         if not self.one_dimensional:
             try:
                 if len(num_ghosts) != len(num_cells):
-                    raise ValueError("GridBase: Size of num_ghosts must match size of num_cells"
+                    raise ValueError("AbstractGrid: Size of num_ghosts must match size of num_cells"
                             + " ({} vs {}).".format(len(num_ghosts), len(num_cells)))
                 else:
                     self.num_ghosts = num_ghosts
@@ -74,7 +75,7 @@ class AbstractGrid:
 
             try:
                 if len(min_value) != len(num_cells):
-                    raise ValueError("GridBase: Size of min_value must match size of num_cells"
+                    raise ValueError("AbstractGrid: Size of min_value must match size of num_cells"
                             + " ({} vs {}).".format(len(min_value), len(num_cells)))
                 else:
                     self.min_value = min_value
@@ -83,7 +84,7 @@ class AbstractGrid:
 
             try:
                 if len(max_value) != len(num_cells):
-                    raise ValueError("GridBase: Size of max_value must match size of num_cells"
+                    raise ValueError("AbstractGrid: Size of max_value must match size of num_cells"
                             + " ({} vs {}).".format(len(max_value), len(num_cells)))
                 else:
                     self.max_value = max_value
@@ -139,8 +140,6 @@ class AbstractGrid:
     def xmax(self): return self.max_value
     @property
     def inter_x(self): return self.interfaces
-    @property
-    def u(self): return self.space
 
     # x, y, and z make for more readable initial conditions.
     @property
@@ -216,6 +215,8 @@ class GridBase(AbstractGrid):
     # Old names for compatability.
     @property
     def u(self): return self.space
+    @u.setter
+    def u(self, value): self.space = value
 
     def set(self, new_values):
         """
@@ -276,3 +277,32 @@ class GridBase(AbstractGrid):
                         axis_slice[-ng:] = axis_slice[-ng - 1]
                 else:
                     raise Exception("Boundary type \"" + str(self.boundary) + "\" not recognized.")
+
+def _is_list(thing):
+    try:
+        _iterator = iter(thing)
+    except TypeError:
+        return True
+    else:
+        return False
+
+# Import down here to avoid circular import.
+from envs.grid1d import Grid1d
+from envs.grid2d import Grid2d
+
+def create_grid(num_dimensions, num_cells, num_ghosts, min_value, max_value, boundary, init_type,
+        deterministic_init=False):
+    if num_dimensions == 1:
+        if _is_list(num_cells): num_cells = num_cells[0]
+        if _is_list(num_ghosts): num_ghosts = num_ghosts[0]
+        if _is_list(min_value): min_value = min_value[0]
+        if _is_list(max_value): max_value = max_value[0]
+        if type(boundary) is not str: boundary = boundary[0]
+
+        return Grid1d(num_cells, num_ghosts, min_value, max_value,
+                init_type=init_type, boundary=boundary, deterministic_init=deterministic_init)
+    elif num_dimensions == 2:
+        return Grid2d(num_cells, num_ghosts, min_value, max_value,
+                init_type=init_type, boundary=boundary, deterministic_init=deterministic_init)
+    else:
+        raise NotImplementedError()

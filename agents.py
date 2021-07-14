@@ -77,8 +77,12 @@ class StandardWENOAgent():
 
         # Flipped because in original formulation we subtract from last index instead of adding from first,
         # and sigma and C weights assume this ordering.
-        sub_stencilas_fp = np.flip(sub_stencils_fp, axis=-1)
-        sub_stencilas_fm = np.flip(sub_stencils_fm, axis=-1)
+        # Note: there was a typo in this line since before this file was created (July 2020) until
+        # now (July 2021). Apparently this flip isn't important. I'm not sure why, but there's a
+        # lot of symmetry going on - maybe there's a mathematical reason why they should be almost
+        # the same.
+        sub_stencils_fp = np.flip(sub_stencils_fp, axis=-1)
+        sub_stencils_fm = np.flip(sub_stencils_fm, axis=-1)
 
         # Insert extra empty dimensions so numpy broadcasting produces
         # the desired outer product along only the intended dimensions.
