@@ -12,7 +12,8 @@ from stable_baselines import logger
 
 from envs.grid import Grid1d
 from envs.source import RandomSource
-from envs.solutions import PreciseWENOSolution, AnalyticalSolution
+from envs.weno_solution import PreciseWENOSolution
+from envs.solutions import AnalyticalSolution
 from envs.solutions import MemoizedSolution, OneStepSolution
 import envs.weno_coefficients as weno_coefficients
 from util.softmax_box import SoftmaxBox
