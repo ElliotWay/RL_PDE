@@ -85,6 +85,7 @@ class GlobalBackpropModel(GlobalModel):
             reward_list = []
             ph_list = []
             for boundary in ['periodic', 'outflow']:
+                self.env.reset()
 
                 cell = IntegrateCell(
                         prep_state_fn=self.env.tf_prep_state,
@@ -107,7 +108,6 @@ class GlobalBackpropModel(GlobalModel):
                 reward_list.append(rewards)
                 ph_list.append(ph)
 
-                self.env.reset()
 
             self.initial_state_ph = ph_list[0]
             self.initial_state_ph_outflow = ph_list[1]
