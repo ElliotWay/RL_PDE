@@ -1,6 +1,8 @@
+import re
 import numpy as np
 
 from envs.grid import GridBase
+from envs.grid1d import Grid1d
 
 class Grid2d(GridBase):
     def __init__(self, num_cells, num_ghosts, min_value, max_value, boundary=None,
@@ -73,6 +75,63 @@ class Grid2d(GridBase):
             self.space = a + b*np.exp(-(
                 (self.x[:, None] - c[0])**2/(2.0*sigma[0]**2)
                 + (self.y[None, :] - c[1])**2/(2.0*sigma[1]**2)))
+
+        elif self.init_type.startswith("1d"):
+            one_d_type = None
+            one_d_axis = None
+            match = re.fullmatch("1d-([^-]*)-(x|y)", self.init_type)
+            if match is not None:
+                one_d_type = match[1]
+                one_d_axis = match[2]
+            else:
+                match = re.fullmatch("1d-([^-]*)", self.init_type)
+                if match is not None:
+                    one_d_type = match[1]
+                else:
+                    if not self.init_type == "1d":
+                        raise ValueError("Grid2d: Malformed 1d init type string"
+                                + " \"{}\".".format(self.init_type)
+                                + " Expecting strings like \"1d-sine-x\".")
+            if 'type' in params: # params override the init_type name.
+                one_d_type = params['type']
+            elif one_d_type is None:
+                one_d_type = "smooth_sine"
+            new_params['type'] = one_d_type
+            if 'axis' in params:
+                one_d_axis = params['axis']
+            elif one_d_axis is None:
+                one_d_axis = 'x'
+            new_params['axis'] = one_d_axis
+
+            if self.boundary is not None and self.boundary != "outflow":
+                raise ValueError("1d initial condition cannot handle explicit boundary condition")
+
+            one_d_params = dict(params)
+            if 'boundary' in one_d_params: # Always use the default boundary from Grid1d.
+                del one_d_params['boundary']
+            one_d_params['init_type'] = one_d_type
+
+            # Keep track of the miscellaneous parameters.
+            for param, value in one_d_params.items():
+                if param not in new_params:
+                    new_params[param] = value
+
+            if one_d_axis == 'x':
+                if not hasattr(self, "x_grid1d"):
+                    self.x_grid1d = Grid1d(self.num_cells[0], self.num_ghosts[0],
+                            self.min_value[0], self.max_value[0])
+                self.x_grid1d.reset(params=one_d_params)
+                x_grid = self.x_grid1d.get_real()
+                self.space[self.real_slice] = np.tile(x_grid[:, None], (1, self.num_cells[1]))
+                self.boundary = (self.x_grid1d.boundary, "outflow")
+            elif one_d_axis == 'y':
+                if not hasattr(self, "y_grid1d"):
+                    self.y_grid1d = Grid1d(self.num_cells[1], self.num_ghosts[1],
+                            self.min_value[1], self.max_value[1])
+                self.y_grid1d.reset(params=one_d_params)
+                y_grid = self.y_grid1d.get_real()
+                self.space[self.real_slice] = np.tile(y_grid, (self.num_cells[0], 1))
+                self.boundary = ("outflow", self.y_grid1d.boundary)
 
         new_params['boundary'] = self.boundary
         self.init_params = new_params

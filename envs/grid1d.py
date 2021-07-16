@@ -30,7 +30,7 @@ class Grid1d(GridBase):
     grid.x - The location values associated with each index in grid.u.
     """
 
-    def __init__(self, nx, ng, xmin=0.0, xmax=1.0, init_type="sine", boundary="outflow", deterministic_init=False):
+    def __init__(self, nx, ng, xmin=0.0, xmax=1.0, init_type="sine", boundary=None, deterministic_init=False):
         """
         Construct a 1D grid.
         

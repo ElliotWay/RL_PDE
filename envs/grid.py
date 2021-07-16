@@ -266,18 +266,26 @@ class GridBase(AbstractGrid):
                 raise Exception("Boundary type \"" + str(self.boundary) + "\" not recognized.")
 
         else:
-            #TODO: Could also loop over iterable boundary condition if we want different boundaries
-            # for different axes.
-            for axis, ng in enumerate(self.num_ghosts):
+
+            try:
+                if len(self.boundary) != len(self.num_cells):
+                    raise ValueError("GridBase: Size of num_ghosts must match size of num_cells"
+                            + " ({} vs {}).".format(len(self.boundary), len(self.num_cells)))
+                else:
+                    boundaries = self.boundary
+            except TypeError:
+                boundaries = (self.boundary,) * len(self.num_cells)
+
+            for axis, (ng, boundary) in enumerate(zip(self.num_ghosts, boundaries)):
                 axis_slice = AxisSlice(self.space, axis)
-                if self.boundary == "periodic":
+                if boundary == "periodic":
                         axis_slice[:ng] = axis_slice[-2*ng: -ng]
                         axis_slice[-ng:] = axis_slice[ng: 2*ng]
-                elif self.boundary == "outflow":
+                elif boundary == "outflow":
                         axis_slice[:ng] = axis_slice[ng]
                         axis_slice[-ng:] = axis_slice[-ng - 1]
                 else:
-                    raise Exception("Boundary type \"" + str(self.boundary) + "\" not recognized.")
+                    raise Exception("Boundary type \"" + str(boundary) + "\" not recognized.")
 
 def _is_list(thing):
     try:

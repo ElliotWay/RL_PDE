@@ -580,10 +580,13 @@ if __name__ == "__main__":
     from matplotlib.ticker import LinearLocator
     from envs.grid2d import Grid2d
 
-    base_grid = Grid2d((128, 128), 4, 0.0, 1.0)
+    order = 2
+    ng = order + 1
+
+    base_grid = Grid2d((128, 128), ng, 0.0, 1.0)
     flux_function = lambda x: 0.5 * x ** 2
-    sol = PreciseWENOSolution2D(base_grid, {}, 3, 1, flux_function)
-    sol.reset({'init_type': 'gaussian'})
+    sol = PreciseWENOSolution2D(base_grid, {}, order, 1, flux_function)
+    sol.reset({'init_type': '1d-smooth_sine-y'})
 
     timestep = 0.0004
     time = 0.0
@@ -604,7 +607,7 @@ if __name__ == "__main__":
             z = sol.get_real()
             surface = ax.plot_surface(x, y, z, cmap=cm.viridis,
                     linewidth=0, antialiased=False)
-            ax.set_zlim(-0.25, 1.25)
+            #ax.set_zlim(-0.25, 1.25)
             ax.zaxis.set_major_locator(LinearLocator(10))
             #ax.zaxis.set_major_formatter(StrMethodFormatter('{x:0.2f}'))
             fig.colorbar(surface, shrink=0.5, aspect=5)
