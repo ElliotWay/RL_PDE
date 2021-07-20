@@ -121,17 +121,21 @@ class Grid2d(GridBase):
                     self.x_grid1d = Grid1d(self.num_cells[0], self.num_ghosts[0],
                             self.min_value[0], self.max_value[0])
                 self.x_grid1d.reset(params=one_d_params)
+                x_bound = self.x_grid1d.boundary if type(self.x_grid1d.boundary) is str \
+                            else self.x_grid1d.boundary[0]
                 x_grid = self.x_grid1d.get_real()
                 self.space[self.real_slice] = np.tile(x_grid[:, None], (1, self.num_cells[1]))
-                self.boundary = (self.x_grid1d.boundary, "outflow")
+                self.boundary = (x_bound, "outflow")
             elif one_d_axis == 'y':
                 if not hasattr(self, "y_grid1d"):
                     self.y_grid1d = Grid1d(self.num_cells[1], self.num_ghosts[1],
                             self.min_value[1], self.max_value[1])
                 self.y_grid1d.reset(params=one_d_params)
+                y_bound = self.y_grid1d.boundary if type(self.y_grid1d.boundary) is str \
+                            else self.y_grid1d.boundary[0]
                 y_grid = self.y_grid1d.get_real()
                 self.space[self.real_slice] = np.tile(y_grid, (self.num_cells[0], 1))
-                self.boundary = ("outflow", self.y_grid1d.boundary)
+                self.boundary = ("outflow", y_bound)
 
         new_params['boundary'] = self.boundary
         self.init_params = new_params

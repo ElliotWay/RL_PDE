@@ -58,103 +58,82 @@ class AbstractGrid:
             iterator = iter(num_cells)
         except TypeError:
             self.one_dimensional = True
+            self.num_cells = (num_cells,)
         else:
             self.one_dimensional = False
+            self.num_cells = num_cells
         
-        self.num_cells = num_cells
+        try:
+            if len(num_ghosts) != len(self.num_cells):
+                raise ValueError("AbstractGrid: Size of num_ghosts must match size of num_cells"
+                        + " ({} vs {}).".format(len(num_ghosts), len(self.num_cells)))
+            else:
+                self.num_ghosts = num_ghosts
+        except TypeError:
+            self.num_ghosts = (num_ghosts,) * len(self.num_cells)
 
-        if not self.one_dimensional:
-            try:
-                if len(num_ghosts) != len(num_cells):
-                    raise ValueError("AbstractGrid: Size of num_ghosts must match size of num_cells"
-                            + " ({} vs {}).".format(len(num_ghosts), len(num_cells)))
-                else:
-                    self.num_ghosts = num_ghosts
-            except TypeError:
-                self.num_ghosts = (num_ghosts,) * len(num_cells)
+        try:
+            if len(min_value) != len(self.num_cells):
+                raise ValueError("AbstractGrid: Size of min_value must match size of num_cells"
+                        + " ({} vs {}).".format(len(min_value), len(self.num_cells)))
+            else:
+                self.min_value = min_value
+        except TypeError:
+            self.min_value = (min_value,) * len(self.num_cells)
 
-            try:
-                if len(min_value) != len(num_cells):
-                    raise ValueError("AbstractGrid: Size of min_value must match size of num_cells"
-                            + " ({} vs {}).".format(len(min_value), len(num_cells)))
-                else:
-                    self.min_value = min_value
-            except TypeError:
-                self.min_value = (min_value,) * len(num_cells)
+        try:
+            if len(max_value) != len(self.num_cells):
+                raise ValueError("AbstractGrid: Size of max_value must match size of num_cells"
+                        + " ({} vs {}).".format(len(max_value), len(self.num_cells)))
+            else:
+                self.max_value = max_value
+        except TypeError:
+            self.max_value = (max_value,) * len(self.num_cells)
 
-            try:
-                if len(max_value) != len(num_cells):
-                    raise ValueError("AbstractGrid: Size of max_value must match size of num_cells"
-                            + " ({} vs {}).".format(len(max_value), len(num_cells)))
-                else:
-                    self.max_value = max_value
-            except TypeError:
-                self.max_value = (max_value,) * len(num_cells)
-        else:
-            self.num_ghosts = num_ghosts
-            self.min_value = min_value
-            self.max_value = max_value
+        self.cell_size = []
+        # Physical coordinates: cell-centered, left and right edges
+        # Note that for >1 dimension, these are not the coordinates themselves - 
+        # the actual coordinates are the cross product of these,
+        # e.g. coords[0] X coords[1] X coords[2].
+        self.coords = []
+        # cell-centered coordinates, only real cells (not ghosts)
+        self.real_coords = []
+        # Physical coordinates: interfaces, left edges
+        self.interfaces = []
 
-        if self.one_dimensional:
-            self.cell_size = (self.max_value - self.min_value) / self.num_cells
-            self.coords = (self.min_value + 
-                (np.arange(self.num_cells + 2 * self.num_ghosts)
-                        - self.num_ghosts + 0.5) * self.dx)
-            self.real_coords = self.coords[self.num_ghosts:-self.num_ghosts]
-            self.interfaces = (self.min_value +
-                (np.arange(self.num_cells + 2 * self.num_ghosts)
-                        - self.num_ghosts) * self.dx)
-        else:
-            self.cell_size = []
-            # Physical coordinates: cell-centered, left and right edges
-            # Note that for >1 dimension, these are not the coordinates themselves - 
-            # the actual coordinates are the cross product of these,
-            # e.g. coords[0] X coords[1] X coords[2].
-            self.coords = []
-            # cell-centered coordinates, only real cells (not ghosts)
-            self.real_coords = []
-            # Physical coordinates: interfaces, left edges
-            self.interfaces = []
+        for nx, ng, xmin, xmax in zip(
+                self.num_cells, self.num_ghosts, self.min_value, self.max_value):
+            dx = (xmax - xmin) / nx
+            self.cell_size.append(dx)
 
-            for nx, ng, xmin, xmax in zip(
-                    self.num_cells, self.num_ghosts, self.min_value, self.max_value):
-                dx = (xmax - xmin) / nx
-                self.cell_size.append(dx)
+            x = xmin + (np.arange(nx + 2 * ng) - ng + 0.5) * dx
+            self.coords.append(x)
+            real_x = x[ng:-ng]
+            self.real_coords.append(real_x)
+            inter_x = xmin + (np.arange(nx + 2 * ng) - ng) * dx
+            self.interfaces.append(inter_x)
 
-                x = xmin + (np.arange(nx + 2 * ng) - ng + 0.5) * dx
-                self.coords.append(x)
-                real_x = x[ng:-ng]
-                self.real_coords.append(real_x)
-                inter_x = xmin + (np.arange(nx + 2 * ng) - ng) * dx
-                self.interfaces.append(inter_x)
-
-    # Old names for compatability.
+    # 1-dimensional shortcuts for compatability.
     @property
-    def nx(self): return self.num_cells
+    def nx(self): return self.num_cells[0]
     @property
-    def ng(self): return self.num_ghosts
+    def ng(self): return self.num_ghosts[0]
     @property
-    def xmin(self): return self.min_value
+    def xmin(self): return self.min_value[0]
     @property
-    def xmax(self): return self.max_value
+    def xmax(self): return self.max_value[0]
     @property
-    def inter_x(self): return self.interfaces
+    def inter_x(self): return self.interfaces[0]
     @property
-    def dx(self): return self.cell_size
+    def dx(self): return self.cell_size[0]
 
     # x, y, and z make for more readable initial conditions.
     @property
     def x(self):
-        if self.one_dimensional:
-            return self.coords
-        else:
-            return self.coords[0]
+        return self.coords[0]
     @property
     def real_x(self):
-        if self.one_dimensional:
-            return self.real_coords
-        else:
-            return self.real_coords[0]
+        return self.real_coords[0]
     @property
     def y(self): return self.coords[1]
     @property
@@ -180,10 +159,10 @@ class AbstractGrid:
 
     def scratch_array(self):
         """ Return a zeroed array dimensioned for this grid. """
-        if self.one_dimensional:
-            return np.zeros((self.nx + 2 * self.ng), dtype=np.float64)
-        else:
-            return np.zeros([len(x) for x in self.coords], dtype=np.float64)
+        return np.zeros([len(x) for x in self.coords], dtype=np.float64)
+
+    @property
+    def ndim(self): return len(self.num_cells)
 
 class GridBase(AbstractGrid):
     """
@@ -201,17 +180,22 @@ class GridBase(AbstractGrid):
 
     def __init__(self, num_cells, num_ghosts, min_value, max_value, boundary="outflow"):
         super().__init__(num_cells, num_ghosts, min_value, max_value)
-        
-        self.boundary = boundary
+     
+        if type(boundary) is str:
+            self.boundary = (boundary,) * len(self.num_cells)
+            """
+            GridBase.boundary is one of these annoying properties that can be either a tuple or a
+            string. The string implies (str,) * len(self.num_cells), but for compability reasons
+            you should check which type it is before using it.
+            """
+        elif boundary is not None and len(boundary) != len(self.num_cells):
+            raise ValueError("GridBase: Size of boundary must match size of num_cells"
+                    + " ({} vs {}).".format(len(self.boundary), len(self.num_cells)))
 
         # Storage for the solution.
         self.space = self.scratch_array()
 
-        if self.one_dimensional:
-            # slice(a,b) is equivalent to a:b.
-            self.real_slice = slice(self.num_ghosts, -self.num_ghosts)
-        else:
-            self.real_slice = tuple([slice(ng, -ng) for ng in self.num_ghosts])
+        self.real_slice = tuple([slice(ng, -ng) for ng in self.num_ghosts])
 
     # Old names for compatability.
     @property
@@ -254,38 +238,26 @@ class GridBase(AbstractGrid):
         Grid.set calls this method, so you need only use this method if accessing the grid by some
         other means, such as writing directly to grid.space.
         """
-        # Periodic - copying from the opposite end, as if the space wraps around
-        if self.one_dimensional:
-            if self.boundary == "periodic":
-                self.space[:self.num_ghosts] = self.space[-2*self.num_ghosts : -self.num_ghosts]
-                self.space[-self.num_ghosts:] = self.space[self.num_ghosts : 2*self.num_ghosts]
-            elif self.boundary == "outflow":
-                self.space[:self.num_ghosts] = self.u[self.num_ghosts]
-                self.space[-self.num_ghosts:] = self.u[-self.num_ghosts - 1]
+        if self.boundary is None:
+            raise Exception("GridBase: boundary must be set before update_boundary is called.")
+        if type(self.boundary) is str:
+            self.boundary = (self.boundary,) * len(self.num_cells)
+        elif len(self.boundary) != len(self.num_cells):
+            raise ValueError("GridBase: Size of boundary must match size of num_cells"
+                    + " ({} vs {}).".format(len(self.boundary), len(self.num_cells)))
+
+        for axis, (ng, bound) in enumerate(zip(self.num_ghosts, self.boundary)):
+            axis_slice = AxisSlice(self.space, axis)
+            # Periodic - copying from the opposite end, as if the space wraps around
+            if bound == "periodic":
+                    axis_slice[:ng] = axis_slice[-2*ng: -ng]
+                    axis_slice[-ng:] = axis_slice[ng: 2*ng]
+            # Outflow - extending the edge values past the boundary
+            elif bound == "outflow":
+                    axis_slice[:ng] = axis_slice[ng]
+                    axis_slice[-ng:] = axis_slice[-ng - 1]
             else:
-                raise Exception("Boundary type \"" + str(self.boundary) + "\" not recognized.")
-
-        else:
-
-            try:
-                if len(self.boundary) != len(self.num_cells):
-                    raise ValueError("GridBase: Size of num_ghosts must match size of num_cells"
-                            + " ({} vs {}).".format(len(self.boundary), len(self.num_cells)))
-                else:
-                    boundaries = self.boundary
-            except TypeError:
-                boundaries = (self.boundary,) * len(self.num_cells)
-
-            for axis, (ng, boundary) in enumerate(zip(self.num_ghosts, boundaries)):
-                axis_slice = AxisSlice(self.space, axis)
-                if boundary == "periodic":
-                        axis_slice[:ng] = axis_slice[-2*ng: -ng]
-                        axis_slice[-ng:] = axis_slice[ng: 2*ng]
-                elif boundary == "outflow":
-                        axis_slice[:ng] = axis_slice[ng]
-                        axis_slice[-ng:] = axis_slice[-ng - 1]
-                else:
-                    raise Exception("Boundary type \"" + str(boundary) + "\" not recognized.")
+                raise Exception("GridBase: Boundary type \"" + str(bound) + "\" not recognized.")
 
 def _is_list(thing):
     try:
@@ -299,15 +271,10 @@ def _is_list(thing):
 from envs.grid1d import Grid1d
 from envs.grid2d import Grid2d
 
-def create_grid(num_dimensions, num_cells, num_ghosts, min_value, max_value, boundary, init_type,
+def create_grid(num_dimensions, num_cells, num_ghosts, min_value, max_value,
+        boundary=None, init_type=None,
         deterministic_init=False):
     if num_dimensions == 1:
-        if _is_list(num_cells): num_cells = num_cells[0]
-        if _is_list(num_ghosts): num_ghosts = num_ghosts[0]
-        if _is_list(min_value): min_value = min_value[0]
-        if _is_list(max_value): max_value = max_value[0]
-        if type(boundary) is not str: boundary = boundary[0]
-
         return Grid1d(num_cells, num_ghosts, min_value, max_value,
                 init_type=init_type, boundary=boundary, deterministic_init=deterministic_init)
     elif num_dimensions == 2:
