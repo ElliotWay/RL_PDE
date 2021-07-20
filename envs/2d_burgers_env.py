@@ -94,11 +94,12 @@ def weno_weights_batch(order, q_batch):
 
     return w
 
-class Abstract2dBurgersEnv(gym.Env):
+class AbstractScalarEnv(gym.Env):
     """
-    WIP 2d Burgers' environment.
+    WIP N-dimensional scalar environment.
+    Update documentation when its done.
 
-    An arbitrary environment for the Burgers' equation.
+    An arbitrary environment for the Burgers equation.
 
     This abstract class handles preparation of the state for an agent,
     the simulation of the baseline state using established methods,
@@ -266,11 +267,12 @@ class Abstract2dBurgersEnv(gym.Env):
     def step(self):
         raise NotImplementedError()
 
+    # Works in ND.
     def reset(self):
         """
         Reset the environment.
 
-        This is the abstract class version. In a subclass, the overriding function should call this
+        This is the abstract version. In a concrete subclass, the overriding function should call this
         version, then return the initial state based on how the subclass is configured.
 
         Returns
@@ -291,30 +293,6 @@ class Abstract2dBurgersEnv(gym.Env):
         self.t = 0.0
         self.steps = 0
         self.previous_error = np.zeros_like(self.grid.get_full())
-
-    def burgers_flux(self, q):
-        # This is the only thing unique to Burgers, could we make this a general class with this as a parameter?
-        return 0.5 * q ** 2
-
-    def lap(self):
-        """
-        Returns the Laplacian of g.u.
-
-        This calculation relies on ghost cells, so make sure they have been filled before calling this.
-        """
-        # TODO - Where does this function belong? Maybe in Grid1d. Figure it out and move it there.
-
-        gr = self.grid
-        u = gr.u
-
-        lapu = gr.scratch_array()
-
-        ib = gr.ilo - 1
-        ie = gr.ihi + 1
-
-        lapu[ib:ie + 1] = (u[ib - 1:ie] - 2.0 * u[ib:ie + 1] + u[ib + 1:ie + 2]) / gr.dx ** 2
-
-        return lapu
 
     @staticmethod
     def fill_default_time_vs_space(xmin, xmax, nx, dt, C, ep_length, time_max):
@@ -972,6 +950,7 @@ class Abstract2dBurgersEnv(gym.Env):
         plt.close(fig)
         return filename
 
+    # This works in ND.
     @staticmethod
     def fill_default_reward_mode(reward_mode_arg):
         reward_mode = "" if reward_mode_arg is None else reward_mode_arg
@@ -1007,6 +986,7 @@ class Abstract2dBurgersEnv(gym.Env):
 
         return reward_mode
     
+    # This works in ND.
     def calculate_reward(self):
         """ Reward calculation based on the error between grid and solution. """
 
@@ -1058,43 +1038,48 @@ class Abstract2dBurgersEnv(gym.Env):
 
         # Average of error in two adjacent cells.
         if "adjacent" in self.reward_mode and "avg" in self.reward_mode:
-            combined_error = (error[self.ng-1:-self.ng] + error[self.ng:-(self.ng-1)]) / 2
+            combined_error = tuple((AxisSlice(error, axis)[ng-1:ng]
+                                + AxisSlice(error, axis)[ng:-(ng-1)]) / 2
+                                    for axis, ng in enumerate(self.grid.num_ghosts))
         # Combine error across the WENO stencil.
         # (NOT the state stencil i.e. self.state_order * 2 - 1, even if we are using a wide state.)
         elif "stencil" in self.reward_mode:
-            stencil_indexes = create_stencil_indexes(
-                    stencil_size=(self.weno_order * 2 - 1),
-                    num_stencils=(self.nx + 1),
-                    offset=(self.ng - self.weno_order))
-            error_stencils = error[stencil_indexes]
-            if "max" in self.reward_mode:
-                combined_error = np.amax(error_stencils, axis=-1)
-            elif "avg" in self.reward_mode:
-                combined_error = np.mean(error_stencils, axis=-1)
-            elif "L2" in self.reward_mode:
-                combined_error = np.sqrt(np.sum(error_stencils**2, axis=-1))
-            else:
-                raise Exception("AbstractBurgersEnv: reward_mode problem")
+            combined_error = []
+            for axis, (nx, ng) in enumerate(zip(self.grid.num_cells, self.grid.num_ghosts)):
+                stencil_indexes = create_stencil_indexes(
+                        stencil_size=(self.weno_order * 2 - 1),
+                        num_stencils=(nx + 1),
+                        offset=(ng - self.weno_order))
+                error_stencils = AxisSlice(error, axis)[stencil_indexes]
+                error_stencils = error[stencil_indexes]
+                if "max" in self.reward_mode:
+                    combined_error.append(np.amax(error_stencils, axis=-1))
+                elif "avg" in self.reward_mode:
+                    combined_error.append(np.mean(error_stencils, axis=-1))
+                elif "L2" in self.reward_mode:
+                    combined_error.append(np.sqrt(np.sum(error_stencils**2, axis=-1)))
+                else:
+                    raise Exception("AbstractBurgersEnv: reward_mode problem")
         else:
             raise Exception("AbstractBurgersEnv: reward_mode problem")
 
         # Squash reward.
         if "nosquash" in self.reward_mode:
             max_penalty = 1e7
-            reward = -combined_error
+            reward = tuple(error for error in combined_error)
         elif "logsquash" in self.reward_mode:
             max_penalty = 1e7
-            reward = -np.log(combined_error + 1e-30)
+            reward = tuple(np.log(error + 1e-30) for error in combined_error)
         elif "arctansquash" in self.reward_mode:
             max_penalty = np.pi / 2
             if "noadjust" in self.reward_mode:
-                reward = np.arctan(-combined_error)
+                reward = tuple(np.arctan(-error) for error in combined_error)
             else:
                 # The constant controls the relative importance of small rewards compared to large rewards.
                 # Towards infinity, all rewards (or penalties) are equally important.
                 # Towards 0, small rewards are increasingly less important.
                 # An alternative to arctan(C*x) with this property would be x^(1/C).
-                reward = np.arctan(self.reward_adjustment * -combined_error)
+                reward = tuple(np.arctan(self.reward_adjustment * -combined_error))
         else:
             raise Exception("AbstractBurgersEnv: reward_mode problem")
 
@@ -1109,6 +1094,9 @@ class Abstract2dBurgersEnv(gym.Env):
             done = True
 
         #print("reward:", reward)
+
+        if self.grid.ndim == 1:
+            reward = reward[0]
 
         return reward, done
 

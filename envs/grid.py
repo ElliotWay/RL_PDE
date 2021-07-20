@@ -259,6 +259,30 @@ class GridBase(AbstractGrid):
             else:
                 raise Exception("GridBase: Boundary type \"" + str(bound) + "\" not recognized.")
 
+    # TODO Create a TF version of this.
+    def laplacian(self):
+        """
+        Compute the Laplacian of the current grid.
+
+        Returns an ndarray of the same shape as the real space.
+        """
+        partial_2nd_derivatives = []
+
+        for axis, (ng, dx) in enumerate(zip(self.num_ghosts, self.cell_size)):
+            # Slice away ghost values on all but the relevant axis.
+            mostly_real_slice = list(self.real_slice)
+            mostly_real_slice[axis] = slice(None)
+            mostly_real_slice = tuple(mostly_real_slice)
+            mostly_real_space = self.space[mostly_real_slice]
+            axis_slice = AxisSlice(mostly_real_space, axis)
+            d2fdx2 = (axis_slice[ng - 1:-(ng + 1)] 
+                    - 2.0 * axis_slice[ng:-ng] 
+                    + axis_slice[ng + 1:-(ng - 1)]) / dx**2
+            partial_2nd_derivatives.append(d2fdx2)
+
+        return np.sum(partial_2nd_derivatives, axis=0)
+
+
 def _is_list(thing):
     try:
         _iterator = iter(thing)

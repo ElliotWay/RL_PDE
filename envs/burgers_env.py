@@ -291,25 +291,13 @@ class AbstractBurgersEnv(gym.Env):
         # This is the only thing unique to Burgers, could we make this a general class with this as a parameter?
         return 0.5 * q ** 2
 
-    def lap(self):
+    #def lap(self):
         """
         Returns the Laplacian of g.u.
 
         This calculation relies on ghost cells, so make sure they have been filled before calling this.
         """
-        # TODO - Where does this function belong? Maybe in Grid1d. Figure it out and move it there.
-
-        gr = self.grid
-        u = gr.u
-
-        lapu = gr.scratch_array()
-
-        ib = gr.ilo - 1
-        ie = gr.ihi + 1
-
-        lapu[ib:ie + 1] = (u[ib - 1:ie] - 2.0 * u[ib:ie + 1] + u[ib + 1:ie + 2]) / gr.dx ** 2
-
-        return lapu
+        # TODO This function is now defined in envs/grid.py#GridBase.laplacian(). Use that instead.
 
     @staticmethod
     def fill_default_time_vs_space(xmin, xmax, nx, dt, C, ep_length, time_max):
@@ -1468,7 +1456,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
             self.weno_solution.update(dt, self.t)
 
         if self.eps > 0.0:
-            R = self.eps * self.lap()
+            R = self.eps * self.grid.lap()
             step += dt * R[self.grid.ilo:self.grid.ihi+1]
         if self.source is not None:
             self.source.update(dt, self.t + dt)
@@ -1945,7 +1933,7 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
         flux = fml + fpr
 
         if self.eps > 0.0:
-            R = self.eps * self.lap()
+            R = self.eps * self.grid.lap()
             rhs = (flux[:-1] - flux[1:]) / g.dx + R[g.ilo:g.ihi+1]
         else:
             rhs = (flux[:-1] - flux[1:]) / g.dx
@@ -2081,7 +2069,7 @@ class FluxBurgersEnv(AbstractBurgersEnv):
         flux = np.sum(action * state, axis=-1)
 
         if self.eps > 0.0:
-            R = self.eps * self.lap()
+            R = self.eps * self.grid.lap()
             rhs = (flux[:-1] - flux[1:]) / g.dx + R[g.ilo:g.ihi+1]
         else:
             rhs = (flux[:-1] - flux[1:]) / g.dx

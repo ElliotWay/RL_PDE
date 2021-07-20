@@ -255,7 +255,7 @@ class PreciseWENOSolution2D(SolutionBase):
         if self.eps > 0.0:
             if self.use_rk4:
                 self.precise_grid.set(u_start)
-            R = self.eps * self.laplacian()
+            R = self.eps * self.precise_grid.laplacian()
             full_step += dt * R[num_ghost_x:-num_ghost_x, num_ghost_y:-num_ghost_y]
 
         if self.source is not None:
@@ -263,26 +263,6 @@ class PreciseWENOSolution2D(SolutionBase):
 
         self.precise_grid.set(u_start + full_step)
         self.precise_grid.update_boundary()
-
-    def laplacian(self):
-        """
-        Returns the Laplacian of g.u.
-
-        This calculation relies on ghost cells, so make sure they have been filled before calling this.
-        """
-        #TODO: rewrite this for 2D.
-
-        gr = self.precise_grid
-        u = gr.u
-
-        lapu = gr.scratch_array()
-
-        ib = gr.ilo - 1
-        ie = gr.ihi + 1
-
-        lapu[ib:ie + 1] = (u[ib - 1:ie] - 2.0 * u[ib:ie + 1] + u[ib + 1:ie + 2]) / gr.dx ** 2
-
-        return lapu
 
     def get_full(self):
         """ Downsample the precise solution to get coarse solution values. """
@@ -493,7 +473,7 @@ class PreciseWENOSolution(SolutionBase):
         rhs = g.scratch_array()
 
         if self.eps > 0.0:
-            R = self.eps * self.lap()
+            R = self.eps * self.precise_grid.lap()
             rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:]) + R[1:-1]
         else:
             rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:])
@@ -502,25 +482,6 @@ class PreciseWENOSolution(SolutionBase):
             rhs[1:-1] += self.source.get_full()[1:-1]
 
         return rhs
-
-    def lap(self):
-        """
-        Returns the Laplacian of g.u.
-
-        This calculation relies on ghost cells, so make sure they have been filled before calling this.
-        """
-
-        gr = self.precise_grid
-        u = gr.u
-
-        lapu = gr.scratch_array()
-
-        ib = gr.ilo - 1
-        ie = gr.ihi + 1
-
-        lapu[ib:ie + 1] = (u[ib - 1:ie] - 2.0 * u[ib:ie + 1] + u[ib + 1:ie + 2]) / gr.dx ** 2
-
-        return lapu
 
     def _update(self, dt, time):
         if self.use_rk4:
