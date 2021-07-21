@@ -185,8 +185,8 @@ class OneStepSolution(SolutionBase):
         assert not isinstance(solution, AnalyticalSolution), ("One-step solutions are not compatible"
         + " with analytical solutions. (Analytical solutions stay the same whereas one-step solutions"
         + " always change).")
-        super().__init__(nx=solution.nx, ng=solution.ng, xmin=solution.xmin, xmax=solution.xmax,
-                record_state=False)
+        super().__init__(solution.num_cells, solution.num_ghosts, solution.min_value,
+                solution.max_value, record_state=False)
         self.inner_solution = solution
         self.current_grid = current_grid
 
@@ -212,6 +212,7 @@ class OneStepSolution(SolutionBase):
     def __getattr__(self, attr):
         return getattr(self.inner_solution, attr)
 
+#TODO Handle ND analytical solutions. (Also non-Burgers solutions?)
 available_analytical_solutions = ["smooth_sine", "smooth_rare", "accelshock", "gaussian"]
 #TODO account for xmin, xmax in case they're not 0 and 1.
 class AnalyticalSolution(SolutionBase):

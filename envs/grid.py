@@ -194,8 +194,13 @@ class GridBase(AbstractGrid):
 
         # Storage for the solution.
         self.space = self.scratch_array()
+        """ The physical space. """
 
         self.real_slice = tuple([slice(ng, -ng) for ng in self.num_ghosts])
+        """
+        Slice for indexing only the real portion and not ghost cells of the space (or something
+        of equivalent shape). So grid.space[grid.real_slice] is equivalent to grid.get_real().
+        """
 
     # Old names for compatability.
     @property
