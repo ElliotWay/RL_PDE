@@ -96,7 +96,7 @@ class GlobalBackpropModel(GlobalModel):
             # (It should not contain ghost cells - those should be handled by the prep_state function
             # that converts real state to rl state.)
             self.initial_state_ph = tf.placeholder(dtype=self.dtype,
-                    shape=(None, self.args.nx), name="init_real_state")
+                    shape=(None, self.env.grid.nx), name="init_real_state")
 
             #TODO possibly restrict num_steps to something smaller?
             # We'd then need to sample timesteps from a WENO trajectory.

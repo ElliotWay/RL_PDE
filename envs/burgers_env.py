@@ -133,7 +133,7 @@ class AbstractBurgersEnv(AbstractScalarEnv):
         self.memoize = memoize
 
         if precise_weno_order is None:
-            precise_weno_order = weno_order
+            precise_weno_order = self.weno_order
         self.precise_weno_order = precise_weno_order
         self.precise_scale = precise_scale
         precise_num_cells = tuple(nx * precise_scale for nx in self.grid.num_cells)
@@ -155,14 +155,14 @@ class AbstractBurgersEnv(AbstractScalarEnv):
                             'boundary':self.grid.boundary},
                         precise_scale=precise_scale, precise_order=precise_weno_order,
                         flux_function=self.burgers_flux, source=self.source,
-                        eps=eps)
+                        nu=nu)
             elif self.grid.ndim == 2:
                 self.solution = PreciseWENOSolution2D(
                         self.grid, {'init_type':self.grid.init_type,
                             'boundary':self.grid.boundary},
                         precise_scale=precise_scale, precise_order=precise_weno_order,
                         flux_function=self.burgers_flux, source=self.source,
-                        eps=eps)
+                        nu=nu)
             else:
                 raise NotImplementedError("{}-dim solution".format(self.grid.ndim)
                         + " not implemented.")
@@ -172,7 +172,7 @@ class AbstractBurgersEnv(AbstractScalarEnv):
             if memoize:
                 print("Note: can't memoize solution when using one-step reward.")
         elif memoize:
-            self.solution = MemoizedSolution(self.solution, episode_length)
+            self.solution = MemoizedSolution(self.solution, self.episode_length)
 
         if self.analytical:
             show_separate_weno = True
@@ -188,26 +188,26 @@ class AbstractBurgersEnv(AbstractScalarEnv):
             self.solution_label = "WENO (one-step)"
             self.weno_solution_label = "WENO (full)"
         else:
-            show_seprate_weno = False
+            show_separate_weno = False
 
         if show_separate_weno:
             if self.grid.ndim == 1:
-                self.solution = PreciseWENOSolution(
+                self.weno_solution = PreciseWENOSolution(
                         self.grid, {'init_type':self.grid.init_type,
                             'boundary':self.grid.boundary},
-                        precise_scale=1, precise_order=weno_order,
+                        precise_scale=1, precise_order=self.weno_order,
                         flux_function=self.burgers_flux, source=self.source,
-                        eps=eps)
+                        nu=nu)
             elif self.grid.ndim == 2:
-                self.solution = PreciseWENOSolution2D(
+                self.weno_solution = PreciseWENOSolution2D(
                         self.grid, {'init_type':self.grid.init_type,
                             'boundary':self.grid.boundary},
                         precise_scale=1, precise_order=weno_order,
                         flux_function=self.burgers_flux, source=self.source,
-                        eps=eps)
+                        nu=nu)
 
             if memoize:
-                self.weno_solution = MemoizedSolution(self.weno_solution, episode_length)
+                self.weno_solution = MemoizedSolution(self.weno_solution, self.episode_length)
         else:
             self.weno_solution = None
 
@@ -240,7 +240,6 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         super().__init__(*args, **kwargs)
 
         self.nx = self.grid.nx
-        self.ng = self.grid.ng
 
         self.action_space = SoftmaxBox(low=0.0, high=1.0, 
                                        shape=(self.grid.real_length() + 1, 2, self.weno_order),
@@ -421,8 +420,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
 
         step = self.dt * derivative_u_t
 
-        #TODO implement viscosity and random source?
-        if self.eps != 0.0:
+        if self.nu != 0.0:
             # Compute the Laplacian. This involves the first ghost cell past the boundary.
             central_lap = (real_state[:-2] - 2.0*real_state[1:-1] + real_state[2:]) / (self.grid.dx**2)
             if self.grid.boundary == "outflow":
@@ -435,7 +433,8 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
                 raise NotImplementedError()
             lap = tf.concat([[left_lap], central_lap, [right_lap]], axis=0)
 
-            step += self.dt * self.eps * lap
+            step += self.dt * self.nu * lap
+        #TODO implement random source?
         if self.source != None:
             raise NotImplementedError("External source has not been implemented"
                     + " in global backprop.")

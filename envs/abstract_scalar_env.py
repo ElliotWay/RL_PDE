@@ -47,7 +47,7 @@ class AbstractScalarEnv(gym.Env):
 
         Parameters
         ----------
-        num_cells : [int]
+        num_cells : int OR [int]
             Number of discretized cells.
         num_ghosts: int OR [int]
             Number of ghosts. Default is weno_order + 1, which is the min required for WENO to
@@ -94,12 +94,23 @@ class AbstractScalarEnv(gym.Env):
 
         #self.nx = nx
         self.weno_order = weno_order
+        if state_order is None: # Does state_order go in this class?
+            self.state_order = self.weno_order
+        else:
+            self.state_order = self.weno_order
+
         if num_ghosts is None:
             self.ng = self.weno_order + 1
         else:
             self.ng = num_ghosts
-        self.ng = self.state_order + 1 # Does state_order go in this class?
-        self.grid = create_grid(len(num_cells),
+        self.ng = self.state_order + 1
+
+        if type(num_cells) is int:
+            dims = 1
+        else:
+            dims = len(num_cells)
+
+        self.grid = create_grid(dims,
                                 num_cells=num_cells, min_value=min_value, max_value=max_value,
                                 num_ghosts=self.ng,
                                 boundary=boundary, init_type=init_type,
@@ -372,7 +383,8 @@ class AbstractScalarEnv(gym.Env):
             if dt is None:
                 dt = 0.0004
             cell_size = dt * approximate_max / C
-            num_cells = tuple((xmax - xmin) / cell_size for xmin, xmax in zip(min_value, max_value))
+            num_cells = tuple(int(np.ceil((xmax - xmin) / cell_size))
+                                    for xmin, xmax in zip(min_value, max_value))
         elif dt is None:
             min_cell_size = min((xmax - xmin) / nx for xmin, xmax, nx
                                                     in zip(min_value, max_value, num_cells))
@@ -427,7 +439,7 @@ class AbstractScalarEnv(gym.Env):
             if type(location) is int:
                 location = (location,)
             # This is equivalent to [:, location] except location is a tuple.
-            state = np.array(self.state_history)[(slice(None,) + location]
+            state = np.array(self.state_history)[(slice(None),) + location]
         return state
 
     # Works in ND.

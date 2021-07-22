@@ -3,7 +3,7 @@ import sys
 import re
 
 from util.misc import positive_int, nonnegative_float, positive_float, float_dict
-from envs import AbstractScalarEnv
+from envs.abstract_scalar_env import AbstractScalarEnv
 from envs import WENOBurgersEnv, SplitFluxBurgersEnv, FluxBurgersEnv
 
 
@@ -83,7 +83,7 @@ def get_env_arg_parser():
     parser.add_argument('--reward-adjustment', type=nonnegative_float, default=1000.0,
                         help="Constant that affects the relative importance of small errors compared to big errors."
                         + " Larger values mean that smaller errors are still important compared to big errors.")
-    default_reward_mode = AbstractBurgersEnv.fill_default_reward_mode("")
+    default_reward_mode = AbstractScalarEnv.fill_default_reward_mode("")
     parser.add_argument('--reward-mode', '--reward_mode', type=str, default=None,
                         help="String that controls how the reward is calculated."
                         + " The curent default is '{}'.".format(default_reward_mode)
@@ -119,21 +119,10 @@ def set_contingent_env_defaults(main_args, env_args):
     print("Full reward mode is '{}'.".format(env_args.reward_mode))
 
     dims = env_dimensions(main_args.env)
-    if env_args.num_cells is not None and len(env_args.num_cells) == 1:
-        # Internal functions expect num_cells to be a tuple of length dims,
-        # or a singleton for 1 dimension.
-        if dims > 1:
-            env_args.num_cells = (env_args.num_cells[0],) * dims
-        else:
-            env_args.num_cells = env_args.num_cells[0]
 
-        # Internal functions can broadcast other parameters.
-        if len(env_args.min_value) == 1:
-            env_args.min_value = env_args.min_value[0]
-        if len(env_args.max_value) == 1:
-            env_args.max_value = env_args.max_value[0]
-        if env_args.boundary is not None and type(env_args.boundary) is not str:
-            env_args.boundary = env_args.boundary[0]
+    # Most functions expect num_cells to be a tuple of length dims.
+    if env_args.num_cells is not None and len(env_args.num_cells) == 1:
+        env_args.num_cells = (env_args.num_cells[0],) * dims
 
     # Make timestep length depend on grid size or vice versa.
     #TODO ep_length should probably be an env parameter. Unless we should have a fixed time limit
@@ -148,7 +137,7 @@ def set_contingent_env_defaults(main_args, env_args):
                 dt=env_args.timestep, C=env_args.C, ep_length=main_args.ep_length,
                 time_max=env_args.time_max)
 
-        if env_args.nx is None:
+        if env_args.num_cells is None:
             env_args.num_cells = num_cells
         if env_args.timestep is None:
             env_args.timestep = dt
@@ -168,13 +157,20 @@ def set_contingent_env_defaults(main_args, env_args):
             sys.argv += ['--ep_length', str(ep_length)]
     else:
         if env_args.num_cells is None:
-            if dims == 1:
-                env_args.num_cells = 128
-            else:
-                env_args.num_cells = (128,) * dims
+            env_args.num_cells = (128,) * dims
+
+    # Grid constructors expect singletons for 1 dimension.
+    if len(env_args.num_cells) == 1:
+        env_args.num_cells = env_args.num_cells[0]
+    if len(env_args.min_value) == 1:
+        env_args.min_value = env_args.min_value[0]
+    if len(env_args.max_value) == 1:
+        env_args.max_value = env_args.max_value[0]
+    if env_args.boundary is not None and type(env_args.boundary) is not str:
+        env_args.boundary = env_args.boundary[0]
 
 def env_dimensions(env_name):
-    match = re.search(r"(\d+)(-|_)?(d|D)")
+    match = re.search(r"(\d+)(-|_)?(d|D)", env_name)
     if match is not None:
         return match.group(0)
     # There are probably exceptions to put here,

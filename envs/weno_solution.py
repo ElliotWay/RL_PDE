@@ -24,7 +24,7 @@ class PreciseWENOSolution2D(WENOSolution):
     def __init__(self, base_grid, init_params,
             precise_order, precise_scale,
             flux_function,
-            eps=0.0, source=None,
+            nu=0.0, source=None,
             record_state=False, record_actions=None):
         super().__init__(base_grid.num_cells, base_grid.num_ghosts,
                 base_grid.min_value, base_grid.max_value, record_state=record_state)
@@ -60,7 +60,7 @@ class PreciseWENOSolution2D(WENOSolution):
                 init_type=self.init_type, boundary=self.boundary)
 
         self.flux_function = flux_function
-        self.eps = eps
+        self.nu = nu
         self.precise_order = precise_order
         self.source = source
 
@@ -263,10 +263,10 @@ class PreciseWENOSolution2D(WENOSolution):
         else: #Euler
             full_step = dt * self.rk_substep()
 
-        if self.eps > 0.0:
+        if self.nu > 0.0:
             if self.use_rk4:
                 self.precise_grid.set(u_start)
-            R = self.eps * self.precise_grid.laplacian()
+            R = self.nu * self.precise_grid.laplacian()
             full_step += dt * R[num_ghost_x:-num_ghost_x, num_ghost_y:-num_ghost_y]
 
         if self.source is not None:
@@ -310,7 +310,7 @@ class PreciseWENOSolution(WENOSolution):
     def __init__(self,
                  base_grid, init_params,
                  precise_order, precise_scale, flux_function,
-                 eps=0.0, source=None,
+                 nu=0.0, source=None,
                  record_state=False, record_actions=None):
         super().__init__(base_grid.num_cells, base_grid.num_ghosts,
                 base_grid.min_value, base_grid.max_value, record_state=record_state)
@@ -336,11 +336,11 @@ class PreciseWENOSolution(WENOSolution):
         else:
             self.init_type = None
 
-        self.precise_grid = Grid1d(precise_nx, precise_ng, base_grid.xmin, base_grid.xmax,
-                                   boundary=boundary, init_type=init_type)
+        self.precise_grid = Grid1d(self.precise_nx, self.precise_ng, base_grid.xmin, base_grid.xmax,
+                                   boundary=self.boundary, init_type=self.init_type)
 
         self.flux_function = flux_function
-        self.eps = eps
+        self.nu = nu
         self.order = precise_order
         self.source = source
 
@@ -495,8 +495,8 @@ class PreciseWENOSolution(WENOSolution):
         flux[1:-1] = fpr[1:-1] + fml[1:-1]
         rhs = g.scratch_array()
 
-        if self.eps > 0.0:
-            R = self.eps * self.precise_grid.lap()
+        if self.nu > 0.0:
+            R = self.nu * self.precise_grid.lap()
             rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:]) + R[1:-1]
         else:
             rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:])
