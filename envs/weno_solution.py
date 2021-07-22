@@ -6,10 +6,16 @@ from envs.grid import AbstractGrid, create_grid
 from envs.grid1d import Grid1d
 from util.misc import create_stencil_indexes
 
+class WENOSolution(SolutionBase):
+    """
+    Interface class to define some functions that WENO solutions should have.
+    """
+    def use_rk4(self, use_rk4):
+        raise NotImplementedError()
 
 # Should be possible to convert this to ND instead of 2D.
 # rk_substep needs to be generalized.
-class PreciseWENOSolution2D(SolutionBase):
+class PreciseWENOSolution2D(WENOSolution):
     def __init__(self, base_grid, init_params,
             precise_order, precise_scale,
             flux_function,
@@ -294,26 +300,38 @@ class PreciseWENOSolution2D(SolutionBase):
 
      
 
-class PreciseWENOSolution(SolutionBase):
+class PreciseWENOSolution(WENOSolution):
 
-    def __init__(self, nx, ng, xmin, xmax,
-                 precise_order, precise_scale, init_type, boundary, flux_function,
+    def __init__(self,
+                 base_grid, init_params,
+                 precise_order, precise_scale, flux_function,
                  eps=0.0, source=None,
                  record_state=False, record_actions=None):
-        super().__init__(nx, ng, xmin, xmax)
+        super().__init__(base_grid.num_cells, base_grid.num_ghosts,
+                base_grid.min_value, base_grid.max_value, record_state=record_state)
 
         assert (precise_scale % 2 == 1), "Precise scale must be odd for easier downsampling."
 
         self.precise_scale = precise_scale
 
-        self.precise_nx = precise_scale * nx
-        if precise_order + 1 > precise_scale * ng:
+        self.precise_nx = precise_scale * base_grid.nx
+        if precise_order + 1 > precise_scale * base_grid.ng:
             self.precise_ng = precise_order + 1
-            self.extra_ghosts = self.precise_ng - (precise_scale * ng)
+            self.extra_ghosts = self.precise_ng - (precise_scale * base_grid.ng)
         else:
-            self.precise_ng = precise_scale * ng
+            self.precise_ng = precise_scale * base_grid.ng
             self.extra_ghosts = 0
-        self.precise_grid = Grid1d(xmin=xmin, xmax=xmax, nx=self.precise_nx, ng=self.precise_ng,
+
+        if 'boundary' in init_params:
+            self.boundary = init_params['boundary']
+        else:
+            self.boundary = None
+        if 'init_type' in init_params:
+            self.init_type = init_params['init_type']
+        else:
+            self.init_type = None
+
+        self.precise_grid = Grid1d(precise_nx, precise_ng, base_grid.xmin, base_grid.xmax,
                                    boundary=boundary, init_type=init_type)
 
         self.flux_function = flux_function

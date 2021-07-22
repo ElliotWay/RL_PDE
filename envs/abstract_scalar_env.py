@@ -3,6 +3,7 @@ import numpy as np
 import tensorflow as tf
 
 from envs.grid import create_grid
+from envs.weno_solution import WENOSolution
 from envs.source import RandomSource
 from util.misc import create_stencil_indexes
 
@@ -14,7 +15,7 @@ class AbstractScalarEnv(gym.Env):
 
     This abstract class handles the underlying spatial grid, (in self.grid),
     functions related to indexing the state and action history, calculating the reward signal, 
-    and other things that can apply to arbitrary equations.
+    the general structure of stepping through time, and resetting the environment.
 
     The remaining behavior should be handled by one or more levels of subclass.
     In particular a concrete subclass should:
@@ -24,13 +25,13 @@ class AbstractScalarEnv(gym.Env):
        - Also self.solution_label and self.weno_solution_label, as descriptions of what they
          actually are.
      - Declare self.observation_space and self.action_space.
-     - Implement the step() function, which applies an action to the spatial grid, and advances
-       self.solution one step.
-       - The step() function should also update self.t, self.steps, self.state_history, and
-         self.action_history.
-     - Implement the reset() function, which calculates the initial state. Implementations should
-       call super().reset(), which resets the internal spatial grid.
-     - Implement the render() function, which displays the state in some way.
+     - Implement render(), which displays the state in some way.
+     - Implement _prep_state(), which calculates and returns the RL state representation of the
+       grid.
+     - Implement _rk_substep(), which calculates the next step based on the action.
+     - Optionally override step() and _finish_step(), if something else needs to happen before or
+       after the step respectively.
+     - Optionally override reset(), if something else needs to happen on each new episode.
     """
 
     def __init__(self,
@@ -38,7 +39,7 @@ class AbstractScalarEnv(gym.Env):
             boundary=None, init_type="gaussian",
             init_params=None,
             fixed_step=0.0004, C=None, #C=0.5,
-            weno_order=3, state_order=None, eps=0.0, srca=0.0, episode_length=250,
+            weno_order=3, state_order=None, srca=0.0, episode_length=250,
             reward_adjustment=1000, reward_mode=None,
             test=False):
         """
@@ -97,7 +98,7 @@ class AbstractScalarEnv(gym.Env):
             self.ng = self.weno_order + 1
         else:
             self.ng = num_ghosts
-        self.ng = self.state_order + 1
+        self.ng = self.state_order + 1 # Does state_order go in this class?
         self.grid = create_grid(len(num_cells),
                                 num_cells=num_cells, min_value=min_value, max_value=max_value,
                                 num_ghosts=self.ng,
@@ -130,22 +131,204 @@ class AbstractScalarEnv(gym.Env):
 
         # Useful values for subclasses to create consistent names.
         self._step_precision = int(np.ceil(np.log(1+self.episode_length) / np.log(10)))
-        self._cell_index_precision = int(np.ceil(np.log(1+self.nx) / np.log(10)))
+        self._cell_index_precision = int(np.ceil(np.log(1+max(self.grid.num_cells)) / np.log(10)))
 
         self.t = 0.0
         self.steps = 0
         self.action_history = []
         self.state_history = []
 
+        self.rk_state = 1
+
         # Subclass should declare the observation and action spaces.
         self.observation_space = None
         self.action_space = None
 
-    def step(self):
+    def step(self, action):
+        raise NotImplementedError()
+
+    def render(self, *args, **kwargs):
+        """
+        Display some representation of the current state.
+        """
+        raise NotImplementedError()
+
+    def _prep_state(self):
+        """
+        Calculate and return the RL state from self.grid.
+
+        Should also set self.state with the RL state.
+        """
+        raise NotImplementedError()
+
+    def _rk_substep(self, action):
+        """
+        Calculate and return the direction of change of the space based on the action.
+
+        The actual change is dt * self._rk_substep(action); this function should not calculate the
+        timestep.
+        The return value may be applied on its own for Euler stepping, or used as part of a
+        Runge-Kutta method.
+        """
         raise NotImplementedError()
 
     @property
     def dimensions(self): return self.grid.ndim
+
+    def step(self, action):
+        """
+        Perform a single time step.
+
+        Parameters
+        ----------
+        action : ndarray OR [ndarray] OR ?
+          Weights for advancing the simulation.
+          The shape depends on the action space in the subclass.
+
+        Returns
+        -------
+        state : ndarray OR [ndarray] OR ?
+          RL state representation of the solution computed from the action.
+          The shape depends on the observation space in the subclass.
+        reward: ndarray OR [ndarray]
+          reward for current action
+        done : bool
+          boolean signifying end of episode
+        info : dict
+          Additional information; nothing currently.
+        """
+        assert not np.isnan(action).any(), "NaN detected in action."
+
+        self.action_history.append(action)
+
+        dt = self.timestep()
+
+        step = dt * self._rk_substep(action)
+
+        state, reward, done = self._finish_step(step, dt)
+
+        self.state_history.append(self.grid.get_full().copy())
+
+        return state, reward, done, {}
+
+    def rk4_step(self, action):
+        """
+        Perform one RK4 substep.
+
+        You should call this function 4 times in succession.
+        The 1st, 2nd, and 3rd calls will return the state in each substep.
+        The 4th call will return the state after the full RK4 step.
+        
+        Regardless of the internal state, the action should always be based on the previously returned state.
+
+        action and state are only recorded on the 4th call.
+
+        Returns
+        -------
+        state: np array
+          depends on which of the 4th calls this is
+        reward: np array
+          0 on first 3 calls, reward for each location on the 4th call
+        done: boolean
+          end of episode, guaranteed to be False on first 3 calls
+        """
+        assert not np.isnan(action).any(), "NaN detected in action."
+
+        if self.rk_state == 1:
+            self.u_start = np.array(self.grid.get_real())
+            self.dt = self.timestep()
+
+            self.k1 = self.dt * self.rk_substep_weno(action)
+            self.grid.set(self.u_start + self.k1/2)
+            state = self._prep_state()
+
+            self.rk_state = 2
+            return state, np.zeros_like(action), False
+        elif self.rk_state == 2:
+            self.k2 = self.dt * self.rk_substep_weno(action)
+            self.grid.set(self.u_start + self.k2/2)
+            state = self._prep_state()
+
+            self.rk_state = 3
+            return state, np.zeros_like(action), False
+        elif self.rk_state == 3:
+            self.k3 = self.dt * self.rk_substep_weno(action)
+            self.grid.set(self.u_start + self.k3)
+            state = self._prep_state()
+
+            self.rk_state = 4
+            return state, np.zeros_like(action), False
+        else:
+            assert self.rk_state == 4
+
+            self.action_history.append(action)
+
+            k4 = self.dt * self.rk_substep_weno(action)
+            step = (self.k1 + 2*(self.k2 + self.k3) + k4) / 6
+
+            if isinstance(self.solution, WENOSolution):
+                self.solution.set_rk4(True)
+            if self.weno_solution is not None:
+                self.weno_solution.set_rk4(True)
+
+            state, reward, done = self._finish_step(step, self.dt, prev=self.u_start)
+
+            if isinstance(self.solution, WENOSolution):
+                self.solution.set_rk4(False)
+            if self.weno_solution is not None:
+                self.weno_solution.set_rk4(False)
+
+            self.state_history.append(self.grid.get_full().copy())
+
+            self.rk_state = 1
+            self.k1 = self.k2 = self.k3 = self.u_start = self.dt = None
+            return state, reward, done
+
+    def _finish_step(self, step, dt, prev=None):
+        """
+        Apply a physical step.
+
+        If prev is None, the step is applied to the current grid, otherwise
+        it is applied to prev, then saved to the grid.
+
+        Override this function if other adjustments should be done to the step before applying it
+        to the grid. (Probably call super()._finish_step() at the END of that method.)
+
+        Returns state, reward, done.
+        """
+        # Update solution before updating the grid, in case it depends on the current grid.
+        self.solution.update(dt, self.t)
+        if self.weno_solution is not None:
+            self.weno_solution.update(dt, self.t)
+
+        if self.source is not None:
+            self.source.update(dt, self.t + dt) # Why is this t + dt? Why is source based on the
+                                                # time after we integrate forward?
+            step += dt * self.source.get_real()
+
+        if prev is None:
+            u_start = self.grid.get_real()
+        else:
+            u_start = prev
+        self.grid.set(u_start + step)
+
+        self.t += dt
+
+        self.steps += 1
+        if self.steps >= self.episode_length:
+            done = True
+        else:
+            done = False
+
+        reward, force_done = self.calculate_reward()
+        done = done or force_done
+
+        state = self.prep_state()
+
+        assert not np.isnan(state).any(), "NaN detected in state."
+        assert not np.isnan(reward).any(), "NaN detected in reward."
+
+        return state, reward, done
 
     # Works in ND.
     def reset(self):
@@ -173,6 +356,10 @@ class AbstractScalarEnv(gym.Env):
         self.t = 0.0
         self.steps = 0
         self.previous_error = np.zeros_like(self.grid.get_full())
+
+        self.rk_state = 1
+
+        return self._prep_state()
 
     # Works in ND.
     @staticmethod
@@ -204,8 +391,6 @@ class AbstractScalarEnv(gym.Env):
             min_cell_size = min(self.grid.cell_size)
             return self.C * min_cell_size / max(abs(self.grid.get_real()))
 
-    def render(self, *args, **kwargs):
-        raise NotImplementedError()
 
     # Works in ND.
     def force_state(self, state_grid):
