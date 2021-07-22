@@ -1,7 +1,3 @@
-import os
-import sys
-from datetime import datetime
-
 import gym
 import numpy as np
 import tensorflow as tf
@@ -9,9 +5,8 @@ from gym import spaces
 from stable_baselines import logger
 
 from envs.abstract_scalar_env import AbstractScalarEnv
-from envs.grid import Grid1d
-from envs.source import RandomSource
-from envs.weno_solution import PreciseWENOSolution, PreciseWENOSolution2D
+from envs.plottable_env import Plottable1DEnv
+from envs.weno_solution import WENOSolution, PreciseWENOSolution, PreciseWENOSolution2D
 from envs.solutions import AnalyticalSolution
 from envs.solutions import MemoizedSolution, OneStepSolution
 import envs.weno_coefficients as weno_coefficients
@@ -103,8 +98,8 @@ class AbstractBurgersEnv(AbstractScalarEnv):
     the RL agent to compare against. It also adds the viscosity parameter 'nu' by overriding
     _finish_step().
 
-    Concrete subclasses still need to implement _prep_state(), _rk_substep(), and declare the
-    observation and action spaces.
+    Concrete subclasses still need to implement render(), _prep_state(), _rk_substep(),
+    and declare the observation and action spaces.
     """
 
     def __init__(self,
@@ -243,13 +238,13 @@ class AbstractBurgersEnv(AbstractScalarEnv):
 
         return state, reward, done
 
+class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
 
-class WENOBurgersEnv(AbstractBurgersEnv):
-
-    def __init__(self, follow_solution=False, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.follow_solution = follow_solution
+        self.nx = self.grid.nx
+        self.ng = self.grid.ng
 
         self.action_space = SoftmaxBox(low=0.0, high=1.0, 
                                        shape=(self.grid.real_length() + 1, 2, self.weno_order),
@@ -264,17 +259,14 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         if self.weno_solution is not None:
             self.weno_solution.set_record_actions("weno")
-        elif not self.analytical:
+        elif not isinstance(self.solution, WENOSolution):
             self.solution.set_record_actions("weno")
 
-        self.dt = self.timestep()
-        self.k1 = self.k2 = self.k3 = self.u_start = None
-        self.rk_state = 1
 
         self._action_labels = ["$w^{}_{}$".format(sign, num) for sign in ['+', '-']
                                     for num in range(1, self.weno_order+1)]
 
-    def prep_state(self):
+    def _prep_state(self):
         """
         Return state at current time step. Returns fpr and fml vector slices.
   
@@ -318,22 +310,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         return state
 
-    def reset(self):
-        """
-        Reset the environment.
-
-        Returns
-        -------
-        Initial state.
-
-        """
-        super().reset()
-
-        self.rk_state = 1
-
-        return self.prep_state()
-
-    def rk_substep_weno(self, weights):
+    def _rk_substep(self, weights):
 
         state = self.current_state
 
@@ -354,174 +331,6 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         rhs = (flux[:-1] - flux[1:]) / self.grid.dx
 
         return rhs
-
-    def rk4_step(self, action):
-        """
-        Perform one RK4 substep.
-
-        You should call this function 4 times in succession.
-        The 1st, 2nd, and 3rd calls will return the state in each substep.
-        The 4th call will return the state after the full RK4 step.
-        
-        Regardless of the internal state, the action should always be based on the previously returned state.
-
-        action and state are only recorded on the 4th call.
-
-        Returns
-        -------
-        state: np array
-          depends on which of the 4th calls this is
-        reward: np array
-          0 on first 3 calls, reward for each location on the 4th call
-        done: boolean
-          end of episode, guaranteed to be False on first 3 calls
-        """
-        if np.isnan(action).any():
-            raise Exception("NaN detected in action.")
-
-        if self.rk_state == 1:
-            self.u_start = np.array(self.grid.get_real())
-            self.dt = self.timestep()
-
-            self.k1 = self.dt * self.rk_substep_weno(action)
-            self.grid.set(self.u_start + self.k1/2)
-            state = self.prep_state()
-
-            self.rk_state = 2
-            return state, np.zeros_like(action), False
-        elif self.rk_state == 2:
-            self.k2 = self.dt * self.rk_substep_weno(action)
-            self.grid.set(self.u_start + self.k2/2)
-            state = self.prep_state()
-
-            self.rk_state = 3
-            return state, np.zeros_like(action), False
-        elif self.rk_state == 3:
-            self.k3 = self.dt * self.rk_substep_weno(action)
-            self.grid.set(self.u_start + self.k3)
-            state = self.prep_state()
-
-            self.rk_state = 4
-            return state, np.zeros_like(action), False
-        else:
-            assert self.rk_state == 4
-
-            self.action_history.append(action)
-
-            k4 = self.dt * self.rk_substep_weno(action)
-            step = (self.k1 + 2*(self.k2 + self.k3) + k4) / 6
-
-            if isinstance(self.solution, PreciseWENOSolution):
-                self.solution.set_rk4(True)
-            if self.weno_solution is not None:
-                self.weno_solution.set_rk4(True)
-
-            state, reward, done = self._finish_step(step, self.dt, prev=self.u_start)
-
-            if isinstance(self.solution, PreciseWENOSolution):
-                self.solution.set_rk4(False)
-            if self.weno_solution is not None:
-                self.weno_solution.set_rk4(False)
-
-            self.state_history.append(self.grid.get_full().copy())
-
-            self.rk_state = 1
-            self.k1 = self.k2 = self.k3 = self.u_start = self.dt = None
-            return state, reward, done
-
-
-    def step(self, action):
-        """
-        Perform a single time step.
-
-        Parameters
-        ----------
-        action : np array
-          Weights for reconstructing WENO weights. This will be multiplied with the output from weno_stencils
-          size: (grid-size + 1) X 2 (fp, fm) X order
-
-        Returns
-        -------
-        state: np array.
-          solution predicted using action
-        reward: float
-          reward for current action
-        done: boolean
-          boolean signifying end of episode
-        info : dictionary
-          not passing anything now
-        """
-
-        if np.isnan(action).any():
-            raise Exception("NaN detected in action.")
-
-        self.action_history.append(action)
-
-        # Find a way to pass this to agent if dt varies.
-        dt = self.timestep()
-
-        step = dt * self.rk_substep_weno(action)
-
-        state, reward, done = self._finish_step(step, dt)
-
-        self.state_history.append(self.grid.get_full().copy())
-
-        return state, reward, done, {}
-
-    def _finish_step(self, step, dt, prev=None):
-        """
-        Apply a physical step.
-
-        If prev is None, the step is applied to the current grid, otherwise
-        it is applied to prev, then saved to the grid.
-
-        Returns state, reward, done.
-        """
-        # Update solution first, in case it depends on our current state.
-        self.solution.update(dt, self.t)
-
-        if self.weno_solution is not None:
-            self.weno_solution.update(dt, self.t)
-
-        # Keep this!
-        if self.eps > 0.0:
-            R = self.eps * self.grid.lap()
-            step += dt * R[self.grid.ilo:self.grid.ihi+1]
-        if self.source is not None:
-            self.source.update(dt, self.t + dt)
-            step += dt * self.source.get_real()
-
-        if prev is None:
-            u_start = self.grid.get_real()
-        else:
-            u_start = prev
-        self.grid.set(u_start + step)
-
-        self.t += dt
-
-        self.steps += 1
-        if self.steps >= self.episode_length:
-            done = True
-        else:
-            done = False
-
-        reward, force_done = self.calculate_reward()
-        done = done or force_done
-
-        # Keep this!
-        # Set the state to the solution after calculating
-        # the reward. Useful for testing?
-        if self.follow_solution:
-            self.grid.set(self.solution.get_real())
-
-        state = self.prep_state()
-
-        if np.isnan(state).any():
-            raise Exception("NaN detected in state.")
-        if np.isnan(reward).any():
-            raise Exception("NaN detected in reward.")
-
-        return state, reward, done
 
     @tf.function
     def tf_prep_state(self, state):
@@ -827,9 +636,6 @@ class DiscreteWENOBurgersEnv(WENOBurgersEnv):
 
         # The observation space is declared in WENOBurgersEnv.
 
-    def reset(self):
-        return super().reset()
-
     def step(self, action):
         plus_actions = action // len(self.action_list)
         minus_actions = action % len(self.action_list)
@@ -840,10 +646,12 @@ class DiscreteWENOBurgersEnv(WENOBurgersEnv):
 
         return super().step(selected_actions)
 
-class SplitFluxBurgersEnv(AbstractBurgersEnv):
+class SplitFluxBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        raise Exception("SplitFluxBurgersEnv hasn't been used in a while! This exception is safe"
+                + " to delete, but keep an eye out for unexpected behavior.")
 
         self.action_space = SoftmaxBox(low=-np.inf, high=np.inf,
                                        shape=(self.grid.real_length() + 1, 2, 2 * self.weno_order - 1),
@@ -856,7 +664,7 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
         else:
             self.weno_solution.set_record_actions("coef")
 
-    def prep_state(self):
+    def _prep_state(self):
         """
         Return state at current time step. Returns fpr and fml vector slices.
   
@@ -900,59 +708,11 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
 
         return state
 
-    def reset(self):
-        """
-        Reset the environment.
-
-        Returns
-        -------
-        Initial state.
-
-        """
-        super().reset()
-
-        return self.prep_state()
-
-    def step(self, action):
-        """
-        Perform a single time step.
-
-        Parameters
-        ----------
-        action : np array
-          Weights for construction the flux.
-          size: (grid-size + 1) X 2 (fp, fm) X (2 * order - 1)
-
-        Returns
-        -------
-        state: np array.
-          solution predicted using action
-        reward: float
-          reward for current action
-        done: boolean
-          boolean signifying end of episode
-        info : dictionary
-          not passing anything now
-        """
-
-        if np.isnan(action).any():
-            raise Exception("NaN detected in action.")
-
-        self.action_history.append(action)
-
+    def _rk_substep(self, action):
         state = self.current_state
 
         fp_state = state[:, 0, :]
         fm_state = state[:, 1, :]
-
-        done = False
-        g = self.grid
-
-        # Store the data at the start of the time step
-        u_copy = g.get_real()
-
-        # Should probably find a way to pass this to agent if dt varies.
-        dt = self.timestep()
 
         fp_action = action[:, 0, :]
         fm_action = action[:, 1, :]
@@ -962,47 +722,16 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv):
 
         flux = fml + fpr
 
-        if self.eps > 0.0:
-            R = self.eps * self.grid.lap()
-            rhs = (flux[:-1] - flux[1:]) / g.dx + R[g.ilo:g.ihi+1]
-        else:
-            rhs = (flux[:-1] - flux[1:]) / g.dx
+        rhs = (flux[:-1] - flux[1:]) / self.grid.dx
 
-        if self.source is not None:
-            self.source.update(dt, self.t + dt)
-            rhs += self.source.get_real()
-
-        self.solution.update(dt, self.t)
-
-        if self.weno_solution is not None:
-            self.weno_solution.update(dt, self.t)
-
-        u_copy += dt * rhs
-        self.grid.set(u_copy)
-
-        self.t += dt
-
-        state = self.prep_state()
-
-        self.steps += 1
-        if self.steps >= self.episode_length:
-            done = True
-
-        reward, force_done = self.calculate_reward()
-        done = done or force_done
-
-        if np.isnan(state).any():
-            raise Exception("NaN detected in state.")
-        if np.isnan(reward).any():
-            raise Exception("NaN detected in reward.")
-
-        return state, reward, done, {}
-
+        return rhs
 
 class FluxBurgersEnv(AbstractBurgersEnv):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        raise Exception("FluxBurgersEnv hasn't been used in a while! This exception is safe"
+                + " to delete, but keep an eye out for unexpected behavior.")
 
         self.action_space = SoftmaxBox(low=-np.inf, high=np.inf,
                                        shape=(self.grid.real_length() + 1, 2 * self.weno_order),
@@ -1011,7 +740,7 @@ class FluxBurgersEnv(AbstractBurgersEnv):
                                             shape=(self.grid.real_length() + 1, 2 * self.state_order),
                                             dtype=np.float64)
 
-    def prep_state(self):
+    def _prep_state(self):
         """
         Return state at current time step. State is flux.
   
@@ -1045,94 +774,9 @@ class FluxBurgersEnv(AbstractBurgersEnv):
 
         return state
 
-    def reset(self):
-        """
-        Reset the environment.
-
-        Returns
-        -------
-        Initial state.
-
-        """
-        super().reset()
-
-        return self.prep_state()
-
-    def step(self, action):
-        """
-        Perform a single time step.
-
-        Parameters
-        ----------
-        action : np array
-          Weights for construction the flux.
-          size: (grid-size + 1) X 2 (fp, fm) X (2 * order - 1)
-
-        Returns
-        -------
-        state: np array.
-          solution predicted using action
-        reward: float
-          reward for current action
-        done: boolean
-          boolean signifying end of episode
-        info : dictionary
-          not passing anything now
-        """
-
-        if np.isnan(action).any():
-            raise Exception("NaN detected in action.")
-
-        self.action_history.append(action)
-
+    def _rk_step(self, action):
         state = self.current_state
-
-        done = False
-        g = self.grid
-
-        # Store the data at the start of the time step
-        u_copy = g.get_real()
-
-        # Should probably find a way to pass this to agent if dt varies.
-        dt = self.timestep()
-
         flux = np.sum(action * state, axis=-1)
+        rhs = (flux[:-1] - flux[1:]) / self.grid.dx
 
-        if self.eps > 0.0:
-            R = self.eps * self.grid.lap()
-            rhs = (flux[:-1] - flux[1:]) / g.dx + R[g.ilo:g.ihi+1]
-        else:
-            rhs = (flux[:-1] - flux[1:]) / g.dx
-
-        if self.source is not None:
-            self.source.update(dt, self.t + dt)
-            rhs += self.source.get_real()
-
-        self.solution.update(dt, self.t)
-        if self.weno_solution is not None:
-            self.weno_solution.update(dt, self.t)
-
-        u_copy += dt * rhs
-        self.grid.set(u_copy)
-
-        # update the solution time
-        self.t += dt
-
-        # Calculate new RL state.
-        state = self.prep_state()
-
-        self.steps += 1
-        if self.steps >= self.episode_length:
-            done = True
-
-        reward, force_done = self.calculate_reward()
-        done = done or force_done
-
-
-        if np.isnan(state).any():
-            raise Exception("NaN detected in state.")
-        if np.isnan(reward).any():
-            raise Exception("NaN detected in reward.")
-
-        return state, reward, done, {}
-
+        return rhs

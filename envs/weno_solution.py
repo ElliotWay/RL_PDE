@@ -13,6 +13,11 @@ class WENOSolution(SolutionBase):
     def use_rk4(self, use_rk4):
         raise NotImplementedError()
 
+    def set_record_actions(self, mode):
+        raise NotImplementedError()
+    def get_action_history(self):
+        raise NotImplementedError()
+
 # Should be possible to convert this to ND instead of 2D.
 # rk_substep needs to be generalized.
 class PreciseWENOSolution2D(WENOSolution):

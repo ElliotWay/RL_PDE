@@ -138,6 +138,9 @@ class AbstractScalarEnv(gym.Env):
         self.action_history = []
         self.state_history = []
 
+        # These are used by RK4.
+        self.dt = self.timestep()
+        self.k1 = self.k2 = self.k3 = self.u_start = None
         self.rk_state = 1
 
         # Subclass should declare the observation and action spaces.
