@@ -366,7 +366,7 @@ class AbstractScalarEnv(gym.Env):
 
     # Works in ND.
     @staticmethod
-    def fill_default_time_vs_space(min_value, max_value, num_cells, dt, C, ep_length, time_max):
+    def fill_default_time_vs_space(num_cells, min_value, max_value, dt, C, ep_length, time_max):
         approximate_max = 2.0 # Is this a good number?
         if num_cells is None:
             if dt is None:

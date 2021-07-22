@@ -13,11 +13,7 @@ import envs.weno_coefficients as weno_coefficients
 from util.softmax_box import SoftmaxBox
 from util.misc import create_stencil_indexes
 
-#TODO (long-term):
-# Rewrite this file. It's close to 2000 lines long, as of writing this comment, which is too many
-# for one file. Probably the Abstract class should be separate, and only have e.g. the plot
-# functions.
-
+#TODO Have a common declaration for these - in weno_solution.py perhaps?
 # Used in step function to extract all the stencils.
 def weno_i_stencils_batch(order, q_batch):
     """
