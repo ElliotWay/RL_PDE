@@ -6,6 +6,8 @@ from envs.grid import create_grid
 from envs.source import RandomSource
 from util.misc import create_stencil_indexes
 
+#TODO adapt to vector quantities. What would need to change?
+# Will state be a tuple like the action? Or is it better to have the vector as the last dimension?
 class AbstractScalarEnv(gym.Env):
     """
     Environment modelling a scalar conservation equation of arbitrary dimensions.
@@ -19,9 +21,13 @@ class AbstractScalarEnv(gym.Env):
      - Declare self.solution, an instance of SolutionBase, from which the reward is calculated.
      - Optionally declare self.weno_solution, an instance of SolutionBase that closely follows WENO
        for comparison.
+       - Also self.solution_label and self.weno_solution_label, as descriptions of what they
+         actually are.
      - Declare self.observation_space and self.action_space.
      - Implement the step() function, which applies an action to the spatial grid, and advances
        self.solution one step.
+       - The step() function should also update self.t, self.steps, self.state_history, and
+         self.action_history.
      - Implement the reset() function, which calculates the initial state. Implementations should
        call super().reset(), which resets the internal spatial grid.
      - Implement the render() function, which displays the state in some way.
@@ -108,10 +114,12 @@ class AbstractScalarEnv(gym.Env):
 
         # Subclass must declare a solution. It should be an instance of SolutionBase.
         self.solution = None
+        self.solution_label = "solution"
         # Subclass may optionally use a weno_solution. This is for keeping track of the comparison
         # solution when the main solution is doing something else. This could use a more general
         # name.
         self.weno_solution = None
+        self.weno_solution_label = "WENO"
 
         self.previous_error = np.zeros_like(self.grid.get_full())
 
@@ -128,6 +136,10 @@ class AbstractScalarEnv(gym.Env):
         self.steps = 0
         self.action_history = []
         self.state_history = []
+
+        # Subclass should declare the observation and action spaces.
+        self.observation_space = None
+        self.action_space = None
 
     def step(self):
         raise NotImplementedError()
