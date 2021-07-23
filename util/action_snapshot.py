@@ -34,7 +34,7 @@ def declare_standard_envs(args):
         return flat_state, {}
     args.init_type = flat
     args.boundary = "outflow"
-    args.nx = len(flat_state)
+    args.num_cells = len(flat_state)
     flat_env = build_env(args.env, args)
     standard_envs.append(flat_env)
 
@@ -43,7 +43,7 @@ def declare_standard_envs(args):
         return rising_state, {}
     args.init_type = rising
     args.boundary = "first"
-    args.nx = len(rising_state)
+    args.num_cells = len(rising_state)
     rising_env = build_env(args.env, args)
     standard_envs.append(rising_env)
 
@@ -52,7 +52,7 @@ def declare_standard_envs(args):
         return falling_state, {}
     args.init_type = falling
     args.boundary = "first"
-    args.nx = len(falling_state)
+    args.num_cells = len(falling_state)
     falling_env = build_env(args.env, args)
     standard_envs.append(falling_env)
 
@@ -62,7 +62,7 @@ def declare_standard_envs(args):
         return shock_state, {}
     args.init_type = shock
     args.boundary = "outflow"
-    args.nx = len(shock_state)
+    args.num_cells = len(shock_state)
     shock_env = build_env(args.env, args)
     standard_envs.append(shock_env)
 
@@ -72,7 +72,7 @@ def declare_standard_envs(args):
         return rare_state, {}
     args.init_type = rare
     args.boundary = "outflow"
-    args.nx = len(rare_state)
+    args.num_cells = len(rare_state)
     rare_env = build_env(args.env, args)
     standard_envs.append(rare_env)
 

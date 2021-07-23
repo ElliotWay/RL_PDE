@@ -182,15 +182,21 @@ class GridBase(AbstractGrid):
         super().__init__(num_cells, num_ghosts, min_value, max_value)
      
         if type(boundary) is str:
-            self.boundary = (boundary,) * len(self.num_cells)
+            if len(self.num_cells) == 1:
+                self.boundary = boundary
+            else:
+                self.boundary = (boundary,) * len(self.num_cells)
             """
             GridBase.boundary is one of these annoying properties that can be either a tuple or a
             string. The string implies (str,) * len(self.num_cells), but for compability reasons
             you should check which type it is before using it.
             """
-        elif boundary is not None and len(boundary) != len(self.num_cells):
-            raise ValueError("GridBase: Size of boundary must match size of num_cells"
-                    + " ({} vs {}).".format(len(self.boundary), len(self.num_cells)))
+        else:
+            if boundary is not None and len(boundary) != len(self.num_cells):
+                raise ValueError("GridBase: Size of boundary must match size of num_cells"
+                        + " ({} vs {}).".format(len(self.boundary), len(self.num_cells)))
+            else:
+                self.boundary = boundary
 
         # Storage for the solution.
         self.space = self.scratch_array()
@@ -243,15 +249,16 @@ class GridBase(AbstractGrid):
         Grid.set calls this method, so you need only use this method if accessing the grid by some
         other means, such as writing directly to grid.space.
         """
-        if self.boundary is None:
+        boundary = self.boundary
+        if boundary is None:
             raise Exception("GridBase: boundary must be set before update_boundary is called.")
-        if type(self.boundary) is str:
-            self.boundary = (self.boundary,) * len(self.num_cells)
-        elif len(self.boundary) != len(self.num_cells):
+        if type(boundary) is str:
+            boundary = (boundary,) * len(self.num_cells)
+        elif len(boundary) != len(self.num_cells):
             raise ValueError("GridBase: Size of boundary must match size of num_cells"
-                    + " ({} vs {}).".format(len(self.boundary), len(self.num_cells)))
+                    + " ({} vs {}).".format(len(boundary), len(self.num_cells)))
 
-        for axis, (ng, bound) in enumerate(zip(self.num_ghosts, self.boundary)):
+        for axis, (ng, bound) in enumerate(zip(self.num_ghosts, boundary)):
             axis_slice = AxisSlice(self.space, axis)
             # Periodic - copying from the opposite end, as if the space wraps around
             if bound == "periodic":

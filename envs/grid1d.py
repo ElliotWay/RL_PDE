@@ -67,8 +67,7 @@ class Grid1d(GridBase):
         # change if init_type is scheduled or sampled.
         self._init_type = init_type
         self.init_type = init_type
-        self._boundary = boundary
-        self.boundary = boundary
+        self._boundary = self.boundary
         self.deterministic_init = deterministic_init
         self._init_schedule_index = 0
         #self._init_schedule = ["smooth_rare", "smooth_sine", "random", "rarefaction", "accelshock"]

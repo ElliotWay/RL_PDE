@@ -212,7 +212,6 @@ class AbstractBurgersEnv(AbstractScalarEnv):
             self.weno_solution = None
 
     def burgers_flux(self, q):
-        # This is the only thing unique to Burgers, could we make this a general class with this as a parameter?
         return 0.5 * q ** 2
 
     #def lap(self):
@@ -221,8 +220,8 @@ class AbstractBurgersEnv(AbstractScalarEnv):
         """
         # Note: This function is now defined in envs/grid.py#GridBase.laplacian(). Use that instead.
 
-    def _finish_step(step, dt, prev=None):
-        if nu > 0.0:
+    def _finish_step(self, step, dt, prev=None):
+        if self.nu > 0.0:
             R = self.nu * self.grid.laplacian()
             step += dt * R[self.grid.real_slice]
 
@@ -256,7 +255,6 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
             self.weno_solution.set_record_actions("weno")
         elif not isinstance(self.solution, WENOSolution):
             self.solution.set_record_actions("weno")
-
 
         self._action_labels = ["$w^{}_{}$".format(sign, num) for sign in ['+', '-']
                                     for num in range(1, self.weno_order+1)]
@@ -350,7 +348,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
             right_ghost = state[:ghost_size[0]]
             full_state = tf.concat([left_ghost, state, right_ghost], axis=0)
         else:
-            raise NotImplementedError()
+            raise NotImplementedError("{} boundary not implemented.".format(self.grid.boundary))
 
         # Compute flux. Burgers specific!!!
         flux = 0.5 * (full_state ** 2)

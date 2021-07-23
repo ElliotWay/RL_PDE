@@ -3,9 +3,11 @@ import numpy as np
 import tensorflow as tf
 
 from envs.grid import create_grid
+from envs.solutions import OneStepSolution
 from envs.weno_solution import WENOSolution
 from envs.source import RandomSource
 from util.misc import create_stencil_indexes
+from util.misc import AxisSlice
 
 #TODO adapt to vector quantities. What would need to change?
 # Will state be a tuple like the action? Or is it better to have the vector as the last dimension?
@@ -56,8 +58,8 @@ class AbstractScalarEnv(gym.Env):
             Lower bounds of the physical space.
         max_value : float OR [float]
             Upper bounds of the physical space.
-        boundary : string
-            Type of boundary condition (periodic/outflow)
+        boundary : string OR [string]
+            Type of boundary condition (periodic/outflow).
         init_type : string
             Type of initial condition (various, see envs.grid).
         init_params : dict
@@ -337,7 +339,7 @@ class AbstractScalarEnv(gym.Env):
         reward, force_done = self.calculate_reward()
         done = done or force_done
 
-        state = self.prep_state()
+        state = self._prep_state()
 
         assert not np.isnan(state).any(), "NaN detected in state."
         assert not np.isnan(reward).any(), "NaN detected in reward."
@@ -690,7 +692,8 @@ class AbstractScalarEnv(gym.Env):
                 # Towards infinity, all rewards (or penalties) are equally important.
                 # Towards 0, small rewards are increasingly less important.
                 # An alternative to arctan(C*x) with this property would be x^(1/C).
-                reward = tuple(np.arctan(self.reward_adjustment * -combined_error))
+                reward = tuple(np.arctan(self.reward_adjustment * -error) for error in
+                        combined_error)
         else:
             raise Exception("AbstractBurgersEnv: reward_mode problem")
 
