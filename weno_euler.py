@@ -15,6 +15,14 @@ from envs import weno_coefficients
 from models.sac import SACBatch
 from util.misc import create_stencil_indexes
 
+import argparse
+from argparse import Namespace
+from envs import builder as env_builder
+from models import get_model_arg_parser
+from util.function_dict import numpy_fn
+from util import metadata
+from util.lookup import get_model_class, get_emi_class
+
 class Grid1d(object):
 
     def __init__(self, nx, ng, xmin=0.0, xmax=1.0, bc="outflow"):
@@ -567,6 +575,88 @@ class WENOSimulation(object):
 
 LOG_DIR = "test/weno_eulers/double_rarefaction"
 #LOG_DIR = "test/weno_eulers/advection"
+os.makedirs(LOG_DIR)
+
+def setup_args():
+    parser = argparse.ArgumentParser(
+        description="Deploy an existing RL agent in an environment. Note that this script also takes various arguments not listed here.",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--help-env', default=False, action='store_true',
+                        help="Do not test and show the environment parameters not listed here.")
+    parser.add_argument('--agent', '-a', type=str, default="log/weno_burgers/full/210708_095448_newBC_order2/best_1_model_19420.zip",
+                        help="Agent to test. Either a file or a string for a standard agent."
+                        + " Parameters are loaded from 'meta.txt' in the same directory as the"
+                        + " agent file, but can be overriden."
+                        + " 'default' uses standard weno coefficients. 'none' forces no agent and"
+                        + " only plots the true solution (ONLY IMPLEMENTED FOR EVOLUTION PLOTS).")
+    parser.add_argument('--env', type=str, default="weno_burgers",
+                        help="Name of the environment in which to deploy the agent.")
+    parser.add_argument('--model', type=str, default='sac',
+                        help="Type of model to be loaded. (Overrides the meta file.)")
+    parser.add_argument('--emi', type=str, default='batch',
+                        help="Environment-model interface. (Overrides the meta file.)")
+    parser.add_argument('--obs-scale', '--obs_scale', type=str, default='z_score_last',
+                        help="Adjustment function to observation. Compute Z score along the last"
+                        + " dimension (the stencil) with 'z_score_last', the Z score along every"
+                        + " dimension with 'z_score_all', or leave them the same with 'none'.")
+    parser.add_argument('--action-scale', '--action_scale', type=str, default=None,
+                        help="Adjustment function to action. Default depends on environment."
+                        + " 'softmax' computes softmax, 'rescale_from_tanh' scales to [0,1] then"
+                        + " divides by the sum of the weights, 'none' does nothing.")
+    parser.add_argument('--log-dir', type=str, default=None,
+                        help="Directory to place log file and other results. Default is test/env/agent/timestamp.")
+    parser.add_argument('--ep-length', type=int, default=500,
+                        help="Number of timesteps in an episode.")
+    parser.add_argument('--seed', type=int, default=1,
+                        help="Set random seed for reproducibility.")
+    parser.add_argument('--plot-actions', '--plot_actions', default=False, action='store_true',
+                        help="Plot the actions in addition to the state.")
+    parser.add_argument('--animate', default=False, action='store_true',
+                        help="Enable animation mode. Plot the state at every timestep, and keep the axes fixed across every plot.")
+    parser.add_argument('--plot-error', '--plot_error', default=False, action='store_true',
+                        help="Plot the error between the agent and the solution. Combines with evolution-plot.")
+    parser.add_argument('--evolution-plot', '--evolution_plot', default=False, action='store_true',
+                        help="Instead of usual rendering create 'evolution plot' which plots several states on the"
+                        + " same plot in increasingly dark color.")
+    parser.add_argument('--convergence-plot', '--convergence_plot', default=False, action='store_true',
+                        help="Do several runs with different grid sizes to create a convergence plot."
+                        " Overrides the --nx argument with 64, 128, 256, and 512, successively."
+                        " Sets the --analytical flag.")
+    parser.add_argument('--rk4', default=False, action='store_true',
+                        help="Use RK4 steps instead of Euler steps. Only available for testing,"
+                        + " since the reward during training doesn't make sense.")
+    parser.add_argument('-y', default=False, action='store_true',
+                        help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
+    parser.add_argument('-n', default=False, action='store_true',
+                        help="Choose no for any questions, namely overwriting existing files. Useful for scripts. Overrides the -y option.")
+
+    main_args, rest = parser.parse_known_args()
+
+    env_arg_parser = env_builder.get_env_arg_parser()
+    env_args, rest = env_arg_parser.parse_known_args(rest)
+    env_builder.set_contingent_env_defaults(main_args, env_args)
+
+    # run_test.py has model arguments that can be overidden, if desired,
+    # but are intended to be loaded from a meta file.
+    model_arg_parser = get_model_arg_parser()
+    model_args, rest = model_arg_parser.parse_known_args(rest)
+
+    internal_args = {}
+    internal_args['total_episodes'] = 1000
+
+    if main_args.env.startswith("weno"):
+        mode = "weno"
+    elif main_args.env.startswith("split_flux"):
+        mode = "split_flux"
+    elif main_args.env.startswith("flux"):
+        mode = "flux"
+    else:
+        mode = "n/a"
+    internal_args['mode'] = mode
+
+    args = Namespace(**vars(main_args), **vars(env_args), **vars(model_args), **internal_args)
+
+    return args
 
 
 if __name__ == "__main__":
@@ -588,12 +678,23 @@ if __name__ == "__main__":
     agent_sim = WENOSimulation(agent_grid, C, order)
     agent_sim.init_cond(init)
 
+    args = setup_args()
+    metadata.load_to_namespace('log/weno_burgers/full/210708_095448_newBC_order2/meta.txt', args, ignore_list=['log_dir', 'ep_length'])
+    env = env_builder.build_env('weno_burgers', args, test=True)
+    obs_adjust = numpy_fn(args.obs_scale)
+    action_adjust = numpy_fn(args.action_scale)
+    model_cls = get_model_class(args.model)
+    emi_cls = get_emi_class(args.emi)
+    emi = emi_cls(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
+    emi.load_model(args.agent)
+    agent = emi.get_policy()
+
     weno_grid = Grid1d(nx, ng, xmin, xmax, bc="outflow")
     weno_sim = WENOSimulation(weno_grid, C, order)
     weno_sim.init_cond(init)
 
-    agent_file = "possible_good_model.zip"
-    agent = SACBatch.load(agent_file)
+    # agent_file = "possible_good_model.zip"
+    # agent = SACBatch.load(agent_file)
     agent_sim.evolve_with_agent(agent, tmax, solution=weno_sim)
     agent_sim.save_plot("last", other=weno_sim)
 
