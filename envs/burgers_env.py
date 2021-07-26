@@ -241,7 +241,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
 
         self.action_space = SoftmaxBox(low=0.0, high=1.0, 
                                        shape=(self.grid.real_length() + 1, 2, self.weno_order),
-                                       dtype=np.float32)
+                                       dtype=np.float64)
         self.observation_space = spaces.Box(low=-1e7, high=1e7,
                                             shape=(self.grid.real_length() + 1, 2, 2 * self.state_order - 1),
                                             dtype=np.float64)
@@ -309,6 +309,9 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         fp_state = state[:, 0, :]
         fm_state = state[:, 1, :]
 
+        #TODO state_order != weno_order has never worked well.
+        # Is this why? Should this be state order? Or possibly it should be weno order but we still
+        # need to compensate for a larger state order somehow?
         fp_stencils = weno_i_stencils_batch(self.weno_order, fp_state)
         fm_stencils = weno_i_stencils_batch(self.weno_order, fm_state)
 

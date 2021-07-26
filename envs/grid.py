@@ -98,7 +98,11 @@ class AbstractGrid:
         self.coords = []
         # cell-centered coordinates, only real cells (not ghosts)
         self.real_coords = []
-        # Physical coordinates: interfaces (including min and max edges)
+        # Physical coordinates of the interfaces (including min and max edges).
+        # Note that these are also not the coordinates of the interfaces.
+        # Substitute these into the cross product of coords to get interfaces along each dimension,
+        # so e.g. coords[0] X interfaces[1] X coords[2] to get the interfaces between cells that
+        # are adjacent on the 1 dimension.
         self.interfaces = []
 
         for nx, ng, xmin, xmax in zip(

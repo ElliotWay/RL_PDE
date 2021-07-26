@@ -102,10 +102,9 @@ class AbstractScalarEnv(gym.Env):
             self.state_order = self.weno_order
 
         if num_ghosts is None:
-            self.ng = self.weno_order + 1
+            self.ng = self.state_order + 1
         else:
             self.ng = num_ghosts
-        self.ng = self.state_order + 1
 
         if type(num_cells) is int:
             dims = 1
