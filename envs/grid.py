@@ -91,14 +91,14 @@ class AbstractGrid:
             self.max_value = (max_value,) * len(self.num_cells)
 
         self.cell_size = []
-        # Physical coordinates: cell-centered, left and right edges
+        # Physical coordinates: cell-centered
         # Note that for >1 dimension, these are not the coordinates themselves - 
         # the actual coordinates are the cross product of these,
         # e.g. coords[0] X coords[1] X coords[2].
         self.coords = []
         # cell-centered coordinates, only real cells (not ghosts)
         self.real_coords = []
-        # Physical coordinates: interfaces, left edges
+        # Physical coordinates: interfaces (including min and max edges)
         self.interfaces = []
 
         for nx, ng, xmin, xmax in zip(
@@ -110,7 +110,7 @@ class AbstractGrid:
             self.coords.append(x)
             real_x = x[ng:-ng]
             self.real_coords.append(real_x)
-            inter_x = xmin + (np.arange(nx + 2 * ng) - ng) * dx
+            inter_x = xmin + (np.arange(nx + 2 * ng + 1) - ng) * dx
             self.interfaces.append(inter_x)
 
     # 1-dimensional shortcuts for compatability.
@@ -127,21 +127,25 @@ class AbstractGrid:
     @property
     def dx(self): return self.cell_size[0]
 
-    # x, y, and z make for more readable initial conditions.
+    # x, y, and z can be more readable.
     @property
-    def x(self):
-        return self.coords[0]
+    def x(self): return self.coords[0]
     @property
-    def real_x(self):
-        return self.real_coords[0]
+    def real_x(self): return self.real_coords[0]
+    @property
+    def inter_x(self): return self.interfaces[0]
     @property
     def y(self): return self.coords[1]
     @property
     def real_y(self): return self.real_coords[1]
     @property
+    def inter_y(self): return self.interfaces[1]
+    @property
     def z(self): return self.coords[2]
     @property
     def real_z(self): return self.real_coords[2]
+    @property
+    def inter_z(self): return self.interfaces[2]
     
     #TODO If grids become really big, then we won't be able to read/write them all at once.
     # Implement __get_item__ and __set_item__ (i.e. the [] operator) if that happens.

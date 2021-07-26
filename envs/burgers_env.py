@@ -2,7 +2,6 @@ import gym
 import numpy as np
 import tensorflow as tf
 from gym import spaces
-from stable_baselines import logger
 
 from envs.abstract_scalar_env import AbstractScalarEnv
 from envs.plottable_env import Plottable1DEnv

@@ -2,11 +2,17 @@ import os
 
 import matplotlib.pyplot as plt
 import matplotlib
+matplotlib.use("Agg")
+from mpl_toolkits.mplot3d import Axes3D
+from matplotlib import cm
+from matplotlib.ticker import LinearLocator
 import numpy as np
 from stable_baselines import logger
 
 from envs.abstract_scalar_env import AbstractScalarEnv
 from envs.solutions import OneStepSolution
+
+
 
 class Plottable1DEnv(AbstractScalarEnv):
     """
@@ -168,6 +174,9 @@ class Plottable1DEnv(AbstractScalarEnv):
             solution_state_history = None
             weno_state_history = None
 
+        # I haven't done enough testing with timestep != None or location != None. Is this a bug?
+        # Ghosts should be fine with past steps; it's with a location over time where it doesn't
+        # make sense. Should this be if location is None?
         if timestep is None:
             if show_ghost and (not override_history or history_includes_ghost):
                 # The ghost arrays slice off one real point so the line connects to the real points.
@@ -197,6 +206,8 @@ class Plottable1DEnv(AbstractScalarEnv):
             if weno_state_history is not None:
                 weno_state_history = weno_state_history[self.ng:-self.ng]
 
+        # Similarly here. With a specific timestep we still want physical x values. Should this
+        # also be if location is None?
         if timestep is None:
             x_values = self.grid.x[self.ng:-self.ng]
         else:
@@ -505,7 +516,7 @@ class Plottable1DEnv(AbstractScalarEnv):
             else:
                 fig.suptitle(title)
 
-        real_x = self.grid.inter_x[self.ng:-(self.ng-1)]
+        real_x = self.grid.inter_x[self.ng:-self.ng]
 
         for dim in range(action_dimensions):
             ax = axes[dim]
@@ -544,3 +555,191 @@ class Plottable1DEnv(AbstractScalarEnv):
 
         plt.close(fig)
         return filename
+
+class Plottable2DEnv(AbstractScalarEnv):
+    """
+    Extension of PDE environment with plotting functions for scalars in 2 dimensions.
+
+    Note that this is an abstract class - you can't declare a Plottable2DEnv.
+    A subclass should extend this (and possibly other classes), then implement the requirements
+    of subclasses of AbstractScalarEnv.
+    """
+
+    metadata = {'render.modes': ['file']}
+
+    def __init__(*args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self._state_axes = None
+
+    def render(self, mode='file', **kwargs):
+        if mode is None:
+            return
+        if "file" in mode:
+            return self.plot_state(**kwargs)
+        else:
+            raise Exception("Plottable1DEnv: \"{}\" render mode not recognized".format(mode))
+
+    def plot_state(self):
+            timestep=None,
+            plot_error=False,
+            suffix=None, title=None,
+            fixed_axes=False, no_borders=False,
+            show_ghost=True,
+            state_history=None, solution_state_history=None,
+            history_includes_ghost=True):
+
+        override_history = (state_history is not None)
+        if override_history and not history_includes_ghost:
+            show_ghost = False
+
+        error_or_state = "error" if plot_error else "state"
+
+        if timestep is None:
+            if not override_history:
+                state_history = self.grid.get_full().copy()
+                if plot_error:
+                    solution_state_history = self.solution.get_full().copy()
+
+                num_steps = self.steps
+                actual_time = self.t
+            else:
+                num_steps = len(state_history)
+                actual_time = num_steps * self.fixed_step
+
+            if title is None:
+                title = ("{} at t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(
+                        error_or_state, actual_time, self.steps)
+            if suffix is None:
+                suffix = ("_step{:0" + str(self._step_precision) + "}").format(num_steps)
+        else:
+            if not override_history:
+                state_history = np.array(self.state_history)[timestep, :]
+                if plot_error:
+                    assert self.solution.is_recording_state(), "Past solution not recorded."
+                    solution_state_history = self.solution.get_state_history().copy()[timestep, :]
+
+            if title is None:
+                if self.C is None:
+                    actual_time = timestep * self.fixed_step
+                    title = ("{} at t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(
+                            error_or_state, actual_time, timestep)
+                else:
+                    # TODO get time with variable timesteps?
+                    title = "{} at step {:0" + str(self._step_precision) + "d}".format(error_or_state, timestep)
+            if suffix is None:
+                suffix = ("_step{:0" + str(self._step_precision) + "}").format(timestep)
+
+        if plot_error:
+            if solution_state_history is None:
+                raise Exception("Cannot plot error if solution state is not available.")
+
+            state_history = np.abs(solution_state_history - state_history)
+
+        if not show_ghost:
+            state_history = state_history[self.grid.real_slice]
+            x_values = self.grid.real_x
+            y_values = self.grid.real_y
+        else:
+            x_values = self.grid.x
+            y_values = self.grid.y
+
+        fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+        x, y = np.meshgrid(x_values, y_values)
+        z = state_history
+        surface = ax.plot_surface(x, y, z, cmap=cm.viridis,
+                linewidth=0, antialiased=False)
+
+        ax.set_title(title)
+
+        if no_borders:
+            ax.set_xmargin(0.0)
+            ax.set_ymargin(0.0)
+
+        # Restrict z-axis if plotting abs error.
+        # Can't have negative, cut off extreme errors.
+        if plot_error:
+            extreme_cutoff = 3.0
+            max_not_extreme = np.max(state_history[state_history < extreme_cutoff])
+            zmax = max_not_extreme*1.05 if max_not_extreme > 0.0 else 0.01
+            ax.set_zlim((0.0, ymax))
+
+        if fixed_axes:
+            #TODO Keep the colorbar fixed as well.
+            if self._state_axes is None:
+                self._state_axes = (ax.get_xlim(), ax_get_ylim(), ax.get_zlim())
+            else:
+                xlim, ylim, zlim = self._state_axes
+                ax.set_xlim(xlim)
+                ax.set_ylim(ylim)
+                ax.set_zlim(zlim)
+
+        ax.zaxis.set_major_locator(LinearLocator(10))
+        fig.colorbar(surface, shrink=0.5, aspect=5)
+
+        # Indicate ghost cells with a rectangle around the real portion.
+        if show_ghost:
+            boundary_kwargs = {'color': 'k', 'linestyle': '--', 'linewidth': 2.5}
+            x_num, y_num = self.grid.num_cells
+            x_ghost, y_ghost = self.grid.num_ghosts
+            x_min, y_min = self.grid.min_value
+            x_max, y_max = self.grid.max_value
+
+            left_x = x_min
+            left_y = self.grid.inter_y[y_ghost:-y_ghost]
+            left_cells = state_history[x_ghost-1:x_ghost+1, y_ghost-1:-(y_ghost-1)]
+            # This is a bit tricky because we don't HAVE the points on the boundaries - we have
+            # cell-centered values. Average them to get the actual points we're looking for.
+            left_z = (left_cells[:-1, :-1] + left_cells[:-1, 1:] 
+                    + left_cells[1:, :-1] + left_cells[1:, 1:]) / 4
+            left_z = left_z[:, None]
+
+            x, y = np.meshgrid(left_x, left_y)
+            left_line = ax.plot(x, y, left_z, **boundary_kwargs)
+
+            bottom_x = self.grid.inter_x[x_ghost:-x_ghost]
+            bottom_y = y_min
+            bottom_cells = state_history[x_ghost-1:-(x_ghost-1), y_ghost-1:y_ghost+1]
+            bottom_z = (bottom_cells[:-1, :-1] + bottom_cells[:-1, 1:] 
+                    + bottom_cells[1:, :-1] + bottom_cells[1:, 1:]) / 4
+            bottom_z = bottom_z[None, :]
+
+            x, y = np.meshgrid(bottom_x, bottom_y)
+            bottom_line = ax.plot(x, y, bottom_z, **boundary_kwargs)
+
+            right_x = x_max
+            right_y = left_y
+            right_cells = state_history[-(x_ghost+1):-(x_ghost-1), y_ghost-1:-(y_ghost-1)]
+            right_z = (right_cells[:-1, :-1] + right_cells[:-1, 1:] 
+                    + right_cells[1:, :-1] + right_cells[1:, 1:]) / 4
+            right_z = right_z[:, None]
+
+            x, y = np.meshgrid(right_x, right_y)
+            right_line = ax.plot(x, y, right_z, **boundary_kwargs)
+
+            top_x = bottom_x
+            top_y = y_max
+            top_cells = state_history[x_ghost-1:-(x_ghost-1), -(y_ghost+1):-(y_ghost-1)]
+            top_z = (top_cells[:-1, :-1] + top_cells[:-1, 1:] 
+                    + top_cells[1:, :-1] + top_cells[1:, 1:]) / 4
+            top_z = top_z[None, :]
+
+            x, y = np.meshgrid(top_x, top_y)
+            top_line = ax.plot(x, y, top_z, **boundary_kwargs)
+
+        log_dir = logger.get_dir()
+        filename = "burgers2d_{}{}.png".format(error_or_state, suffix)
+        filename = os.path.join(log_dir, filename)
+        plt.savefig(filename)
+        print('Saved plot to ' + filename + '.')
+
+        plt.close(fig)
+        return filename
+
+    def plot_state_evolution(self, *args, **kwargs):
+        raise NotImplementedError("2D evolution plot not implemented."
+                + " Not sure how we should do that. Create animation?")
+
+    def plot_action(self, *args, **kwargs):
+        raise NotImplementedError("2D action plot not implemented."
+                + " Not sure the right way to do that. Should we have a 3D plot for each weight?")

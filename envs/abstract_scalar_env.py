@@ -160,9 +160,6 @@ class AbstractScalarEnv(gym.Env):
         self.observation_space = None
         self.action_space = None
 
-    def step(self, action):
-        raise NotImplementedError()
-
     def render(self, *args, **kwargs):
         """
         Display some representation of the current state.
