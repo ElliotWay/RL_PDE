@@ -1,12 +1,47 @@
 import numpy as np
 
 import envs.weno_coefficients as weno_coefficients
+from envs.weno_solution import weno_weights_nd
+from rl_pde.policy import Policy
 
-class Policy:
+# This could be a general ND agent easily enough,
+# but we probably don't need any larger than a 2D agent.
+class StandardWENO2DAgent(Policy):
+    def __init__(self, order=3, mode="weno"):
+        self.order = order
+        self.mode = mode
+
     def predict(self, state, deterministic=False):
-        raise NotImplementedError
+        weno_weights = tuple(weno_weights_nd(state_part) for state_part in state)
 
-class StandardWENOAgent():
+        if self.mode == "weno":
+            return weno_weights, None
+        elif self.mode == "split_flux":
+            raise Exception("I haven't tested this. This exception is safe to delete,"
+                    + " but check that things are working as expected.")
+            order = self.order
+            a_mat = weno_coefficients.a_all[order]
+            a_mat = np.flip(a_mat, axis=-1)
+    
+            # a_mat is [sub_stencil_index, inner_index]
+            # weno_weights is [x, y, (fp,fm), sub_stencil_index]
+            # We want [x, y, (fp,fm), inner_index].
+            combined_weights = [a_mat[None, None, None, :, :] * weights[:, :, :, :, None]
+                                        for weights in weno_weights]
+
+            all_flux_weights = []
+            for weights, state_part in zip(combined_weights, state):
+                flux_weights = np.zeros_like(state_part)
+                # TODO: figure out a way to vectorize this. This is a weird broadcast I'm trying to do,
+                # which would be easier if numpy had builtin support for banded matrices.
+                for sub_stencil_index in range(order):
+                    flux_weights[:, :, sub_stencil_index:sub_stencil_index + order] += \
+                                                            weights[:, :, sub_stencil_index, :]
+            return all_flux_weights, None
+
+        raise Exception("{} mode not implemented.".format(mode))
+
+class StandardWENOAgent(Policy):
     def __init__(self, order=3, mode="weno"):
         self.order = order
         self.mode = mode
@@ -29,7 +64,7 @@ class StandardWENOAgent():
 
             flux_weights = np.zeros_like(state)
             # TODO: figure out a way to vectorize this. This is a weird broadcast I'm trying to do,
-            # which would be easier if numpy had bultin support for banded matrices.
+            # which would be easier if numpy had builtin support for banded matrices.
             for sub_stencil_index in range(order):
                 flux_weights[:, :, sub_stencil_index:sub_stencil_index + order] += combined_weights[:, :, sub_stencil_index, :]
 
@@ -101,129 +136,3 @@ class StandardWENOAgent():
         weights_fm = alpha_fm / (np.sum(alpha_fm, axis=-1)[:, None])
 
         return np.stack([weights_fp, weights_fm], axis=1)
-
-
-class StationaryAgent():
-    """ Agent that always returns vectors of 0s, causing the environment to stay still. """
-
-    def __init__(self, order=3, mode="weno"):
-        
-        self.order = order
-        self.mode = mode
-
-    def predict(self, state, deterministic=False):
-
-        if self.mode == "weno":
-            state_shape = list(state.shape)
-            state_shape[-1] = self.order
-            action_shape = tuple(state_shape)
-        elif self.mode == "split_flux" or self.mode == "flux":
-            action_shape = state.shape
-
-        return np.zeros(action_shape), None
-
-
-class EqualAgent():
-    """ Agent that always returns vectors of equal weight for each stencil. """
-
-    def __init__(self, order=3):
-        
-        self.order = order
-
-    def predict(self, state, deterministic=False):
-
-        action_shape = list(state.shape)
-        action_shape[-1] = self.order
-        action_shape = tuple(action_shape)
-
-        return np.full(action_shape, 1.0 / self.order), None
-
-
-class MiddleAgent():
-    """ Agent that gives the middle stencil a weight of 1, and the rest 0. """
-
-    def __init__(self, order=3):
-        
-        self.order = order
-
-    def predict(self, state, deterministic=False):
-
-        action_shape = list(state.shape)
-        action_shape[-1] = self.order
-        action_shape = tuple(action_shape)
-
-        middle = int(self.order / 2)
-
-        weights = np.zeros(action_shape)
-        weights[..., middle] = 1.0
-
-        return weights, None
-
-
-class LeftAgent():
-    """ Agent that gives the leftmost stencil a weight of 1, and the rest 0. """
-
-    def __init__(self, order=3):
-        
-        self.order = order
-
-    def predict(self, state, deterministic=False):
-
-        action_shape = list(state.shape)
-        action_shape[-1] = self.order
-        action_shape = tuple(action_shape)
-
-        middle = int(self.order / 2)
-
-        weights = np.zeros(action_shape)
-        weights[..., 0] = 1.0
-
-        return weights, None
-
-
-class RightAgent():
-    """ Agent that gives the rightmost stencil a weight of 1, and the rest 0. """
-
-    def __init__(self, order=3):
-        
-        self.order = order
-
-    def predict(self, state, deterministic=False):
-
-        action_shape = list(state.shape)
-        action_shape[-1] = self.order
-        action_shape = tuple(action_shape)
-
-        weights = np.zeros(action_shape)
-        weights[..., -1] = 1.0
-
-        return weights, None
-
-class RandomAgent():
-    """ Agent that gives random weights (that still add up to 1). """
-
-    def __init__(self, order=3, mode="weno"):
-
-        self.order = order
-        self.mode = mode
-
-    def predict(self, state, deterministic=False):
-        # deterministic argument is ignored - this class is meant to represent a random policy,
-        # not a policy with random actions.
-
-        if self.mode == "weno":
-            action_shape = list(state.shape)
-            action_shape[-1] = self.order
-            action_shape = tuple(action_shape)
-
-            # Do Gaussian sample, then apply softmax.
-            random_logits = np.random.normal(size=action_shape)
-            exp_logits = np.exp(random_logits)
-
-            action = exp_logits / (np.sum(exp_logits, axis=-1)[..., None])
-            return action, None
-        elif self.mode == "split_flux" or self.mode == "flux": 
-            # e^(order - 1) is chosen ad-hoc to vaguely relate to the max weights in WENO that increase with order.
-            return np.random.normal(size=state.shape, scale=(np.exp(self.order - 1))), None
-
-        raise Exception("{} mode not implemented.".format(mode))

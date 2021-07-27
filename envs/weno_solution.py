@@ -87,6 +87,10 @@ def weno_sub_stencils_nd(order, stencils_array):
     interpolated = np.sum(a_mat * sub_stencils, axis=-1)
     return interpolated
 
+# Future note: we're wasting some computations.
+# The q^2 matrix for the kth sub-stencil has a lot of overlap with the q^2 matrix with the k+1st sub-stencil.
+# Also the upper triangle of the q^2 matrix is not needed.
+# Not a huge deal, but could be relevant with higher orders or factors of increasing complexity.
 def weno_weights_nd(order, stencils_array):
     """
     Compute standard WENO weights for a given ndarray of stencils. (The stencils are 1D.)
@@ -255,9 +259,9 @@ class PreciseWENOSolution2D(WENOSolution):
             #r_ss.append(right_r)
             #r_w.append(right_w)
         #left_flux_reconstructed = np.stack(l_ss, axis=1)
-        #left_weights = np.stack(l_w, axis=0)
+        #left_weights = np.stack(l_w, axis=1)
         #right_flux_reconstructed = np.stack(r_ss, axis=1)
-        #right_weights = np.stack(r_w, axis=0)
+        #right_weights = np.stack(r_w, axis=1)
 
         left_flux_reconstructed, left_weights = weno_reconstruct_nd(order, left_stencils)
         right_flux_reconstructed, right_weights = weno_reconstruct_nd(order, right_stencils)

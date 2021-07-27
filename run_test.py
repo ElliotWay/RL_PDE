@@ -21,9 +21,9 @@ from stable_baselines import logger
 
 from rl_pde.run import rollout
 from rl_pde.emi import BatchEMI, StandardEMI, TestEMI
+from rl_pde.agents import get_agent
 from envs import builder as env_builder
 from envs import AbstractBurgersEnv
-from agents import StandardWENOAgent, StationaryAgent, EqualAgent, MiddleAgent, LeftAgent, RightAgent, RandomAgent
 from models import get_model_arg_parser
 from models import SACModel, PolicyGradientModel, TestModel
 from util import metadata
@@ -222,11 +222,13 @@ def main():
         env_arg_parser.print_help()
         sys.exit(0)
 
-    # If an agent is specified, load parameters from its meta file.
+    # Load basic agent, if one was specified.
+    agent = get_agent(args.agent, order=args.order, mode=mode, dimensions=1)
+    # If the returned agent is None, assume it is the file name of a real agent.
+    # If a real agent is specified, load parameters from its meta file.
     # This only overrides arguments that were not explicitly specified.
     #TODO: Find more reliable way of doing this so we are robust to argument changes.
-    if args.agent not in (
-            "default", "none", "weno", "std", "stationary", "equal", "middle", "left", "right", "random"):
+    if agent is None:
         if not os.path.isfile(args.agent):
             raise Exception("Agent file \"{}\" not found.".format(args.agent))
 
@@ -274,23 +276,7 @@ def main():
             env_args.append(eval_env_args)
         env = envs[0]
 
-    # TODO: create standard agent lookup function in agents.py.
-    if (args.agent == "default" or args.agent == "none"
-        or args.agent == "weno" or args.agent == "std"):
-        agent = StandardWENOAgent(order=args.order, mode=mode)
-    elif args.agent == "stationary":
-        agent = StationaryAgent(order=args.order, mode=mode)
-    elif args.agent == "equal":
-        agent = EqualAgent(order=args.order)
-    elif args.agent == "middle":
-        agent = MiddleAgent(order=args.order)
-    elif args.agent == "left":
-        agent = LeftAgent(order=args.order)
-    elif args.agent == "right":
-        agent = RightAgent(order=args.order)
-    elif args.agent == "random":
-        agent = RandomAgent(order=args.order, mode=mode)
-    else:
+    if agent is None:
         obs_adjust = numpy_fn(args.obs_scale)
         action_adjust = numpy_fn(args.action_scale)
 
