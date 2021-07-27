@@ -4,35 +4,9 @@ from gym import spaces
 
 from envs.burgers_env import AbstractBurgersEnv
 from envs.plottable_env import Plottable2DEnv
+from envs.weno_solution import lf_flux_split_nd, weno_sub_stencils_nd
 from util.softmax_box import SoftmaxBox
 
-from util.misc import AxisSlice
-
-#TODO Put these functions somewhere else.
-def weno_sub_stencils_nd(order, stencils_array):
-    """
-    Interpolate sub-stencils in an ndarray of stencils.
-
-    An ndarray of stencils:
-    [spatial dimensions... X stencil size]
-    ->
-    An ndarray of interpolated sub-stencils:
-    [spatial dimensions... X num sub-stencils]
-    """
-    # These weights have shape order X order (i.e. num stencils * stencil size).
-    a_mat = weno_coefficients.a_all[order]
-
-    # These weights are "backwards" in the original formulation.
-    # This is easier in the original formulation because we can add the k for our kth stencil to the index,
-    # then subtract by a variable amount to get each value, but there's no need to do that here, and flipping
-    # it back around makes the expression simpler.
-    a_mat = np.flip(a_mat, axis=-1)
-
-    sub_stencil_indexes = create_stencil_indexes(stencil_size=order, num_stencils=order)
-    sub_stencils = AxisSlice(stencils_array, -1)[sub_stencil_indexes]
-
-    interpolated = np.sum(a_mat * sub_stencils, axis=-1)
-    return interpolated
 
 class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
 
@@ -77,18 +51,16 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
     def _prep_state(self):
         u_values = self.grid.get_full()
         flux = self.burgers_flux(u_values)
-
-        # Lax Friedrichs Flux Splitting
-        x_alpha = np.max(np.abs(u_values), axis=0)
-        y_alpha = np.max(np.abs(u_values), axis=1)
-        flux_left = (flux - x_alpha * u_values) / 2
-        flux_right = (flux + x_alpha * u_values) / 2
-        flux_down = (flux - y_alpha * u_values) / 2
-        flux_up = (flux + y_alpha * u_values) / 2
-
         num_x, num_y = self.grid.num_cells
         ghost_x, ghost_y = self.grid.num_ghosts
 
+        # Lax Friedrichs flux splitting.
+        (flux_left, flux_right), (flux_down, flux_up) = lf_flux_split_nd(flux, g.space)
+
+        # Trim vertical ghost cells from horizontally split flux. (Should this be part of flux
+        # splitting?)
+        flux_left = flux_left[:, ghost_y:-ghost_y]
+        flux_right = flux_right[:, ghost_y:-ghost_y]
         right_stencil_indexes = create_stencil_indexes(stencil_size=self.state_order * 2 - 1,
                                                        num_stencils=num_x + 1,
                                                        offset=ghost_x - self.state_order)
@@ -99,6 +71,8 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
         left_stencils = (flux_left.transpose()[:, indexes]).transpose([1,0,2])
         horizontal_state = np.stack([left_stencils, right_stencils], axis=2)
 
+        flux_down = flux_down[ghost_x:-ghost_x, :]
+        flux_up = flux_up[ghost_x:-ghost_x, :]
         up_stencil_indexes = create_stencil_indexes(stencil_size=self.state_order * 2 - 1,
                                                     num_stencils=num_y + 1,
                                                     offset=ghost_y - self.state_order)

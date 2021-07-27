@@ -580,7 +580,7 @@ class Plottable2DEnv(AbstractScalarEnv):
         else:
             raise Exception("Plottable1DEnv: \"{}\" render mode not recognized".format(mode))
 
-    def plot_state(self):
+    def plot_state(self,
             timestep=None,
             plot_error=False,
             suffix=None, title=None,

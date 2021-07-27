@@ -5,6 +5,140 @@ import envs.weno_coefficients as weno_coefficients
 from envs.grid import AbstractGrid, create_grid
 from envs.grid1d import Grid1d
 from util.misc import create_stencil_indexes
+from util.misc import AxisSlice
+
+def lf_flux_split_nd(flux_array, values_array):
+    """
+    Apply Lax-Friedrichs flux splitting along each dimension of the input.
+
+    The maximum velocity (alpha) is computed per 1-dimensional slice.
+
+    The output is structured like:
+    [(-,+), (-,+), ...] (- and + directions for each direction.)
+    Exception: in 1 dimension, the output will be the single tuple.
+    """
+    output = []
+    abs_values = np.abs(values_array)
+    for dim in range(flux_array.ndim):
+        alpha = np.expand_dims(np.max(abs_values, axis=dim), axis=dim)
+        fm = (flux_array - alpha * values_array) / 2
+        fp = (flux_array + alpha * values_array) / 2
+        output.append((fm, fp))
+
+    if len(output) == 1:
+        return output[0]
+    else:
+        return output
+
+#TODO: Finish this function. It is not currently in use. I couldn't find a clean way of handling
+# this in a general case. - direction stencils need to be flipped and shifted. Unsplit flux has a
+# different stencil size. Could use same parameters as create_stencil_indexes?
+# It would be better if every stenciling used the same function; I've already had bugs from one
+# version doing it incorrectly.
+def create_stencils_nd(order, values_array, axis, source_grid):
+    """
+    UNFINISHED DO NOT USE
+    Create 1D stencils from an ndarray.
+
+    Ghost cells from axes besides the stenciled axis will be trimmed.
+
+    The source_grid parameter will not be modified - it is used to access the underlying properties.
+    """
+
+    # Trim ghost cells of other dimensions.
+    ghost_slice = list(source_grid.real_slice)
+    ghost_slice[axis] = slice(None)
+    trimmed = values_array[ghost_slice]
+
+    indexes = create_stencil_indexes(stencil_size=order * 2 - 1,
+                                     num_stencils=source_grid.num_cells[axis] + 1,
+                                     offset=source_grid.num_ghosts[axis] - order)
+
+    # How to handle this?
+    #left_stencil_indexes = np.flip(right_stencil_indexes, axis=-1) + 1
+
+    # Indexing is tricky here. I couldn't find a way without transposing and then transposing
+    # back. (It might be possible, though.)
+    left_stencils = (flux_left.transpose()[:, left_stencil_indexes]).transpose([1,0,2])
+    right_stencils = (flux_right.transpose()[:, right_stencil_indexes]).transpose([1,0,2])
+
+def weno_sub_stencils_nd(order, stencils_array):
+    """
+    Interpolate sub-stencils in an ndarray of stencils. (The stencils are 1D.)
+
+    An ndarray of stencils:
+    [spatial dimensions... X stencil size]
+    ->
+    An ndarray of interpolated sub-stencils:
+    [spatial dimensions... X num sub-stencils]
+    """
+    # These weights have shape order X order (i.e. num stencils * stencil size).
+    a_mat = weno_coefficients.a_all[order]
+
+    # These weights are "backwards" in the original formulation.
+    # This is easier in the original formulation because we can add the k for our kth stencil to the index,
+    # then subtract by a variable amount to get each value, but there's no need to do that here, and flipping
+    # it back around makes the expression simpler.
+    a_mat = np.flip(a_mat, axis=-1)
+
+    sub_stencil_indexes = create_stencil_indexes(stencil_size=order, num_stencils=order)
+    sub_stencils = AxisSlice(stencils_array, -1)[sub_stencil_indexes]
+
+    interpolated = np.sum(a_mat * sub_stencils, axis=-1)
+    return interpolated
+
+def weno_weights_nd(order, stencils_array):
+    """
+    Compute standard WENO weights for a given ndarray of stencils. (The stencils are 1D.)
+
+    An ndarray of stencils:
+    [spatial dimensions... X stencil size]
+    An ndarray of weights:
+    [spatial dimensions X num weights (one for each sub-stencil)
+    """
+    # Adapted from agents.py#StandardWENOAgent.
+
+    C = weno_coefficients.C_all[order]
+    sigma = weno_coefficients.sigma_all[order]
+    epsilon = 1e-16
+
+    sub_stencil_indexes = create_stencil_indexes(stencil_size=order, num_stencils=order)
+    sub_stencils = AxisSlice(stencils_array, -1)[sub_stencil_indexes]
+
+    # "beta" below refers to the smoothness indicator.
+    # To my best understanding, beta is calculated based on an approximation of the square of pairs
+    # of values in the stencil, so we multiply every pair of values in a sub-stencil together,
+    # weighted appropriately for the approximation by sigma.
+
+    # Flip the stencils because in the original formulation we subtract from the last index instead
+    # of adding from the first, and sigma weights assume this ordering.
+    sub_stencils_flipped = np.flip(sub_stencils, axis=-1)
+
+    # Insert extra empty dimensions so numpy broadcasting produces
+    # the desired outer product along only the intended dimensions.
+    squared = sub_stencils_flipped[..., None, :] * sub_stencils_flipped[..., :, None]
+    #print("max flux:", np.max(squared))
+    # Note that sigma is made up of triangular matrices, so the second copy of each pair is weighted by 0.
+    beta = np.sum(sigma * squared, axis=(-2, -1))
+    #print("max beta:", np.max(beta))
+    #if np.max(beta) == 0.0:
+        #print(sub_stencils)
+        #assert False
+
+    alpha = C / (epsilon + beta ** 2)
+
+    # Add back in the sub-stencil dimension after the sum so numpy broadcasts there
+    # instead of on the stencil dimension.
+    weights = alpha / (np.sum(alpha, axis=-1)[..., None])
+
+    return weights
+
+def weno_reconstruct_nd(order, stencils_array):
+    sub_stencils = weno_sub_stencils_nd(order, stencils_array)
+    weights = weno_weights_nd(order, stencils_array)
+
+    reconstructed = np.sum(weights * sub_stencils, axis=-1)
+    return reconstructed, weights
 
 class WENOSolution(SolutionBase):
     """
@@ -79,148 +213,93 @@ class PreciseWENOSolution2D(WENOSolution):
     def get_action_history(self):
         return self.action_history
 
-    def weno_sub_stencils(self, stencils_batch):
-        order = self.precise_order
-        a_mat = weno_coefficients.a_all[order]
-
-        # These weights are "backwards" in the original formulation.
-        # This is easier in the original formulation because we can add the k for our kth stencil to the index,
-        # then subtract by a variable amount to get each value, but there's no need to do that here, and flipping
-        # it back around makes the expression simpler.
-        a_mat = np.flip(a_mat, axis=-1)
-
-        sub_stencil_indexes = create_stencil_indexes(stencil_size=order, num_stencils=order)
-
-        sub_stencils = np.sum(a_mat * stencils_batch[:, sub_stencil_indexes], axis=-1)
-        return sub_stencils
-
-    def weno_weights(self, stencils_batch):
-        # Adapted from agents.py#StandardWENOAgent.
-        order = self.precise_order
-
-        C = weno_coefficients.C_all[order]
-        sigma = weno_coefficients.sigma_all[order]
-        epsilon = 1e-16
-
-        sliding_window_indexes = np.arange(order)[None, :] + np.arange(order)[:, None]
-
-        # beta refers to the smoothness indicator.
-        # To my best understanding, beta is calculated based on an approximation of the square of the values
-        # in q, so we multiply every pair of values in a sub-stencil together, weighted appropriately for
-        # the approximation by sigma.
-
-        sub_stencils = stencils_batch[:, sliding_window_indexes]
-
-        # Flipped because in original formulation we subtract from last index instead of adding from first,
-        # and sigma and C weights assume this ordering.
-        sub_stencils_flipped = np.flip(sub_stencils, axis=-1)
-
-        # Insert extra empty dimensions so numpy broadcasting produces
-        # the desired outer product along only the intended dimensions.
-        q_squared = sub_stencils_flipped[:, :, None, :] * sub_stencils_flipped[:, :, :, None]
-
-        # Note that sigma is made up of triangular matrices, so the second copy of each pair is weighted by 0.
-        beta = np.sum(sigma * q_squared, axis=(-2, -1))
-
-        alpha = C / (epsilon + beta ** 2)
-
-        # We need the [:, None] so numpy broadcasts to the sub-stencil dimension, instead of the stencil dimension.
-        weights = alpha / (np.sum(alpha, axis=-1)[:, None])
-
-        return weights
-
-    def weno_reconstruct(self, stencils):
-        """
-        Compute WENO reconstruction.
-
-        Parameters
-        ----------
-        q : ndarray (number of interfaces X stencil size)
-          Stencils of scalar data to reconstruct. Probably fluxes.
-
-        Returns
-        -------
-        Reconstructed data at the interfaces.
-
-        """
-        weights = self.weno_weights(stencils)
-        sub_stencils = self.weno_sub_stencils(stencils)
-
-        reconstructed = np.sum(weights * sub_stencils, axis=-1)
-        return reconstructed, weights
-
     def rk_substep(self):
         g = self.precise_grid
         g.update_boundary()
         order = self.precise_order
         num_x, num_y = g.num_cells
-        num_ghost_x, num_ghost_y = g.num_ghosts
+        ghost_x, ghost_y = g.num_ghosts
         cell_size_x, cell_size_y = g.cell_size
 
         # compute flux at each point
         flux = self.flux_function(g.space)
 
-        # Recompute flux over every row and every column.
-        vertical_flux_reconstructed = np.zeros((num_x, num_y+1)) # index a,b is actually a,b-1/2
-        horizontal_flux_reconstructed = np.zeros((num_x+1, num_y)) # index a,b is actually a-1/2, b
-        if self.record_actions is not None:
-            vertical_actions = np.zeros((num_x, num_y+1, 2, order))
-            horizontal_actions = np.zeros((num_x+1, num_y, 2, order))
-        #TODO: Vectorize further? weno_reconstruct() is already vectorized,
-        # but could reasonably be extended to apply to the entire space at once.
-        up_stencil_indexes = create_stencil_indexes(stencil_size=order * 2 - 1,
-                                                    num_stencils=num_y + 1,
-                                                    offset=num_ghost_y - order)
-        down_stencil_indexes = np.flip(up_stencil_indexes, axis=-1) + 1
-        for x_index in range(num_x):
-            grid_row = g.space[x_index, :]
-            flux_row = flux[x_index, :]
-            alpha = np.max(grid_row)
+        (flux_left, flux_right), (flux_down, flux_up) = lf_flux_split_nd(flux, g.space)
 
-            flux_up = (flux_row + alpha * grid_row) / 2
-            flux_down = (flux_row - alpha * grid_row) / 2
-
-            up_stencils = flux_up[up_stencil_indexes]
-            up_reconstructed, up_weights = self.weno_reconstruct(up_stencils)
-
-            down_stencils = flux_down[down_stencil_indexes]
-            down_reconstructed, down_weights = self.weno_reconstruct(down_stencils)
-
-            if self.record_actions is not None:
-                vertical_actions[x_index, :, 0, :] = up_weights
-                vertical_actions[x_index, :, 1, :] = down_weights
-            
-            vertical_flux_reconstructed[x_index, :] = up_reconstructed + down_reconstructed
-
+        # Trim vertical ghost cells from horizontally split flux. (Should this be part of flux
+        # splitting?)
+        flux_left = flux_left[:, ghost_y:-ghost_y]
+        flux_right = flux_right[:, ghost_y:-ghost_y]
         right_stencil_indexes = create_stencil_indexes(stencil_size=order * 2 - 1,
                                                        num_stencils=num_x + 1,
-                                                       offset=num_ghost_x - order)
+                                                       offset=ghost_x - order)
         left_stencil_indexes = np.flip(right_stencil_indexes, axis=-1) + 1
-        for y_index in range(num_y):
-            grid_col = g.space[:, y_index]
-            flux_col = flux[:, y_index]
-            # get maximum velocity
-            alpha = np.max(grid_col)
+        # Indexing is tricky here. I couldn't find a way without transposing and then transposing
+        # back. (It might be possible, though.)
+        left_stencils = (flux_left.transpose()[:, left_stencil_indexes]).transpose([1,0,2])
+        right_stencils = (flux_right.transpose()[:, right_stencil_indexes]).transpose([1,0,2])
+ 
+        #l_ss = []
+        #l_w = []
+        #r_ss = []
+        #r_w = []
+        #for i in range(left_stencils.shape[1]):
+            #l_s = left_stencils[:, i]
+            #r_s = right_stencils[:, i]
+#
+            #left_r, left_w = self.weno_reconstruct(l_s)
+            #l_ss.append(left_r)
+            #l_w.append(left_w)
+#
+            #right_r, right_w = self.weno_reconstruct(r_s)
+            #r_ss.append(right_r)
+            #r_w.append(right_w)
+        #left_flux_reconstructed = np.stack(l_ss, axis=1)
+        #left_weights = np.stack(l_w, axis=0)
+        #right_flux_reconstructed = np.stack(r_ss, axis=1)
+        #right_weights = np.stack(r_w, axis=0)
 
-            # Lax Friedrichs Flux Splitting
-            flux_right = (flux_col + alpha * grid_col) / 2
-            flux_left = (flux_col - alpha * grid_col) / 2
+        left_flux_reconstructed, left_weights = weno_reconstruct_nd(order, left_stencils)
+        right_flux_reconstructed, right_weights = weno_reconstruct_nd(order, right_stencils)
+        horizontal_flux_reconstructed = left_flux_reconstructed + right_flux_reconstructed
 
-            right_stencils = flux_right[right_stencil_indexes]
-            right_reconstructed, right_weights = self.weno_reconstruct(right_stencils)
+        flux_down = flux_down[ghost_x:-ghost_x, :]
+        flux_up = flux_up[ghost_x:-ghost_x, :]
+        up_stencil_indexes = create_stencil_indexes(stencil_size=order * 2 - 1,
+                                                    num_stencils=num_y + 1,
+                                                    offset=ghost_y - order)
+        down_stencil_indexes = np.flip(up_stencil_indexes, axis=-1) + 1
+        up_stencils = flux_up[:, up_stencil_indexes]
+        down_stencils = flux_down[:, down_stencil_indexes]
 
-            left_stencils = flux_left[left_stencil_indexes]
-            left_reconstructed, left_weights = self.weno_reconstruct(left_stencils)
-            
-            if self.record_actions is not None:
-                horizontal_actions[:, y_index, 0, :] = right_weights
-                horizontal_actions[:, y_index, 1, :] = left_weights
+        #d_ss = []
+        #d_w = []
+        #u_ss = []
+        #u_w = []
+        #for i in range(up_stencils.shape[0]):
+            #u_s = up_stencils[i, :]
+            #d_s = down_stencils[i, :]
+#
+            #up_r, up_w = self.weno_reconstruct(u_s)
+            #u_ss.append(up_r)
+            #u_w.append(up_w)
+#
+            #down_r, down_w = self.weno_reconstruct(d_s)
+            #d_ss.append(down_r)
+            #d_w.append(down_w)
+        #down_flux_reconstructed = np.stack(d_ss, axis=0)
+        #down_weights = np.stack(d_w, axis=0)
+        #up_flux_reconstructed = np.stack(u_ss, axis=0)
+        #up_weights = np.stack(u_w, axis=0)
 
-            horizontal_flux_reconstructed[:, y_index] = right_reconstructed + left_reconstructed
+        down_flux_reconstructed, down_weights = weno_reconstruct_nd(order, down_stencils)
+        up_flux_reconstructed, up_weights = weno_reconstruct_nd(order, up_stencils)
+        vertical_flux_reconstructed = up_flux_reconstructed + down_flux_reconstructed
 
         if self.record_actions is not None:
             if self.record_actions == "weno":
-                self.action_history.append((vertical_actions, horizontal_actions))
+                self.action_history.append((np.stack([left_weights_, right_weights], axis=-2),
+                                                np.stack([down_weights, up_weights])))
             elif self.record_actions == "coef":
                 raise NotImplementedError()
                 # This corresponds to e.g. SplitFluxBurgersEnv.
@@ -237,13 +316,13 @@ class PreciseWENOSolution2D(WENOSolution):
             else:
                 raise Exception("Unrecognized action type: '{}'".format(self.record_actions))
 
-        rhs = (  (vertical_flux_reconstructed[:, :-1]
-                    - vertical_flux_reconstructed[:, 1:]) / cell_size_y
-               + (horizontal_flux_reconstructed[:-1, :]
+        step = (  (horizontal_flux_reconstructed[:-1, :]
                     - horizontal_flux_reconstructed[1:, :]) / cell_size_x
-               )
+                + (vertical_flux_reconstructed[:, :-1]
+                    - vertical_flux_reconstructed[:, 1:]) / cell_size_y
+                )
 
-        return rhs
+        return step
 
     def _update(self, dt, time):
         u_start = np.array(self.precise_grid.get_real())
@@ -267,7 +346,7 @@ class PreciseWENOSolution2D(WENOSolution):
             if self.use_rk4:
                 self.precise_grid.set(u_start)
             R = self.nu * self.precise_grid.laplacian()
-            full_step += dt * R[num_ghost_x:-num_ghost_x, num_ghost_y:-num_ghost_y]
+            full_step += dt * R[self.precise_grid.real_slice]
 
         if self.source is not None:
             step += dt * self.source.get_real()
@@ -570,7 +649,7 @@ if __name__ == "__main__":
     base_grid = Grid2d((128, 128), ng, 0.0, 1.0)
     flux_function = lambda x: 0.5 * x ** 2
     sol = PreciseWENOSolution2D(base_grid, {}, order, 1, flux_function)
-    sol.reset({'init_type': '1d-smooth_sine-y'})
+    sol.reset({'init_type': '1d-accelshock-x'})
 
     timestep = 0.0004
     time = 0.0
@@ -583,7 +662,9 @@ if __name__ == "__main__":
         shutil.rmtree(save_dir)
         os.makedirs(save_dir)
 
-    for step in range(250):
+    steps = 500
+
+    for step in range(steps + 1):
         if step % 10 == 0:
             print("{}...".format(step), end='', flush=True)
             fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
