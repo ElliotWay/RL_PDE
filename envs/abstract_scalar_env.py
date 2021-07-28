@@ -209,7 +209,8 @@ class AbstractScalarEnv(gym.Env):
         info : dict
           Additional information; nothing currently.
         """
-        assert not np.isnan(action).any(), "NaN detected in action."
+        assert not (np.isnan(action).any() if self.grid.ndim == 1 else \
+                any([np.isnan(a).any() for a in action])), "NaN detected in action."
 
         self.action_history.append(action)
 
@@ -244,7 +245,8 @@ class AbstractScalarEnv(gym.Env):
         done: boolean
           end of episode, guaranteed to be False on first 3 calls
         """
-        assert not np.isnan(action).any(), "NaN detected in action."
+        assert not (np.isnan(action).any() if self.grid.ndim == 1 else \
+                any([np.isnan(a).any() for a in action])), "NaN detected in action."
 
         if self.rk_state == 1:
             self.u_start = np.array(self.grid.get_real())
@@ -337,8 +339,10 @@ class AbstractScalarEnv(gym.Env):
 
         state = self._prep_state()
 
-        assert not np.isnan(state).any(), "NaN detected in state."
-        assert not np.isnan(reward).any(), "NaN detected in reward."
+        assert not (np.isnan(state).any() if self.grid.ndim == 1 else \
+                any([np.isnan(s).any() for s in state])), "NaN detected in state."
+        assert not (np.isnan(reward).any() if self.grid.ndim == 1 else \
+                any([np.isnan(r).any() for r in reward])), "NaN detected in reward."
 
         return state, reward, done
 
@@ -647,6 +651,7 @@ class AbstractScalarEnv(gym.Env):
 
         # Average of error in two adjacent cells.
         if "adjacent" in self.reward_mode and "avg" in self.reward_mode:
+            #TODO This should probably trim ghosts from other axes.
             combined_error = tuple((AxisSlice(error, axis)[ng-1:ng]
                                 + AxisSlice(error, axis)[ng:-(ng-1)]) / 2
                                     for axis, ng in enumerate(self.grid.num_ghosts))

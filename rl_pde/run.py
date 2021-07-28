@@ -11,7 +11,7 @@ from matplotlib.ticker import SymmetricalLogLocator
 
 from stable_baselines import logger
 
-from agents import StandardWENOAgent
+from rl_pde.agents import StandardWENOAgent
 from util import action_snapshot
 from util.misc import human_readable_time_delta
 

@@ -68,7 +68,8 @@ class MemoizedSolution(SolutionBase):
         assert not isinstance(solution, OneStepSolution), ("Memoized solutions are not compatible"
         + " with one-step solutions. (Memoized solutions stay the same whereas one-step solutions"
         + " always change).")
-        super().__init__(solution.nx, solution.ng, solution.xmin, solution.xmax,
+        super().__init__(solution.num_cells, solution.num_ghosts, solution.min_value,
+                solution.max_value,
                 # The inner solution should record the state history, not this wrapper.
                 record_state=False)
 
@@ -138,7 +139,7 @@ class MemoizedSolution(SolutionBase):
             return self.inner_solution.get_full()
 
     def get_real(self):
-        return self.get_full()[self.ng:-self.ng]
+        return self.get_full()[self.real_slice]
 
     def _reset(self, init_params):
         # If time_index is -1, then this is the first call to reset,

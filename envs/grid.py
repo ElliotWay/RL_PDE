@@ -117,6 +117,13 @@ class AbstractGrid:
             inter_x = xmin + (np.arange(nx + 2 * ng + 1) - ng) * dx
             self.interfaces.append(inter_x)
 
+        self.real_slice = tuple([slice(ng, -ng) for ng in self.num_ghosts])
+        """
+        Slice for indexing only the real portion and not ghost cells of the space (or something
+        of equivalent shape).
+        So grid.space[grid.real_slice] should be equivalent to grid.get_real().
+        """
+
     # 1-dimensional shortcuts for compatability.
     @property
     def nx(self): return self.num_cells[0]
@@ -209,12 +216,6 @@ class GridBase(AbstractGrid):
         # Storage for the solution.
         self.space = self.scratch_array()
         """ The physical space. """
-
-        self.real_slice = tuple([slice(ng, -ng) for ng in self.num_ghosts])
-        """
-        Slice for indexing only the real portion and not ghost cells of the space (or something
-        of equivalent shape). So grid.space[grid.real_slice] is equivalent to grid.get_real().
-        """
 
     # Old names for compatability.
     @property

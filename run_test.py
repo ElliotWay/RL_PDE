@@ -122,14 +122,40 @@ def do_test(env, agent, args):
             env.plot_state_evolution(num_states=10, plot_error=True)
 
     print("Test finished in " + str(end_time - start_time) + " seconds.")
+    
+    if env.dimensions == 1:
+        total_reward = np.sum(rewards, axis=0)
+        print("Reward: mean = {}, min = {} @ {}, max = {} @ {}".format(
+                np.mean(total_reward),
+                np.amin(total_reward), np.argmin(total_reward),
+                np.amax(total_reward), np.argmax(total_reward)))
+    else:
+        dim_names = ['x', 'y']
 
-    total_reward = np.sum(rewards, axis=0)
-    print("Reward: mean = {}, min = {} @ {}, max = {} @ {}".format(
-            np.mean(total_reward),
-            np.amin(total_reward), np.argmin(total_reward),
-            np.amax(total_reward), np.argmax(total_reward)))
+        rewards_reshaped = [np.array([step_reward[i] for step_reward in rewards]) for i in
+                range(len(rewards[0]))]
+        total_reward = [np.sum(reward_dim, axis=0) for reward_dim in rewards_reshaped]
+        avg_reward = np.mean([np.mean(reward_dim) for reward_dim in total_reward])
 
-    error = np.sqrt(env.grid.dx * np.sum(np.square(env.grid.get_real() - env.solution.get_real())))
+        min_reward = [np.amin(reward_dim) for reward_dim in total_reward]
+        dim_with_min = np.argmin(min_reward)
+        actual_min = min_reward[dim_with_min]
+        actual_argmin = np.unravel_index(np.argmin(total_reward[dim_with_min]),
+                            shape=total_reward[dim_with_min].shape)
+
+        max_reward = [np.amax(reward_dim) for reward_dim in total_reward]
+        dim_with_max = np.argmax(max_reward)
+        actual_max = max_reward[dim_with_max]
+        actual_argmax = np.unravel_index(np.argmax(total_reward[dim_with_max]),
+                            shape=total_reward[dim_with_max].shape)
+
+        print("Reward: mean = {}, min = {} @ {} in {}, max = {} @ {} in {}".format(
+                avg_reward,
+                actual_min, actual_argmin, dim_names[dim_with_min],
+                actual_max, actual_argmax, dim_names[dim_with_max]))
+
+    error = np.sqrt(np.prod(env.grid.cell_size) 
+                        * np.sum(np.square(env.grid.get_real() - env.solution.get_real())))
     print("Final error with solution was {}.".format(env.compute_l2_error()))
 
     return error
@@ -222,8 +248,10 @@ def main():
         env_arg_parser.print_help()
         sys.exit(0)
 
+    dims = env_builder.env_dimensions(args.env)
+
     # Load basic agent, if one was specified.
-    agent = get_agent(args.agent, order=args.order, mode=mode, dimensions=1)
+    agent = get_agent(args.agent, order=args.order, mode=mode, dimensions=dims)
     # If the returned agent is None, assume it is the file name of a real agent.
     # If a real agent is specified, load parameters from its meta file.
     # This only overrides arguments that were not explicitly specified.

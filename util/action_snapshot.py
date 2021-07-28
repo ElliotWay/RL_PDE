@@ -12,7 +12,7 @@ tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 from stable_baselines import logger
 
 from envs import get_env_arg_parser, build_env
-from agents import StandardWENOAgent, StationaryAgent, EqualAgent, MiddleAgent, LeftAgent, RightAgent, RandomAgent
+from rl_pde.agents import StationaryAgent, EqualAgent, MiddleAgent, LeftAgent, RightAgent, RandomAgent
 
 standard_envs = None
 

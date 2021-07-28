@@ -24,6 +24,9 @@ class Grid2d(GridBase):
 
     def reset(self, params={}):
 
+        if params is None:
+            params = {}
+
         if 'init_type' in params:
             self.init_type = params['init_type']
         elif self._init_type == "schedule":
@@ -102,8 +105,9 @@ class Grid2d(GridBase):
                 one_d_axis = 'x'
             new_params['axis'] = one_d_axis
 
-            if self.boundary is not None and self.boundary != "outflow":
-                raise ValueError("1d initial condition cannot handle explicit boundary condition")
+            #TODO: Handle explicit boundary conditions. Not sure how that works, but if the
+            # boundary is ("periodic", "outflow"), that's what it should be, even if that doesn't
+            # make sense.
 
             one_d_params = dict(params)
             if 'boundary' in one_d_params: # Always use the default boundary from Grid1d.

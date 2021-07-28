@@ -35,7 +35,7 @@ def lf_flux_split_nd(flux_array, values_array):
 # different stencil size. Could use same parameters as create_stencil_indexes?
 # It would be better if every stenciling used the same function; I've already had bugs from one
 # version doing it incorrectly.
-def create_stencils_nd(order, values_array, axis, source_grid):
+def create_stencils_nd(values_array, order, axis, source_grid):
     """
     UNFINISHED DO NOT USE
     Create 1D stencils from an ndarray.
@@ -62,7 +62,7 @@ def create_stencils_nd(order, values_array, axis, source_grid):
     left_stencils = (flux_left.transpose()[:, left_stencil_indexes]).transpose([1,0,2])
     right_stencils = (flux_right.transpose()[:, right_stencil_indexes]).transpose([1,0,2])
 
-def weno_sub_stencils_nd(order, stencils_array):
+def weno_sub_stencils_nd(stencils_array, order):
     """
     Interpolate sub-stencils in an ndarray of stencils. (The stencils are 1D.)
 
@@ -91,7 +91,7 @@ def weno_sub_stencils_nd(order, stencils_array):
 # The q^2 matrix for the kth sub-stencil has a lot of overlap with the q^2 matrix with the k+1st sub-stencil.
 # Also the upper triangle of the q^2 matrix is not needed.
 # Not a huge deal, but could be relevant with higher orders or factors of increasing complexity.
-def weno_weights_nd(order, stencils_array):
+def weno_weights_nd(stencils_array, order):
     """
     Compute standard WENO weights for a given ndarray of stencils. (The stencils are 1D.)
 
@@ -138,8 +138,8 @@ def weno_weights_nd(order, stencils_array):
     return weights
 
 def weno_reconstruct_nd(order, stencils_array):
-    sub_stencils = weno_sub_stencils_nd(order, stencils_array)
-    weights = weno_weights_nd(order, stencils_array)
+    sub_stencils = weno_sub_stencils_nd(stencils_array, order)
+    weights = weno_weights_nd(stencils_array, order)
 
     reconstructed = np.sum(weights * sub_stencils, axis=-1)
     return reconstructed, weights
@@ -302,8 +302,8 @@ class PreciseWENOSolution2D(WENOSolution):
 
         if self.record_actions is not None:
             if self.record_actions == "weno":
-                self.action_history.append((np.stack([left_weights_, right_weights], axis=-2),
-                                                np.stack([down_weights, up_weights])))
+                self.action_history.append((np.stack([left_weights, right_weights], axis=-2),
+                                                np.stack([down_weights, up_weights], axis=-1)))
             elif self.record_actions == "coef":
                 raise NotImplementedError()
                 # This corresponds to e.g. SplitFluxBurgersEnv.
@@ -375,8 +375,7 @@ class PreciseWENOSolution2D(WENOSolution):
         return grid[middle_cells_slice]
 
     def get_real(self):
-        real_slice = tuple([slice(ng, -ng) for ng in self.num_ghosts])
-        return self.get_full()[real_slice]
+        return self.get_full()[self.real_slice]
 
     def _reset(self, init_params):
         self.precise_grid.reset(init_params)
@@ -653,7 +652,8 @@ if __name__ == "__main__":
     base_grid = Grid2d((128, 128), ng, 0.0, 1.0)
     flux_function = lambda x: 0.5 * x ** 2
     sol = PreciseWENOSolution2D(base_grid, {}, order, 1, flux_function)
-    sol.reset({'init_type': '1d-accelshock-x'})
+    #sol.reset({'init_type': '1d-accelshock-x'})
+    sol.reset({'init_type': 'gaussian'})
 
     timestep = 0.0004
     time = 0.0

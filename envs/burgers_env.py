@@ -135,8 +135,6 @@ class AbstractBurgersEnv(AbstractScalarEnv):
             precise_weno_order = self.weno_order
         self.precise_weno_order = precise_weno_order
         self.precise_scale = precise_scale
-        precise_num_cells = tuple(nx * precise_scale for nx in self.grid.num_cells)
-        #self.precise_nx = self.precise_num_cells[0]
 
         self.follow_solution = follow_solution
 

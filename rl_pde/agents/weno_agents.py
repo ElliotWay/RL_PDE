@@ -12,7 +12,7 @@ class StandardWENO2DAgent(Policy):
         self.mode = mode
 
     def predict(self, state, deterministic=False):
-        weno_weights = tuple(weno_weights_nd(state_part) for state_part in state)
+        weno_weights = tuple(weno_weights_nd(state_part, self.order) for state_part in state)
 
         if self.mode == "weno":
             return weno_weights, None

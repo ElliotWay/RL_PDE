@@ -4,8 +4,9 @@ from gym import spaces
 
 from envs.burgers_env import AbstractBurgersEnv
 from envs.plottable_env import Plottable2DEnv
-from envs.weno_solution import lf_flux_split_nd, weno_sub_stencils_nd
+from envs.weno_solution import lf_flux_split_nd, weno_sub_stencils_nd, WENOSolution
 from util.softmax_box import SoftmaxBox
+from util.misc import create_stencil_indexes
 
 
 class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
@@ -29,7 +30,7 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
                 # num x interfaces X num y cells X (+,-) X stencil size
                 shape=(num_x + 1, num_y, 2, 2*self.state_order+1),
                 dtype=np.float64)
-        y_rl_state = SoftmaxBox(low-1e7, high=1e7,
+        y_rl_state = SoftmaxBox(low=-1e7, high=1e7,
                 shape=(num_x, num_y + 1, 2, 2*self.state_order+1),
                 dtype=np.float64)
         self.observation_space = spaces.Tuple((x_rl_state, y_rl_state))
@@ -55,7 +56,7 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
         ghost_x, ghost_y = self.grid.num_ghosts
 
         # Lax Friedrichs flux splitting.
-        (flux_left, flux_right), (flux_down, flux_up) = lf_flux_split_nd(flux, g.space)
+        (flux_left, flux_right), (flux_down, flux_up) = lf_flux_split_nd(flux, self.grid.space)
 
         # Trim vertical ghost cells from horizontally split flux. (Should this be part of flux
         # splitting?)
@@ -67,8 +68,8 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
         left_stencil_indexes = np.flip(right_stencil_indexes, axis=-1) + 1
         # Indexing is tricky here. I couldn't find a way without transposing and then transposing
         # back. (It might be possible, though.)
-        right_stencils = (flux_right.transpose()[:, indexes]).transpose([1,0,2])
-        left_stencils = (flux_left.transpose()[:, indexes]).transpose([1,0,2])
+        right_stencils = (flux_right.transpose()[:, right_stencil_indexes]).transpose([1,0,2])
+        left_stencils = (flux_left.transpose()[:, left_stencil_indexes]).transpose([1,0,2])
         horizontal_state = np.stack([left_stencils, right_stencils], axis=2)
 
         flux_down = flux_down[ghost_x:-ghost_x, :]
@@ -77,8 +78,8 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
                                                     num_stencils=num_y + 1,
                                                     offset=ghost_y - self.state_order)
         down_stencil_indexes = np.flip(up_stencil_indexes, axis=-1) + 1
-        up_stencils = flux_up[:, indexes]
-        down_stencil = flux_down[:, indexes]
+        up_stencils = flux_up[:, up_stencil_indexes]
+        down_stencils = flux_down[:, down_stencil_indexes]
         vertical_state = np.stack([down_stencils, up_stencils], axis=2)
 
         state = (horizontal_state, vertical_state)
@@ -96,10 +97,10 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
         up_stencils = y_state[:, :, 1, :]
 
         #TODO I think we need to offset the sub_stencil indexes by the state_order - weno_order.
-        left_sub_stencils = weno_sub_stencils_nd(self.weno_order, left_stencils)
-        right_sub_stencils = weno_sub_stencils_nd(self.weno_order, right_stencils)
-        down_sub_stencils = weno_sub_stencils_nd(self.weno_order, down_stencils)
-        up_sub_stencils = weno_sub_stencils_nd(self.weno_order, up_stencils)
+        left_sub_stencils = weno_sub_stencils_nd(left_stencils, self.weno_order)
+        right_sub_stencils = weno_sub_stencils_nd(right_stencils, self.weno_order)
+        down_sub_stencils = weno_sub_stencils_nd(down_stencils, self.weno_order)
+        up_sub_stencils = weno_sub_stencils_nd(up_stencils, self.weno_order)
 
         x_action, y_action = action
         left_action = x_action[:, :, 0, :]
@@ -115,7 +116,7 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
         horizontal_flux_reconstructed = left_flux_reconstructed + right_flux_reconstructed
         vertical_flux_reconstructed = down_flux_reconstructed + up_flux_reconstructed
 
-        cell_size_x, cell_size_y = g.cell_size
+        cell_size_x, cell_size_y = self.grid.cell_size
 
         step = (  (horizontal_flux_reconstructed[:-1, :]
                     - horizontal_flux_reconstructed[1:, :]) / cell_size_x

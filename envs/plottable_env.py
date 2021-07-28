@@ -567,7 +567,7 @@ class Plottable2DEnv(AbstractScalarEnv):
 
     metadata = {'render.modes': ['file']}
 
-    def __init__(*args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self._state_axes = None

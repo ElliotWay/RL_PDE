@@ -5,6 +5,7 @@ import re
 from util.misc import positive_int, nonnegative_float, positive_float, float_dict
 from envs.abstract_scalar_env import AbstractScalarEnv
 from envs import WENOBurgersEnv, SplitFluxBurgersEnv, FluxBurgersEnv
+from envs.burgers_2d_env import WENOBurgers2DEnv
 
 
 # Could pass name of env, and only have relevant parameters instead of allowing all of them?
@@ -124,6 +125,11 @@ def set_contingent_env_defaults(main_args, env_args):
     if env_args.num_cells is not None and len(env_args.num_cells) == 1:
         env_args.num_cells = (env_args.num_cells[0],) * dims
 
+    if dims > 1 and len(env_args.min_value) == 1:
+        env_args.min_value = (env_args.min_value[0],) * dims
+    if dims > 1 and len(env_args.max_value) == 1:
+        env_args.max_value = (env_args.max_value[0],) * dims
+
     # Make timestep length depend on grid size or vice versa.
     #TODO ep_length should probably be an env parameter. Unless we should have a fixed time limit
     # instead?
@@ -172,7 +178,7 @@ def set_contingent_env_defaults(main_args, env_args):
 def env_dimensions(env_name):
     match = re.search(r"(\d+)(-|_)?(d|D)", env_name)
     if match is not None:
-        return match.group(0)
+        return int(match.group(1))
     # There are probably exceptions to put here,
     # e.g. environments that are inherently 3d but don't
     # have "3d" in their name.
@@ -210,6 +216,8 @@ def build_env(env_name, args, test=False):
 
     if env_name == "weno_burgers":
         env = WENOBurgersEnv(**kwargs)
+    elif env_name == "weno_burgers_2d":
+        env = WENOBurgers2DEnv(**kwargs)
     elif env_name == "split_flux_burgers":
         env = SplitFluxBurgersEnv(**kwargs)
     elif env_name == "flux_burgers":
