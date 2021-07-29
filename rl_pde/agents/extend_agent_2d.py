@@ -17,15 +17,17 @@ class ExtendAgent2D(Policy):
         horizontal_state, vertical_state = state
 
         h_actions = []
-        for index in horizontal_state.shape[1]:
+        for index in range(horizontal_state.shape[1]):
             state_slice = horizontal_state[:, index]
-            h_actions.append(self.sub_agent.predict(state_slice, deterministic=deterministic))
+            action, _ = self.sub_agent.predict(state_slice, deterministic=deterministic)
+            h_actions.append(action)
         horizontal_action = np.stack(h_actions, axis=1)
 
         v_actions = []
-        for index in vertical_state.shape[0]:
+        for index in range(vertical_state.shape[0]):
             state_slice = vertical_state[index, :]
-            v_actions.append(self.sub_agent.predict(state_slice, deterministic=deterministic))
+            action, _ = self.sub_agent.predict(state_slice, deterministic=deterministic)
+            v_actions.append(action)
         vertical_action = np.stack(v_actions, axis=0)
 
-        return (horizontal_action, vertical_action)
+        return (horizontal_action, vertical_action), None

@@ -21,7 +21,7 @@ from stable_baselines import logger
 
 from rl_pde.run import rollout
 from rl_pde.emi import BatchEMI, StandardEMI, TestEMI
-from rl_pde.agents import get_agent
+from rl_pde.agents import get_agent, ExtendAgent2D
 from envs import builder as env_builder
 from envs import AbstractBurgersEnv
 from models import get_model_arg_parser
@@ -72,14 +72,17 @@ def save_error_plot(x_vals, y_vals, labels, args):
     plt.close()
 
 def do_test(env, agent, args):
-    NUM_UPDATES = 10
+    if args.animate:
+        NUM_UPDATES = 50
+    else:
+        NUM_UPDATES = 10
     update_count = 0
     next_update = 0
 
     render_args = {}
     if args.animate:
         render_args["fixed_axes"] = True
-        render_args["no_x_borders"] = True
+        render_args["no_borders"] = True
         render_args["show_ghost"] = False
     else:
         render_args["fixed_axes"] = False
@@ -91,7 +94,8 @@ def do_test(env, agent, args):
         # Write to variables in parent scope.
         nonlocal next_update
         nonlocal update_count
-        if args.animate or step == next_update:
+        #if args.animate or step == next_update:
+        if step == next_update:
             if step == next_update:
                 print("step = {}".format(step))
 

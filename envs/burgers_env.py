@@ -199,7 +199,7 @@ class AbstractBurgersEnv(AbstractScalarEnv):
                 self.weno_solution = PreciseWENOSolution2D(
                         self.grid, {'init_type':self.grid.init_type,
                             'boundary':self.grid.boundary},
-                        precise_scale=1, precise_order=weno_order,
+                        precise_scale=1, precise_order=self.weno_order,
                         flux_function=self.burgers_flux, source=self.source,
                         nu=nu)
 

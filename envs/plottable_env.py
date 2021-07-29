@@ -32,17 +32,29 @@ class Plottable1DEnv(AbstractScalarEnv):
         self._action_axes = None
         self._action_labels = None
 
-        if self.weno_solution is not None:
-            self.weno_color = "tab:blue"
-            self.weno_ghost_color = "#75bdf0"
-            self.true_color = "tab:pink"
-            self.true_ghost_color = "#f7e4ed"
-        else:
-            self.true_color = "tab:blue"
-            self.true_ghost_color = "#75bdf0"
+
+        # We don't know whether self.weno_solution is declared or not until later, as it might be
+        # declared by a child class, or a sibling class, so may not be declared by this point.
+        self.weno_color = None
+        self.weno_ghost_color = None
+        self.true_color = None
+        self.true_ghost_color = None
+        self.agent_color = None
+        self.agent_ghost_color = None
+        # ghost green: "#94d194"
+
+    def set_colors(self):
+        if self.true_color is None:
+            if self.weno_solution is not None:
+                self.weno_color = "tab:blue"
+                self.weno_ghost_color = "#75bdf0"
+                self.true_color = "tab:pink"
+                self.true_ghost_color = "#f7e4ed"
+            else:
+                self.true_color = "tab:blue"
+                self.true_ghost_color = "#75bdf0"
         self.agent_color = "tab:orange"
         self.agent_ghost_color =  "#ffad66"
-        # ghost green: "#94d194"
 
     def render(self, mode='file', **kwargs):
         if mode is None:
@@ -56,7 +68,7 @@ class Plottable1DEnv(AbstractScalarEnv):
             timestep=None, location=None,
             plot_error=False,
             suffix=None, title=None,
-            fixed_axes=False, no_x_borders=False, show_ghost=True,
+            fixed_axes=False, no_borders=False, show_ghost=True,
             state_history=None, solution_state_history=None, weno_state_history=None,
             history_includes_ghost=True):
         """
@@ -99,6 +111,8 @@ class Plottable1DEnv(AbstractScalarEnv):
         """
 
         assert (timestep is None or location is None), "Can't plot state at both a timestep and a location."
+
+        self.set_colors()
 
         override_history = (state_history is not None)
 
@@ -235,7 +249,7 @@ class Plottable1DEnv(AbstractScalarEnv):
 
         ax.set_title(title)
 
-        if no_x_borders:
+        if no_borders:
             ax.set_xmargin(0.0)
 
         # Restrict y-axis if plotting abs error.
@@ -304,6 +318,7 @@ class Plottable1DEnv(AbstractScalarEnv):
             Override the current state histories with a different set. Useful if, for example, you
             copied the history from an earlier episode.
         """
+        self.set_colors()
 
         override_history = (state_history is not None)
 
@@ -334,6 +349,7 @@ class Plottable1DEnv(AbstractScalarEnv):
         # Plot the true solution first so it appears under the RL solution.
         true = None
         weno = None
+        weno_override = False
         if not plot_error and not no_true:
             if not override_history:
                 # Decide whether to use solution or weno_solution, or both.
@@ -348,12 +364,16 @@ class Plottable1DEnv(AbstractScalarEnv):
                 elif self.weno_solution is not None and self.weno_solution.is_recording_state():
                     solution_state_history = np.array(
                                 self.weno_solution.get_state_history())[:, self.ng:-self.ng]
+                    weno_override = True
 
             if solution_state_history is not None:
                 assert len(state_history) == len(solution_state_history), "History mismatch."
                 
+                true_color = self.true_color
+                if weno_override:
+                    true_color = self.weno_color
                 if full_true:
-                    true_rgb = matplotlib.colors.to_rgb(self.true_color)
+                    true_rgb = matplotlib.colors.to_rgb(true_color)
                     true_color_sequence = color_sequence(start_rgb, true_rgb, num_states)
                     sliced_solution_history = solution_state_history[slice_indexes]
                     
@@ -363,7 +383,7 @@ class Plottable1DEnv(AbstractScalarEnv):
                                     ls='-', linewidth=1, color=true_rgb)
                 else:
                     true = plt.plot(x_values, solution_state_history[-1], 
-                                    ls='-', linewidth=4, color=self.true_color)
+                                    ls='-', linewidth=4, color=true_color)
 
                 if weno_state_history is not None:
                     assert len(state_history) == len(weno_state_history), "History mismatch."
@@ -410,7 +430,10 @@ class Plottable1DEnv(AbstractScalarEnv):
             labels = ["init", "RL"]
             if true is not None:
                 plots.append(true[0])
-                labels.append(self.solution_label)
+                if weno_override:
+                    labels.append(self.weno_solution_label)
+                else:
+                    labels.append(self.solution_label)
             if weno is not None:
                 plots.append(weno[0])
                 labels.append(self.weno_solution_label)
@@ -434,7 +457,7 @@ class Plottable1DEnv(AbstractScalarEnv):
         return filename
 
     def plot_action(self, timestep=None, location=None, suffix=None, title=None,
-                    fixed_axes=False, no_x_borders=False, **kwargs):
+                    fixed_axes=False, no_borders=False, **kwargs):
         """
         Plot actions at either a timestep or a specific location.
 
@@ -460,6 +483,7 @@ class Plottable1DEnv(AbstractScalarEnv):
             If true, trim the plot to exactly the extent of the x coordinates. Useful for animation.
       
         """
+        self.set_colors()
 
         assert (timestep is None or location is None), "Can't plot action at both a timestep and a location."
 
@@ -525,7 +549,7 @@ class Plottable1DEnv(AbstractScalarEnv):
                 ax.plot(real_x, weno_action_history[dim, :], c=weno_color, linestyle='-', label="WENO")
             ax.plot(real_x, action_history[dim, :], c=self.agent_color, linestyle='-', label="RL")
 
-            if no_x_borders:
+            if no_borders:
                 ax.set_xmargin(0.0)
 
             if fixed_axes:
@@ -667,7 +691,7 @@ class Plottable2DEnv(AbstractScalarEnv):
         if fixed_axes:
             #TODO Keep the colorbar fixed as well.
             if self._state_axes is None:
-                self._state_axes = (ax.get_xlim(), ax_get_ylim(), ax.get_zlim())
+                self._state_axes = (ax.get_xlim(), ax.get_ylim(), ax.get_zlim())
             else:
                 xlim, ylim, zlim = self._state_axes
                 ax.set_xlim(xlim)

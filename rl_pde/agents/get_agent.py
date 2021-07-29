@@ -13,6 +13,8 @@ def get_agent(name, order, mode="weno", dimensions=1):
             return StandardWENOAgent(order=order, mode=mode)
         elif dimensions == 2:
             return StandardWENO2DAgent(order=order, mode=mode)
+            # This would be work but would be substantially slower:
+            #return ExtendAgent2D(StandardWENOAgent(order=order, mode=mode))
 
     else:
         if name == "stationary":
