@@ -108,7 +108,7 @@ def save_action_snapshot(agent, weno_agent=None, suffix=""):
         state_axis.set_xmargin(0.0)
         state_axis.set_ylim((-2.0, 2.0))
 
-        interface_x_values = env.grid.inter_x[env.ng:-(env.ng-1)]
+        interface_x_values = env.grid.inter_x[env.ng:-env.ng]
         for dim in range(action_dimensions):
             action_axis = axes[1+dim, index]
             if weno_agent is not None:

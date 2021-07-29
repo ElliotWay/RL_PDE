@@ -1,7 +1,9 @@
 import os
 import numpy as np
 
-class AbstractModel:
+from rl_pde.policy import Policy
+
+class AbstractModel(Policy):
     """
     General RL model representing a trainable policy.
     The "train" function is not defined as part of this interface, representing different possible
