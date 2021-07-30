@@ -33,23 +33,30 @@ class BatchGlobalEMI(EMI):
 
         self.args = args # Not ideal. This EMI has too much visibility if it keeps the whole args.
 
-        # To record the "full" error, that is, the difference between the solution following the
-        # agent and the solution following WENO from the beginning, we need to keep a separate copy
-        # of the WENO solution.
-        args_copy = Namespace(**vars(args))
-        if args_copy.reward_mode is not None:
-            args_copy.reward_mode = args_copy.reward_mode.replace('one-step', 'full')
-        if not "random" in args.init_type:
-            args_copy.memoize = True # Memoizing means we don't waste time and memory recomputing
-                                     # the solution each time.
-        else:
-            args_copy.memoize = False # Unfortunately we HAVE to recompute each time if the
-                                      # environment is randomized.
-        args_copy.analytical = False
+        self.weno_solution_env = None
 
-        self.weno_solution_env = build_env(args_copy.env, args_copy)
+    # Declare this lazily so it doesn't need to be declared during testing.
+    def _declare_solution_env(self):
+        if self.weno_solution_env is None:
+            # To record the "full" error, that is, the difference between the solution following the
+            # agent and the solution following WENO from the beginning, we need to keep a separate copy
+            # of the WENO solution.
+            args_copy = Namespace(**vars(self.args))
+            if args_copy.reward_mode is not None:
+                args_copy.reward_mode = args_copy.reward_mode.replace('one-step', 'full')
+            if not "random" in args.init_type:
+                args_copy.memoize = True # Memoizing means we don't waste time and memory recomputing
+                                         # the solution each time.
+            else:
+                args_copy.memoize = False # Unfortunately we HAVE to recompute each time if the
+                                          # environment is randomized.
+            args_copy.analytical = False
+
+            self.weno_solution_env = build_env(args_copy.env, args_copy)
 
     def training_episode(self, env):
+        self._declare_weno_solution_env()
+
         num_inits = self.args.batch_size
         initial_conditions = []
         init_params = []

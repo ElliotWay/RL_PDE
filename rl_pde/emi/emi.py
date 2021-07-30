@@ -61,6 +61,7 @@ class EMI:
         """
         self._model.load(path)
 
+
 class TestEMI(EMI):
     """ Fake EMI for testing. """
     def __init__(self, env, model_cls, args, action_adjust=None, obs_adjust=None):
@@ -88,6 +89,7 @@ class TestEMI(EMI):
         return full_path
     def load_model(self, path):
         print("Test EMI is pretending to load from {}".format(path))
+
 
 class PolicyWrapper(Policy):
     """
@@ -136,6 +138,7 @@ class PolicyWrapper(Policy):
         else:
             adjusted_action = action
         return adjusted_action, info
+
 
 class StandardEMI(EMI):
     """

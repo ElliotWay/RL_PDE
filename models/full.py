@@ -145,7 +145,6 @@ class GlobalBackpropModel(GlobalModel):
             self.policy = PolicyNet(layers=self.args.layers, action_shape=action_shape,
                     activation_fn=tf.nn.relu, name="policy", dtype=self.dtype)
 
-
             # Direct policy input and output used in predict() method during testing.
             self.policy_input_ph = tf.placeholder(dtype=self.dtype,
                     shape=(None,) + self.env.observation_space.shape[1:], name="policy_input")
@@ -164,7 +163,10 @@ class GlobalBackpropModel(GlobalModel):
             self.load_op = {}
             self.load_ph = {}
             for param in self.policy_params:
-                placeholder = tf.placeholder(dtype=param.dtype, shape=param.shape)
+                clean_name = ''.join(x if x not in "\0\ \t\n\\/:=.*\"\'<>|?" else '_'
+                                        for x in str(param.name))
+                placeholder = tf.placeholder(dtype=param.dtype, shape=param.shape, 
+                        name="load_{}".format(clean_name))
                 self.load_op[param] = param.assign(placeholder)
                 self.load_ph[param] = placeholder
 
@@ -323,19 +325,29 @@ class GlobalBackpropModel(GlobalModel):
                     " What did you put in there?")
         #self.__dict__.update(data) # Use this if we put something in extra_data in save().
                                     # (The keys need to be the same as the name of the field.)
-
+        is_old_model = False
         feed_dict = {}
         for param in self.policy_params:
             placeholder = self.load_ph[param]
             try:
-                param_value = param_dict[param.name]
-            except KeyError:
-                print("{} not in saved model.".format(param.name))
-                policy_net_name = param.name.replace("policy", "policy_net", 1)
-                if policy_net_name in param_dict:
-                    print("Assuming older model that used \"policy_net\".")
-                    param_value = param_dict[policy_net_name]
+                if is_old_model:
+                    name = param.name.replace("policy", "policy_net", 1)
                 else:
+                    name = param.name
+                param_value = param_dict[name]
+            except KeyError:
+                if not is_old_model:
+                    print("{} not in saved model.".format(param.name))
+                    policy_net_name = param.name.replace("policy", "policy_net", 1)
+                    if policy_net_name in param_dict:
+                        print("Assuming older model that used \"policy_net\".")
+                        param_value = param_dict[policy_net_name]
+                        is_old_model = True
+                    else:
+                        raise Exception("\"{}\" is either corrupted or not a GlobalBackprop model."
+                            .format(path))
+                else:
+                    print("{} not in saved model.".format(param.name))
                     raise Exception("\"{}\" is either corrupted or not a GlobalBackprop model."
                         .format(path))
 

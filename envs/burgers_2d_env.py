@@ -28,10 +28,10 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
         
         x_rl_state = spaces.Box(low=-1e7, high=1e7,
                 # num x interfaces X num y cells X (+,-) X stencil size
-                shape=(num_x + 1, num_y, 2, 2*self.state_order+1),
+                shape=(num_x + 1, num_y, 2, 2*self.state_order-1),
                 dtype=np.float64)
         y_rl_state = SoftmaxBox(low=-1e7, high=1e7,
-                shape=(num_x, num_y + 1, 2, 2*self.state_order+1),
+                shape=(num_x, num_y + 1, 2, 2*self.state_order-1),
                 dtype=np.float64)
         self.observation_space = spaces.Tuple((x_rl_state, y_rl_state))
 

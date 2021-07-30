@@ -31,6 +31,11 @@ def get_model_class(model_name):
     else:
         raise Exception("Unrecognized model type: \"{}\"".format(model_name))
 
+def get_model_dims(model_name):
+    # Currently, they're ALL 1-dimensionsal.
+    # We'll need to change this later when 2-dimensional models exist.
+    return 1
+
 def get_emi_class(emi_name):
     if emi_name == 'batch':
         return BatchEMI

@@ -53,6 +53,7 @@ class UnbatchedEnvPL(gym.Env):
     def seed(self, seed):
         raise Exception("This is a placeholder env - you can only access the spaces.")
 
+
 class UnbatchedPolicy(Policy):
     """
     Policy to wrap policies trained for an UnbatchedEnvPL.
@@ -60,7 +61,6 @@ class UnbatchedPolicy(Policy):
     actions the model's predict outputs.
     """
     def __init__(self, original_env, unbatched_env, model):
-        assert isinstance(unbatched_env, UnbatchedEnvPL)
         self.original_obs_shape = original_env.observation_space.shape
         self.unbatched_obs_shape = unbatched_env.observation_space.shape
         self.original_action_shape = original_env.action_space.shape
@@ -85,6 +85,7 @@ class UnbatchedPolicy(Policy):
             actions = actions.reshape((len(obs),) + self.original_action_shape[1:])
 
         return actions, None
+
 
 class BatchEMI(EMI):
     """

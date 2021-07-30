@@ -5,7 +5,7 @@ from rl_pde.policy import Policy
 # This could be extended to ND without too much difficulty.
 class ExtendAgent2D(Policy):
     """
-    Extend a 1-dimensional agent into 2 dimensions.
+    Decorator that extends a 1-dimensional agent into 2 dimensions.
 
     The 1-dimensional agent is applied to every column and every row of a 2-dimensional
     environment.

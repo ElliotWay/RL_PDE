@@ -20,7 +20,7 @@ tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 from stable_baselines import logger
 
 from rl_pde.run import rollout
-from rl_pde.emi import BatchEMI, StandardEMI, TestEMI
+from rl_pde.emi import BatchEMI, StandardEMI, TestEMI, DimensionalAdapterEMI
 from rl_pde.agents import get_agent, ExtendAgent2D
 from envs import builder as env_builder
 from envs import AbstractBurgersEnv
@@ -28,7 +28,7 @@ from models import get_model_arg_parser
 from models import SACModel, PolicyGradientModel, TestModel
 from util import metadata
 from util.function_dict import numpy_fn
-from util.lookup import get_model_class, get_emi_class
+from util.lookup import get_model_class, get_emi_class, get_model_dims
 from util.misc import set_global_seed
 
 ON_POSIX = 'posix' in sys.builtin_module_names
@@ -281,12 +281,13 @@ def main():
     if not args.convergence_plot:
         env = env_builder.build_env(args.env, args, test=True)
     else:
+        if dims > 1:
+            raise NotImplementedError("Convergence plots not adapted to 2D yet.")
         #args.analytical = True # Compare to analytical solution (preferred)
         args.analytical = False # Compare to WENO (necessary when WENO isn't accurate either)
         if args.reward_mode is not None and 'one-step' in args.reward_mode:
             print("TODO: compute error with analytical solution when using one-step error.")
-            print("(Currently forcing the error to change to full instead, error is still with"
-                    + "analytical.)")
+            print("(Currently forcing the error to change to full instead.)")
             args.reward_mode = 'full'
         CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]#, 1024, 2048, 4096, 8192]
         envs = []
@@ -313,10 +314,18 @@ def main():
         action_adjust = numpy_fn(args.action_scale)
 
         model_cls = get_model_class(args.model)
-
         emi_cls = get_emi_class(args.emi)
+        model_dims = get_model_dims(args.model)
 
-        emi = emi_cls(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
+        if model_dims < dims:
+            if model_dims == 1:
+                emi = DimensionalAdapterEMI(emi_cls, env, model_cls, args,
+                        obs_adjust=obs_adjust, action_adjust=action_adjust)
+            else:
+                raise Exception("Cannot adapt {}-dimensional model to {}-dimensional environment."
+                        .format(model_dims, dims))
+        else:
+            emi = emi_cls(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
 
         emi.load_model(args.agent)
         agent = emi.get_policy()
