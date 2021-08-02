@@ -22,13 +22,15 @@ def get_env_arg_parser():
                         + " depends on the value of --timestep and of --C; if those are both"
                         + " defaults, then it defaults to a square grid of 125.")
     parser.add_argument('--min-value', '--min_value', '--xmin', type=float, nargs='+',
-                            default=[0.0],
+                            default=None,
                         help="Lower bounds of the physical space. May have multiple values,"
-                        + " see --num-cells.")
+                        + " see --num-cells. Default is 0.0, but some initial conditions may"
+                        + " specify different defaults.")
     parser.add_argument('--max-value', '--max_value', '--xmax', type=float, nargs='+',
-                            default=[1.0],
+                            default=None,
                         help="Upper bounds of the physical space. May have multiple values,"
-                        + " see --num-cells.")
+                        + " see --num-cells. Default is 1.0, but some initial conditions may"
+                        + " specify different defaults.")
     parser.add_argument('--order', type=positive_int, default=2,
                         help="Order of WENO approximation (assuming using WENO environment or agent).")
     parser.add_argument('--state_order', '--state-order', type=positive_int, default=None,
@@ -53,7 +55,7 @@ def get_env_arg_parser():
                         + " Only works with --fixed-timesteps.")
 
     parser.add_argument('--init_type', '--init-type', type=str, default="schedule",
-                        help="Shape of the initial state.")
+                        help="The type of initial condition.")
     parser.add_argument('--boundary', '--bc', type=str, default=None, nargs='+',
                         help="The boundary condition of the space. May have multiple values,"
                         + " see --num-cells. The default boundary conditions depend on the"
@@ -119,6 +121,14 @@ def set_contingent_env_defaults(main_args, env_args):
     env_args.reward_mode = AbstractScalarEnv.fill_default_reward_mode(env_args.reward_mode)
     print("Full reward mode is '{}'.".format(env_args.reward_mode))
 
+    if env_args.min_value is None or env_args.max_value is None:
+        if env_args.init_type == "jsz7":
+            env_args.min_value = (0.0,)
+            env_args.max_value = (4.0,)
+        else:
+            env_args.min_value = (0.0,)
+            env_args.max_value = (1.0,)
+
     dims = env_dimensions(main_args.env)
 
     # Most functions expect num_cells to be a tuple of length dims.
@@ -174,6 +184,7 @@ def set_contingent_env_defaults(main_args, env_args):
         env_args.max_value = env_args.max_value[0]
     if env_args.boundary is not None and type(env_args.boundary) is not str:
         env_args.boundary = env_args.boundary[0]
+
 
 def env_dimensions(env_name):
     match = re.search(r"(\d+)(-|_)?(d|D)", env_name)

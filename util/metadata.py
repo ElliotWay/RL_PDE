@@ -198,7 +198,15 @@ def load_to_namespace(meta_filename, args_ns, ignore_list=[], override_args=None
     explicit_args, other = no_default_parser.parse_known_args(override_args)
     if len(other) > 0:
         raise Exception("Loading meta file had issues. Couldn't understand these arguments: {}"
-                .format(" ".join(other)))
+                .format(" ".join(other)) + "\n"
+                + " Known issues:\n"
+                + " * Can't handle explicit arguments with multiple names that differ more\n"
+                + " than - vs _.  --num_cells vs --num-cells is fine, but --nx will confuse\n"
+                + " it since we don't have a good  way of reconstructing the arg parser except\n"
+                + " from the args dict.\n"
+                + " * Similarly, parameters with updated names are not loaded correctly,\n"
+                + " such as changing --nx to --num-cells. This will assume the defaults,\n"
+                + " which is usually the right behavior.")
 
     meta_dict = load_meta_file(meta_filename)
     for arg in arg_dict:
@@ -211,4 +219,5 @@ def load_to_namespace(meta_filename, args_ns, ignore_list=[], override_args=None
         else:
             arg_dict[arg] = destring_value(meta_dict[arg])
 
-        # Note: If a parameter was in the meta file, but not the arg namespace, it was just a non-parameter field in the meta file.
+        # Note: If a parameter was in the meta file, but not the arg namespace,
+        # it was probably a non-parameter field in the meta file.

@@ -130,7 +130,7 @@ def do_test(env, agent, args):
     
     if env.dimensions == 1:
         total_reward = np.sum(rewards, axis=0)
-        print("Reward: mean = {}, min = {} @ {}, max = {} @ {}".format(
+        print("Reward: mean = {:g}, min = {:g} @ {}, max = {:g} @ {}".format(
                 np.mean(total_reward),
                 np.amin(total_reward), np.argmin(total_reward),
                 np.amax(total_reward), np.argmax(total_reward)))
@@ -154,7 +154,7 @@ def do_test(env, agent, args):
         actual_argmax = np.unravel_index(np.argmax(total_reward[dim_with_max]),
                             shape=total_reward[dim_with_max].shape)
 
-        print("Reward: mean = {}, min = {} @ {} in {}, max = {} @ {} in {}".format(
+        print("Reward: mean = {:g}, min = {:g} @ {} in {}, max = {:g} @ {} in {}".format(
                 avg_reward,
                 actual_min, actual_argmin, dim_names[dim_with_min],
                 actual_max, actual_argmax, dim_names[dim_with_max]))

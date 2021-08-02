@@ -77,6 +77,20 @@ class Grid2d(GridBase):
             self.space = a + b*np.exp(-(
                 (self.x[:, None] - c[0])**2/(2.0*sigma[0]**2)
                 + (self.y[None, :] - c[1])**2/(2.0*sigma[1]**2)))
+        # Jiang, Shu, Zhang, Example 7. (An alternative formulation of finite difference WENO
+        # schemes with Lax-Wendroff time discretization for conservation laws)
+        elif self.init_type == "jsz7":
+            if self.boundary is None:
+                self.boundary = "periodic"
+            
+            a = params['a'] if 'a' in params else 0.5
+            new_params['a'] = a
+            b = params['b'] if 'b' in params else 1.0
+            new_params['b'] = b
+            c = params['c'] if 'c' in params else (np.pi / 2.0,) * 2
+            new_params['c'] = c
+
+            self.space = a + b * np.sin(c[0] * self.x[:, None] + c[1] * self.x[None, :])
 
         elif self.init_type.startswith("1d"):
             one_d_type = None
