@@ -234,6 +234,28 @@ class WENOSimulation(object):
             self.grid.q[2] = numpy.where(self.grid.x < 0,
                                          E_l * numpy.ones_like(self.grid.x),
                                          E_r * numpy.ones_like(self.grid.x))
+        elif type == "slow_shock":
+            rho_l = 5.6698
+            rho_r = 1.0
+            v_l = -1.4701
+            v_r = -10.5
+            p_l = 100.0
+            p_r = 1.0
+            S_l = rho_l * v_l
+            S_r = rho_r * v_r
+            e_l = p_l / rho_l / (self.eos_gamma - 1)
+            e_r = p_r / rho_r / (self.eos_gamma - 1)
+            E_l = rho_l * (e_l + v_l ** 2 / 2)
+            E_r = rho_r * (e_r + v_r ** 2 / 2)
+            self.grid.q[0] = numpy.where(self.grid.x < 0,
+                                         rho_l * numpy.ones_like(self.grid.x),
+                                         rho_r * numpy.ones_like(self.grid.x))
+            self.grid.q[1] = numpy.where(self.grid.x < 0,
+                                         S_l * numpy.ones_like(self.grid.x),
+                                         S_r * numpy.ones_like(self.grid.x))
+            self.grid.q[2] = numpy.where(self.grid.x < 0,
+                                         E_l * numpy.ones_like(self.grid.x),
+                                         E_r * numpy.ones_like(self.grid.x))
         else:
             raise Exception("Invalid initial condition: \"{}\":".format(type))
 
@@ -567,11 +589,6 @@ class WENOSimulation(object):
         plt.close(fig)
 
 
-LOG_DIR = "test/weno_eulers/double_rarefaction"
-# LOG_DIR = "test/weno_eulers/advection"
-os.makedirs(LOG_DIR, exist_ok=True)
-
-
 def setup_args():
     parser = argparse.ArgumentParser(
         description="Deploy an existing RL agent in an environment. Note that this script also takes various arguments not listed here.",
@@ -656,26 +673,54 @@ def setup_args():
     return args
 
 
+# LOG_DIR = "test/weno_eulers/double_rarefaction"
+# LOG_DIR = "test/weno_eulers/advection"
+# LOG_DIR = "test/weno_eulers/sod_characteristic"
+LOG_DIR = "test/weno_eulers/slow_shock"
+os.makedirs(LOG_DIR, exist_ok=True)
+
+
 if __name__ == "__main__":
 
     xmin = -0.5
     xmax = 0.5
     nx = 128
 
-    tmax = 0.1  # 0.1
+    tmax = 0.1
     C = 0.5
 
     order = 2
     ng = order + 2
 
-    init = "double_rarefaction"
+    # init = "double_rarefaction"
     # init = "advection"
+    # init = "sod"
+    init = "slow_shock"
 
-    left = riemann.State(p=0.4, u=-2.0, rho=1.0)
-    right = riemann.State(p=0.4, u=2.0, rho=1.0)
+    # # setup the problem -- Sod
+    # left = riemann.State(p=1.0, u=0.0, rho=1.0)
+    # right = riemann.State(p=0.1, u=0.0, rho=0.125)
+    #
+    # rp = riemann.RiemannProblem(left, right)
+    # rp.find_star_state()
+    #
+    # x_e, rho_e, v_e, p_e = rp.sample_solution(tmax, 1024)
+    # e_e = p_e / 0.4 / rho_e
+
+    # # setup the problem -- double rarefaction
+    # left = riemann.State(p=0.4, u=-2.0, rho=1.0)
+    # right = riemann.State(p=0.4, u=2.0, rho=1.0)
+    # rp = riemann.RiemannProblem(left, right)
+    # rp.find_star_state()
+    # x_e, rho_e, v_e, p_e = rp.sample_solution(tmax, 1024)
+    # e_e = p_e / 0.4 / rho_e
+
+    # slow shock
+    left = riemann.State(p=100.0, u=-1.4701, rho=5.6698)
+    right = riemann.State(p=1.0, u=-10.5, rho=1.0)
     rp = riemann.RiemannProblem(left, right)
     rp.find_star_state()
-    x_e, rho_e, v_e, p_e = rp.sample_solution(0.1, 1024)
+    x_e, rho_e, v_e, p_e = rp.sample_solution(tmax, 1024)
     e_e = p_e / 0.4 / rho_e
 
     agent_grid = Grid1d(nx, ng, xmin, xmax, bc="outflow")
@@ -707,24 +752,37 @@ if __name__ == "__main__":
     # weno_sim.evolve(tmax)
     # weno_sim.save_plot("last")
 
-    g = agent_sim.grid
+    g = weno_sim.grid
     x = g.x + 0.5
     rho = g.q[0, :]
     v = g.q[1, :] / g.q[0, :]
     e = (g.q[2, :] - rho * v ** 2 / 2) / rho
     p = (weno_sim.eos_gamma - 1) * (g.q[2, :] - rho * v ** 2 / 2)
-    p2 = (agent_sim.eos_gamma - 1) * (g.q[2, :] - rho * v ** 2 / 2)
+
+    g2 = agent_sim.grid
+    x2 = g2.x + 0.5
+    rho2 = g2.q[0, :]
+    v2 = g2.q[1, :] / g2.q[0, :]
+    e2 = (g2.q[2, :] - rho2 * v2 ** 2 / 2) / rho2
+    p2 = (agent_sim.eos_gamma - 1) * (g2.q[2, :] - rho2 * v2 ** 2 / 2)
+
     fig, axes = plt.subplots(4, 1, sharex=True, figsize=(6, 10))
     axes[0].plot(x[g.ilo:g.ihi + 1], rho[g.ilo:g.ihi + 1], 'bo')
+    axes[0].plot(x2[g.ilo:g.ihi + 1], rho2[g.ilo:g.ihi + 1], 'r')
     axes[0].plot(x_e, rho_e, 'k--')
+    axes[0].legend(['weno', 'loaded agent', 'Godunov'])
     axes[1].plot(x[g.ilo:g.ihi + 1], v[g.ilo:g.ihi + 1], 'bo')
+    axes[1].plot(x2[g.ilo:g.ihi + 1], v2[g.ilo:g.ihi + 1], 'r')
     axes[1].plot(x_e, v_e, 'k--')
+    axes[1].legend(['weno', 'loaded agent', 'Godunov'])
     axes[2].plot(x[g.ilo:g.ihi + 1], p[g.ilo:g.ihi + 1], 'bo')
-    axes[2].plot(x[g.ilo:g.ihi + 1], p2[g.ilo:g.ihi + 1], 'r')
+    axes[2].plot(x2[g.ilo:g.ihi + 1], p2[g.ilo:g.ihi + 1], 'r')
     axes[2].plot(x_e, p_e, 'k--')
     axes[2].legend(['weno', 'loaded agent', 'Godunov'])
     axes[3].plot(x[g.ilo:g.ihi + 1], e[g.ilo:g.ihi + 1], 'bo')
+    axes[3].plot(x2[g.ilo:g.ihi + 1], e2[g.ilo:g.ihi + 1], 'r')
     axes[3].plot(x_e, e_e, 'k--')
+    axes[3].legend(['weno', 'loaded agent', 'Godunov'])
     axes[0].set_ylabel(r"$\rho$")
     axes[1].set_ylabel(r"$u$")
     axes[2].set_ylabel(r"$p$")
@@ -732,6 +790,6 @@ if __name__ == "__main__":
     axes[3].set_ylabel(r"$e$")
     for ax in axes:
         ax.set_xlim(0, 1)
-    axes[0].set_title(r"Double rarefaction, WENO, $r={}$".format(order))
+    axes[0].set_title(r"{}, WENO, $r={}$".format(LOG_DIR, order))
     fig.tight_layout()
-    plt.savefig(LOG_DIR + "weno-euler-rarefaction-r{}.png".format(order))
+    plt.savefig("{}-weno-euler-r{}.png".format(LOG_DIR, order))
