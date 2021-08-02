@@ -114,6 +114,16 @@ def main():
     if len(rest) > 0:
         raise Exception("Unrecognized arguments: " + " ".join(rest))
 
+    dims = env_builder.env_dimensions(args.env)
+    if dims > 1:
+        raise NotImplementedError("Training with >1 dimensions is not yet implemented!"
+                + " Various things need to be added and changed for that to happen:"
+                + " TF functions for the 2D env need to be implemented,"
+                + " the Global Backprop model needs to be adapted so that it does not assume"
+                + " only one spatial dimension,"
+                + " the run() function needs to be modified to handle either 1 or 2 dimensions,"
+                + " and probably other things besides.")
+
     if args.repeat is not None:
         metadata.load_to_namespace(args.repeat, args)
 

@@ -44,7 +44,7 @@ class BatchGlobalEMI(EMI):
             args_copy = Namespace(**vars(self.args))
             if args_copy.reward_mode is not None:
                 args_copy.reward_mode = args_copy.reward_mode.replace('one-step', 'full')
-            if not "random" in args.init_type:
+            if not "random" in args_copy.init_type:
                 args_copy.memoize = True # Memoizing means we don't waste time and memory recomputing
                                          # the solution each time.
             else:
@@ -55,7 +55,7 @@ class BatchGlobalEMI(EMI):
             self.weno_solution_env = build_env(args_copy.env, args_copy)
 
     def training_episode(self, env):
-        self._declare_weno_solution_env()
+        self._declare_solution_env()
 
         num_inits = self.args.batch_size
         initial_conditions = []

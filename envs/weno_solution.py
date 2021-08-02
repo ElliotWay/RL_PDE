@@ -350,7 +350,7 @@ class PreciseWENOSolution2D(WENOSolution):
             if self.use_rk4:
                 self.precise_grid.set(u_start)
             R = self.nu * self.precise_grid.laplacian()
-            full_step += dt * R[self.precise_grid.real_slice]
+            full_step += dt * R
 
         if self.source is not None:
             step += dt * self.source.get_real()
@@ -578,7 +578,12 @@ class PreciseWENOSolution(WENOSolution):
         rhs = g.scratch_array()
 
         if self.nu > 0.0:
-            R = self.nu * self.precise_grid.lap()
+            R = self.nu * self.precise_grid.laplacian()
+            # Hack to make the new version of grid.laplacian (which returns a real sized grid)
+            # work with code that expects the old version (which returned a full sized grid with
+            # ghost cells). The ghost cells will be overwritten anyway.
+            R = np.concatenate([np.zeros(self.precise_grid.ng),
+                R, np.zeros(self.precise_grid.ng)])
             rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:]) + R[1:-1]
         else:
             rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:])
@@ -672,7 +677,7 @@ if __name__ == "__main__":
         if step % 10 == 0:
             print("{}...".format(step), end='', flush=True)
             fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-            x, y = np.meshgrid(sol.real_x, sol.real_y)
+            x, y = np.meshgrid(sol.real_x, sol.real_y, indexing='ij')
             z = sol.get_real()
             surface = ax.plot_surface(x, y, z, cmap=cm.viridis,
                     linewidth=0, antialiased=False)

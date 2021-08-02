@@ -220,7 +220,7 @@ class AbstractBurgersEnv(AbstractScalarEnv):
     def _finish_step(self, step, dt, prev=None):
         if self.nu > 0.0:
             R = self.nu * self.grid.laplacian()
-            step += dt * R[self.grid.real_slice]
+            step += dt * R
 
         state, reward, done = super()._finish_step(step, dt, prev)
 

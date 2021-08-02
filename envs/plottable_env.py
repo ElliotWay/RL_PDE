@@ -609,7 +609,7 @@ class Plottable2DEnv(AbstractScalarEnv):
             plot_error=False,
             suffix=None, title=None,
             fixed_axes=False, no_borders=False,
-            show_ghost=True,
+            show_ghost=False,
             state_history=None, solution_state_history=None,
             history_includes_ghost=True):
 
@@ -669,7 +669,7 @@ class Plottable2DEnv(AbstractScalarEnv):
             y_values = self.grid.y
 
         fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-        x, y = np.meshgrid(x_values, y_values)
+        x, y = np.meshgrid(x_values, y_values, indexing='ij')
         z = state_history
         surface = ax.plot_surface(x, y, z, cmap=cm.viridis,
                 linewidth=0, antialiased=False)
@@ -699,57 +699,57 @@ class Plottable2DEnv(AbstractScalarEnv):
                 ax.set_zlim(zlim)
 
         ax.zaxis.set_major_locator(LinearLocator(10))
-        fig.colorbar(surface, shrink=0.5, aspect=5)
+        #fig.colorbar(surface, shrink=0.5, aspect=5)
 
         # Indicate ghost cells with a rectangle around the real portion.
+        #
+        # Turns out, matplotlib isn't terribly well suited to drawing lines on existing 3D
+        # surfaces. It also doesn't help that the boundary is almost indistinguishably close
+        # to the edge. For now, show_ghost will default to False, and setting it to true will
+        # include the ghost cells but not indicate them in any way.
+        """
         if show_ghost:
-            boundary_kwargs = {'color': 'k', 'linestyle': '--', 'linewidth': 2.5}
+            boundary_kwargs = {'color': 'k', 'linestyle': '-', 'linewidth': 1.5}
+            lift = 0.01 # Keep the line above the surface so it's visible.
             x_num, y_num = self.grid.num_cells
             x_ghost, y_ghost = self.grid.num_ghosts
             x_min, y_min = self.grid.min_value
             x_max, y_max = self.grid.max_value
 
-            left_x = x_min
             left_y = self.grid.inter_y[y_ghost:-y_ghost]
+            left_x = np.full_like(left_y, x_min)
             left_cells = state_history[x_ghost-1:x_ghost+1, y_ghost-1:-(y_ghost-1)]
             # This is a bit tricky because we don't HAVE the points on the boundaries - we have
             # cell-centered values. Average them to get the actual points we're looking for.
             left_z = (left_cells[:-1, :-1] + left_cells[:-1, 1:] 
-                    + left_cells[1:, :-1] + left_cells[1:, 1:]) / 4
-            left_z = left_z[:, None]
-
-            x, y = np.meshgrid(left_x, left_y)
-            left_line = ax.plot(x, y, left_z, **boundary_kwargs)
+                    + left_cells[1:, :-1] + left_cells[1:, 1:]) / 4 + lift
+            left_z = left_z.squeeze(0)
+            left_line = ax.plot(left_x, left_y, left_z, **boundary_kwargs)
 
             bottom_x = self.grid.inter_x[x_ghost:-x_ghost]
-            bottom_y = y_min
+            bottom_y = np.full_like(bottom_x, y_min)
             bottom_cells = state_history[x_ghost-1:-(x_ghost-1), y_ghost-1:y_ghost+1]
             bottom_z = (bottom_cells[:-1, :-1] + bottom_cells[:-1, 1:] 
-                    + bottom_cells[1:, :-1] + bottom_cells[1:, 1:]) / 4
-            bottom_z = bottom_z[None, :]
+                    + bottom_cells[1:, :-1] + bottom_cells[1:, 1:]) / 4 + lift
+            bottom_z = bottom_z.squeeze(1)
+            bottom_line = ax.plot(bottom_x, bottom_y, bottom_z, **boundary_kwargs)
 
-            x, y = np.meshgrid(bottom_x, bottom_y)
-            bottom_line = ax.plot(x, y, bottom_z, **boundary_kwargs)
-
-            right_x = x_max
             right_y = left_y
+            right_x = np.full_like(right_y, x_max)
             right_cells = state_history[-(x_ghost+1):-(x_ghost-1), y_ghost-1:-(y_ghost-1)]
             right_z = (right_cells[:-1, :-1] + right_cells[:-1, 1:] 
-                    + right_cells[1:, :-1] + right_cells[1:, 1:]) / 4
-            right_z = right_z[:, None]
-
-            x, y = np.meshgrid(right_x, right_y)
-            right_line = ax.plot(x, y, right_z, **boundary_kwargs)
+                    + right_cells[1:, :-1] + right_cells[1:, 1:]) / 4 + lift
+            right_z = right_z.squeeze(0)
+            right_line = ax.plot(right_x, right_y, right_z, **boundary_kwargs)
 
             top_x = bottom_x
-            top_y = y_max
+            top_y = np.full_like(top_x, y_max)
             top_cells = state_history[x_ghost-1:-(x_ghost-1), -(y_ghost+1):-(y_ghost-1)]
             top_z = (top_cells[:-1, :-1] + top_cells[:-1, 1:] 
-                    + top_cells[1:, :-1] + top_cells[1:, 1:]) / 4
-            top_z = top_z[None, :]
-
-            x, y = np.meshgrid(top_x, top_y)
-            top_line = ax.plot(x, y, top_z, **boundary_kwargs)
+                    + top_cells[1:, :-1] + top_cells[1:, 1:]) / 4 + lift
+            top_z = top_z.squeeze(1)
+            top_line = ax.plot(top_x, top_y, top_z, **boundary_kwargs)
+        """
 
         log_dir = logger.get_dir()
         filename = "burgers2d_{}{}.png".format(error_or_state, suffix)

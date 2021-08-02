@@ -87,6 +87,7 @@ def do_test(env, agent, args):
     else:
         render_args["fixed_axes"] = False
 
+    # For now, always hide the ghost cells.
     render_args["show_ghost"] = False
 
     next_update = 0
