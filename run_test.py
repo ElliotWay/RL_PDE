@@ -24,6 +24,7 @@ from rl_pde.emi import BatchEMI, StandardEMI, TestEMI, DimensionalAdapterEMI
 from rl_pde.agents import get_agent, ExtendAgent2D
 from envs import builder as env_builder
 from envs import AbstractBurgersEnv
+from envs import Plottable1DEnv, Plottable2DEnv
 from models import get_model_arg_parser
 from models import SACModel, PolicyGradientModel, TestModel
 from util import metadata
@@ -122,9 +123,14 @@ def do_test(env, agent, args):
     if args.plot_actions:
         env.plot_action(**render_args)
     if args.evolution_plot:
-        env.plot_state_evolution(num_states=10, full_true=False, no_true=False, plot_weno=False)
-        if args.plot_error:
-            env.plot_state_evolution(num_states=10, plot_error=True)
+        if isinstance(env, Plottable1DEnv):
+            env.plot_state_evolution(num_states=10, full_true=False, no_true=False, plot_weno=False)
+            if args.plot_error:
+                env.plot_state_evolution(num_states=10, plot_error=True)
+        elif isinstance(env, Plottable2DEnv):
+            env.plot_state_evolution(num_frames=50)
+        else:
+            raise Exception()
 
     print("Test finished in " + str(end_time - start_time) + " seconds.")
     
