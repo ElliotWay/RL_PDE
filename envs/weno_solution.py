@@ -195,7 +195,7 @@ class PreciseWENOSolution2D(WENOSolution):
         self.precise_grid = create_grid(len(self.precise_num_cells),
                 self.precise_num_cells, self.precise_num_ghosts,
                 base_grid.min_value, base_grid.max_value,
-                init_type=self.init_type, boundary=self.boundary)
+                eqn_type='burgers', init_type=self.init_type, boundary=self.boundary)
 
         self.flux_function = flux_function
         self.nu = nu

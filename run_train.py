@@ -38,9 +38,6 @@ def main():
                         help="Do not train and show the environment parameters not listed here.")
     parser.add_argument('--help-model', default=False, action='store_true',
                         help="Do not train and show the model training parameters not listed here.")
-    parser.add_argument('--equation', choices=['burgers, euler'], type=str.lower, default='burgers',
-                        help="Type of PDE equation(s) to be modeled, currently support Burger's Equation (burgers),"
-                             "Euler Equations (euler). Default is burgers.")
     parser.add_argument('--model', type=str, default='full',
                         help="Type of model to train. Options are 'full', 'sac', and 'pg'.")
     parser.add_argument('--env', type=str, default="weno_burgers",
