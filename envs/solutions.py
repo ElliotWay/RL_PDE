@@ -5,7 +5,7 @@ from scipy.optimize import brentq
 
 import envs.weno_coefficients as weno_coefficients
 from envs.grid import AbstractGrid
-from envs.grid1d import Grid1d
+from envs.grid1d import Burgers1DGrid
 
 
 class SolutionBase(AbstractGrid):
@@ -224,10 +224,10 @@ class AnalyticalSolution(SolutionBase):
                 and not init_type in ['schedule', 'sample']):
             raise Exception("Invalid analytical type \"{}\", available options are {}.".format(init_type, available_analytical_solutions))
 
-        self.grid = Grid1d(nx=nx, ng=ng, xmin=xmin, xmax=xmax, init_type=init_type)
+        self.grid = Burgers1DGrid(nx=nx, ng=ng, xmin=xmin, xmax=xmax, init_type=init_type)
 
     def _update(self, dt, time):
-        # Assume that Grid1d.reset() is still setting the correct parameters.
+        # Assume that Burgers1DGrid.reset() is still setting the correct parameters.
         params = self.grid.init_params
         init_type = params['init_type']
 

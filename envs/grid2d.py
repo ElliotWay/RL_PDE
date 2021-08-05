@@ -2,9 +2,9 @@ import re
 import numpy as np
 
 from envs.grid import GridBase
-from envs.grid1d import Grid1d
+from envs.grid1d import Burgers1DGrid
 
-class Grid2d(GridBase):
+class Burgers2DGrid(GridBase):
     def __init__(self, num_cells, num_ghosts, min_value, max_value, boundary=None,
             init_type="gaussian", deterministic_init=False):
         super().__init__(num_cells, num_ghosts, min_value, max_value, boundary)
@@ -105,7 +105,7 @@ class Grid2d(GridBase):
                     one_d_type = match[1]
                 else:
                     if not self.init_type == "1d":
-                        raise ValueError("Grid2d: Malformed 1d init type string"
+                        raise ValueError("Burgers2DGrid: Malformed 1d init type string"
                                 + " \"{}\".".format(self.init_type)
                                 + " Expecting strings like \"1d-sine-x\".")
             if 'type' in params: # params override the init_type name.
@@ -124,7 +124,7 @@ class Grid2d(GridBase):
             # make sense.
 
             one_d_params = dict(params)
-            if 'boundary' in one_d_params: # Always use the default boundary from Grid1d.
+            if 'boundary' in one_d_params: # Always use the default boundary from Burgers1DGrid.
                 del one_d_params['boundary']
             one_d_params['init_type'] = one_d_type
 
@@ -135,8 +135,8 @@ class Grid2d(GridBase):
 
             if one_d_axis == 'x':
                 if not hasattr(self, "x_grid1d"):
-                    self.x_grid1d = Grid1d(self.num_cells[0], self.num_ghosts[0],
-                            self.min_value[0], self.max_value[0])
+                    self.x_grid1d = Burgers1DGrid(self.num_cells[0], self.num_ghosts[0],
+                                                  self.min_value[0], self.max_value[0])
                 self.x_grid1d.reset(params=one_d_params)
                 x_bound = self.x_grid1d.boundary if type(self.x_grid1d.boundary) is str \
                             else self.x_grid1d.boundary[0]
@@ -145,8 +145,8 @@ class Grid2d(GridBase):
                 self.boundary = (x_bound, "outflow")
             elif one_d_axis == 'y':
                 if not hasattr(self, "y_grid1d"):
-                    self.y_grid1d = Grid1d(self.num_cells[1], self.num_ghosts[1],
-                            self.min_value[1], self.max_value[1])
+                    self.y_grid1d = Burgers1DGrid(self.num_cells[1], self.num_ghosts[1],
+                                                  self.min_value[1], self.max_value[1])
                 self.y_grid1d.reset(params=one_d_params)
                 y_bound = self.y_grid1d.boundary if type(self.y_grid1d.boundary) is str \
                             else self.y_grid1d.boundary[0]

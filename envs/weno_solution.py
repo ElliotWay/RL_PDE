@@ -3,7 +3,7 @@ import numpy as np
 from envs.solutions import SolutionBase
 import envs.weno_coefficients as weno_coefficients
 from envs.grid import AbstractGrid, create_grid
-from envs.grid1d import Grid1d
+from envs.grid1d import Burgers1DGrid
 from util.misc import create_stencil_indexes
 from util.misc import AxisSlice
 
@@ -418,8 +418,8 @@ class PreciseWENOSolution(WENOSolution):
         else:
             self.init_type = None
 
-        self.precise_grid = Grid1d(self.precise_nx, self.precise_ng, base_grid.xmin, base_grid.xmax,
-                                   boundary=self.boundary, init_type=self.init_type)
+        self.precise_grid = Burgers1DGrid(self.precise_nx, self.precise_ng, base_grid.xmin, base_grid.xmax,
+                                          boundary=self.boundary, init_type=self.init_type)
 
         self.flux_function = flux_function
         self.nu = nu
@@ -649,12 +649,12 @@ if __name__ == "__main__":
     from mpl_toolkits.mplot3d import Axes3D
     from matplotlib import cm
     from matplotlib.ticker import LinearLocator
-    from envs.grid2d import Grid2d
+    from envs.grid2d import Burgers2DGrid
 
     order = 2
     ng = order + 1
 
-    base_grid = Grid2d((128, 128), ng, 0.0, 1.0)
+    base_grid = Burgers2DGrid((128, 128), ng, 0.0, 1.0)
     flux_function = lambda x: 0.5 * x ** 2
     sol = PreciseWENOSolution2D(base_grid, {}, order, 1, flux_function)
     #sol.reset({'init_type': '1d-accelshock-x'})

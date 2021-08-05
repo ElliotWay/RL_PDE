@@ -7,13 +7,13 @@ import numpy as np
 
 from envs.grid import GridBase
 
-class Grid1d(GridBase):
+class Burgers1DGrid(GridBase):
     """
     1-dimensional grid of values for use in modelling differential equations.
     
     Fields intended for external use:
     grid.u - Current values in the grid, including ghost cells.
-    Grid1d.update() updates the ghost cells automatically. If updating grid.u directly,
+    Burgers1DGrid.update() updates the ghost cells automatically. If updating grid.u directly,
     remember to call update_boundary().
     grid.nx
     grid.ng
@@ -295,13 +295,13 @@ class Grid1d(GridBase):
             super().update_boundary()
 
 
-class EulerGrid1d(GridBase):
+class Euler1DGrid(GridBase):
     """
     1-dimensional grid of values for use in modelling differential equations.
 
     Fields intended for external use:
     grid.u - Current values in the grid, including ghost cells.
-    Grid1d.update() updates the ghost cells automatically. If updating grid.u directly,
+    Burgers1DGrid.update() updates the ghost cells automatically. If updating grid.u directly,
     remember to call update_boundary().
     grid.nx
     grid.ng

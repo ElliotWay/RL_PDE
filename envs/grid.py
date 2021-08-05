@@ -321,24 +321,24 @@ def _is_list(thing):
         return False
 
 # Import down here to avoid circular import.
-from envs.grid1d import Grid1d, EulerGrid1d
-from envs.grid2d import Grid2d
+from envs.grid1d import Burgers1DGrid, Euler1DGrid
+from envs.grid2d import Burgers2DGrid
 
 def create_grid(num_dimensions, num_cells, num_ghosts, min_value, max_value, eqn_type='burgers',
         boundary=None, init_type=None,
         deterministic_init=False):
     if eqn_type == 'burgers':
         if num_dimensions == 1:
-            return Grid1d(num_cells, num_ghosts, min_value, max_value,
-                          init_type=init_type, boundary=boundary, deterministic_init=deterministic_init)
+            return Burgers1DGrid(num_cells, num_ghosts, min_value, max_value,
+                                 init_type=init_type, boundary=boundary, deterministic_init=deterministic_init)
         elif num_dimensions == 2:
-            return Grid2d(num_cells, num_ghosts, min_value, max_value,
-                          init_type=init_type, boundary=boundary, deterministic_init=deterministic_init)
+            return Burgers2DGrid(num_cells, num_ghosts, min_value, max_value,
+                                 init_type=init_type, boundary=boundary, deterministic_init=deterministic_init)
         else:
             raise NotImplementedError()
     elif eqn_type == 'euler':
         if num_dimensions == 1:
-            return EulerGrid1d(num_cells, num_ghosts, min_value, max_value,
+            return Euler1DGrid(num_cells, num_ghosts, min_value, max_value,
                                init_type=init_type, boundary=boundary, deterministic_init=deterministic_init)
         else:
             raise NotImplementedError()
