@@ -6,7 +6,7 @@ matplotlib.use("Agg")
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 from matplotlib.ticker import LinearLocator
-from matplotlib.animation import ArtistAnimation
+from matplotlib.animation import FuncAnimation
 import numpy as np
 from stable_baselines import logger
 
@@ -595,6 +595,9 @@ class Plottable2DEnv(AbstractScalarEnv):
 
         self._state_axes = None
 
+        self.use_image_magick = True
+        self.use_ffmpeg = True
+
     def render(self, mode='file', **kwargs):
         if mode is None:
             return
@@ -604,11 +607,14 @@ class Plottable2DEnv(AbstractScalarEnv):
             raise Exception("Plottable1DEnv: \"{}\" render mode not recognized".format(mode))
 
     def _plot_state(self,
+            axes,
             plot_error,
             title,
             fixed_axes, no_borders,
             state_history,
             history_includes_ghost):
+
+        ax = axes
 
         if history_includes_ghost:
             x_values = self.grid.x
@@ -617,7 +623,7 @@ class Plottable2DEnv(AbstractScalarEnv):
             x_values = self.grid.real_x
             y_values = self.grid.real_y
 
-        fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+        #fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
         x, y = np.meshgrid(x_values, y_values, indexing='ij')
         z = state_history
         surface = ax.plot_surface(x, y, z, cmap=cm.viridis,
@@ -701,7 +707,7 @@ class Plottable2DEnv(AbstractScalarEnv):
             top_line = ax.plot(top_x, top_y, top_z, **boundary_kwargs)
         """
 
-        return fig
+        #return fig
 
     def plot_state(self,
             timestep=None,
@@ -762,10 +768,15 @@ class Plottable2DEnv(AbstractScalarEnv):
         if not show_ghost:
             state_history = state_history[self.grid.real_slice]
 
-        fig = self._plot_state(plot_error=plot_error, title=title,
+
+        fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+
+        self._plot_state(axes=ax, plot_error=plot_error, title=title,
                 fixed_axes=fixed_axes, no_borders=no_borders,
                 state_history=state_history,
                 history_includes_ghost=(override_history and history_includes_ghost))
+
+        fig.tight_layout()
 
         log_dir = logger.get_dir()
         filename = "burgers2d_{}{}.png".format(error_or_state, suffix)
@@ -785,14 +796,19 @@ class Plottable2DEnv(AbstractScalarEnv):
         else:
             base_title = title
 
-        frames = []
-
         # Indexes into the state history. There are num_frames+1 indices, where the first
         # is always 0 the last is always len(state_history)-1, and the rest are evenly
         # spaced between them.
         timesteps = (np.arange(num_frames+1)*(len(self.state_history)-1)/num_frames).astype(int)
         
-        for timestep in timesteps:
+        fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+        fig.tight_layout()
+
+        def update_plot(timestep):
+
+            if timestep == -1:
+                return []
+
             state = self.state_history[timestep]
 
             if self.C is None:
@@ -807,25 +823,62 @@ class Plottable2DEnv(AbstractScalarEnv):
             if not show_ghost:
                 state = state[self.grid.real_slice]
 
-            fig = self._plot_state(plot_error=False, title=title,
+            ax.cla()
+            self._plot_state(axes=ax, plot_error=False, title=title,
                     fixed_axes=True, no_borders=True,
                     state_history=state, history_includes_ghost=show_ghost)
-            frames.append([fig])
 
             # TODO also plot error
 
-        empty_fig = plt.figure()
-        animation = ArtistAnimation(empty_fig, frames, interval=200, repeat_delay=500)
-                 
+            return [ax]
+
+        # In milliseconds.
+        frame_interval = 100
+        start_delay = 500
+        end_delay = 500
+
+        start_delay_frames = [-1] * int(start_delay / frame_interval)
+        end_delay_frames = [-1] * int(end_delay / frame_interval)
+
+        frames = [0,] + start_delay_frames + list(timesteps[1:]) + end_delay_frames
+
+        animation = FuncAnimation(fig, update_plot, frames, interval=frame_interval)
+        # FuncAnimation has an argument "repeat_delay" which serves the same purpose as end_delay,
+        # except repeat_delay doesn't work for saved animations.
+
+        writer = None
+        extension = ""
+
+        fps = 1000.0 / frame_interval
+        if self.use_image_magick:
+            try:
+                from matplotlib.animation import ImageMagickWriter
+                writer = ImageMagickWriter(fps=fps)
+                extension = ".gif"
+            except ImportError:
+                self.use_image_magick = False
+                #print("Couldn't load imagemagick.")
+        if not self.use_image_magick and self.use_ffmpeg:
+            try:
+                from matplotlib.animation import FFMpegWriter
+                writer = FFMpegWriter(fps=fps)
+                extension = ".mp4"
+            except ImportError:
+                self.use_ffmpeg = False
+                #print("Couldn't load FFMpeg.")
+        # Otherwise, use whatever matplotlib has as the default.
+
         log_dir = logger.get_dir()
         filename = os.path.join(log_dir,
-                "evolution{}.gif".format(suffix))
-        animation.save(filename, "imagemagick")
-        print('Saved animation to ' + filename + '.')
+                "evolution{}{}".format(suffix, extension))
 
-        for frame in frames:
-            plt.close(frame)
-        plt.close(empty_fig)
+        print("Saving animation to {}".format(filename), end='')
+                 
+        animation.save(filename, writer,
+                progress_callback = lambda i, n: print('.', end='', flush=True))
+        print('Saved.')
+
+        plt.close(fig)
         animation = None
 
         return filename

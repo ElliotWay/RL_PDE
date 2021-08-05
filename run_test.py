@@ -122,18 +122,8 @@ def do_test(env, agent, args):
         env.plot_state(plot_error=True, **render_args)
     if args.plot_actions:
         env.plot_action(**render_args)
-    if args.evolution_plot:
-        if isinstance(env, Plottable1DEnv):
-            env.plot_state_evolution(num_states=10, full_true=False, no_true=False, plot_weno=False)
-            if args.plot_error:
-                env.plot_state_evolution(num_states=10, plot_error=True)
-        elif isinstance(env, Plottable2DEnv):
-            env.plot_state_evolution(num_frames=50)
-        else:
-            raise Exception()
-
     print("Test finished in " + str(end_time - start_time) + " seconds.")
-    
+ 
     if env.dimensions == 1:
         total_reward = np.sum(rewards, axis=0)
         print("Reward: mean = {:g}, min = {:g} @ {}, max = {:g} @ {}".format(
@@ -165,12 +155,20 @@ def do_test(env, agent, args):
                 actual_min, actual_argmin, dim_names[dim_with_min],
                 actual_max, actual_argmax, dim_names[dim_with_max]))
 
-    error = np.sqrt(np.prod(env.grid.cell_size) 
-                        * np.sum(np.square(env.grid.get_real() - env.solution.get_real())))
-    print("Final error with solution was {}.".format(env.compute_l2_error()))
+    error = env.compute_l2_error()
+    print("Final error with solution was {}.".format(error))
+
+    if args.evolution_plot:
+        if isinstance(env, Plottable1DEnv):
+            env.plot_state_evolution(num_states=10, full_true=False, no_true=False, plot_weno=False)
+            if args.plot_error:
+                env.plot_state_evolution(num_states=10, plot_error=True)
+        elif isinstance(env, Plottable2DEnv):
+            env.plot_state_evolution(num_frames=20)
+        else:
+            raise Exception()
 
     return error
-
 
 def main():
     parser = argparse.ArgumentParser(
