@@ -180,7 +180,10 @@ class AbstractGrid:
 
     def scratch_array(self):
         """ Return a zeroed array dimensioned for this grid. """
-        return np.zeros([self.vec_len] + [len(x) for x in self.coords], dtype=np.float64)
+        space = np.zeros([self.vec_len] + [len(x) for x in self.coords], dtype=np.float64)
+        if len(space) == 1:
+            space = space[0]  # For backward compatibility, scalar state doesn't need 1st dim
+        return space
 
     @property
     def ndim(self): return len(self.num_cells)
@@ -221,8 +224,6 @@ class GridBase(AbstractGrid):
 
         # Storage for the solution.
         self.space = self.scratch_array()
-        if len(self.space) == 1:
-            self.space = self.space[0]  # For backward compatibility, scalar state doesn't need 1st dim
         """ The physical space. """
 
     # Old names for compatability.
