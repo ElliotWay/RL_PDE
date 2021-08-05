@@ -37,7 +37,7 @@ class AbstractScalarEnv(gym.Env):
     """
 
     def __init__(self,
-            num_cells=(128, 128), num_ghosts=None, min_value=0.0, max_value=1.0,
+            num_cells=(128, 128), num_ghosts=None, min_value=0.0, max_value=1.0, eqn_type='burgers',
             boundary=None, init_type="gaussian",
             init_params=None,
             fixed_step=0.0004, C=None, #C=0.5,
@@ -58,6 +58,8 @@ class AbstractScalarEnv(gym.Env):
             Lower bounds of the physical space.
         max_value : float OR [float]
             Upper bounds of the physical space.
+        eqn_type: str, choices = ['burgers', 'euler']
+            Equation type for creating the grid.
         boundary : string OR [string]
             Type of boundary condition (periodic/outflow).
         init_type : string
@@ -111,7 +113,7 @@ class AbstractScalarEnv(gym.Env):
         else:
             dims = len(num_cells)
 
-        self.grid = create_grid(dims,
+        self.grid = create_grid(dims, eqn_type=eqn_type,
                                 num_cells=num_cells, min_value=min_value, max_value=max_value,
                                 num_ghosts=self.ng,
                                 boundary=boundary, init_type=init_type,

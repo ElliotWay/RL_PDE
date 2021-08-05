@@ -26,7 +26,7 @@ class AbstractGrid:
     AbstractGrid itself.
     """
 
-    def __init__(self, num_cells, num_ghosts, min_value, max_value):
+    def __init__(self, num_cells, num_ghosts, min_value, max_value, vec_len):
         """
         Construct a new Grid of arbitrary physical dimensions.
 
@@ -52,6 +52,10 @@ class AbstractGrid:
             The upper bound of the grid for each dimension. Either a list that gives the upper
             bound for each dimension, or a single float to give each dimension the same upper
             bound.
+        vec_len : int
+            Length of the state vector, corresponding to the first dimension of grid.space
+
+        TODO: Add length of vector and names of each index.Could implement __getattr__ so e.g. grid.rho and grid.S work.
         """
 
         try:
@@ -89,6 +93,8 @@ class AbstractGrid:
                 self.max_value = max_value
         except TypeError:
             self.max_value = (max_value,) * len(self.num_cells)
+
+        self.vec_len = vec_len
 
         self.cell_size = []
         # Physical coordinates: cell-centered
@@ -174,7 +180,7 @@ class AbstractGrid:
 
     def scratch_array(self):
         """ Return a zeroed array dimensioned for this grid. """
-        return np.zeros([len(x) for x in self.coords], dtype=np.float64)
+        return np.zeros([self.vec_len] + [len(x) for x in self.coords], dtype=np.float64)
 
     @property
     def ndim(self): return len(self.num_cells)
@@ -193,8 +199,8 @@ class GridBase(AbstractGrid):
     other boundary conditions are required.
     """
 
-    def __init__(self, num_cells, num_ghosts, min_value, max_value, boundary="outflow"):
-        super().__init__(num_cells, num_ghosts, min_value, max_value)
+    def __init__(self, num_cells, num_ghosts, min_value, max_value, vec_len, boundary="outflow"):
+        super().__init__(num_cells, num_ghosts, min_value, max_value, vec_len)
      
         if type(boundary) is str:
             if len(self.num_cells) == 1:
@@ -215,6 +221,8 @@ class GridBase(AbstractGrid):
 
         # Storage for the solution.
         self.space = self.scratch_array()
+        if len(self.space) == 1:
+            self.space = self.space[0]  # For backward compatibility, scalar state doesn't need 1st dim
         """ The physical space. """
 
     # Old names for compatability.
@@ -316,10 +324,10 @@ def _is_list(thing):
 from envs.grid1d import Grid1d, EulerGrid1d
 from envs.grid2d import Grid2d
 
-def create_grid(num_dimensions, num_cells, num_ghosts, min_value, max_value, eqn_type='burger',
+def create_grid(num_dimensions, num_cells, num_ghosts, min_value, max_value, eqn_type='burgers',
         boundary=None, init_type=None,
         deterministic_init=False):
-    if eqn_type == 'burger':
+    if eqn_type == 'burgers':
         if num_dimensions == 1:
             return Grid1d(num_cells, num_ghosts, min_value, max_value,
                           init_type=init_type, boundary=boundary, deterministic_init=deterministic_init)
@@ -328,7 +336,7 @@ def create_grid(num_dimensions, num_cells, num_ghosts, min_value, max_value, eqn
                           init_type=init_type, boundary=boundary, deterministic_init=deterministic_init)
         else:
             raise NotImplementedError()
-    elif eqn_type == 'euler':  # TODO: better way to handle eqn_type
+    elif eqn_type == 'euler':
         if num_dimensions == 1:
             return EulerGrid1d(num_cells, num_ghosts, min_value, max_value,
                                init_type=init_type, boundary=boundary, deterministic_init=deterministic_init)

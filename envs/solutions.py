@@ -64,11 +64,11 @@ class MemoizedSolution(SolutionBase):
     of the same parameters.
     Wastes memory for solutions that change every episode.
     """
-    def __init__(self, solution, ep_length):
+    def __init__(self, solution, ep_length, vec_len=1):
         assert not isinstance(solution, OneStepSolution), ("Memoized solutions are not compatible"
         + " with one-step solutions. (Memoized solutions stay the same whereas one-step solutions"
         + " always change).")
-        super().__init__(solution.num_cells, solution.num_ghosts, solution.min_value,
+        super().__init__(vec_len, solution.num_cells, solution.num_ghosts, solution.min_value,
                 solution.max_value,
                 # The inner solution should record the state history, not this wrapper.
                 record_state=False)
@@ -179,7 +179,7 @@ class OneStepSolution(SolutionBase):
     Using a solution like this can be used for a more reliable comparison,
     as there is only one step's worth of different actions.
     """
-    def __init__(self, solution, current_grid):
+    def __init__(self, solution, current_grid, vec_len=1):
         assert not isinstance(solution, MemoizedSolution), ("Memoized solutions are not compatible"
         + " with one-step solutions. (Memoized solutions stay the same whereas one-step solutions"
         + " always change).")
@@ -187,7 +187,7 @@ class OneStepSolution(SolutionBase):
         + " with analytical solutions. (Analytical solutions stay the same whereas one-step solutions"
         + " always change).")
         super().__init__(solution.num_cells, solution.num_ghosts, solution.min_value,
-                solution.max_value, record_state=False)
+                solution.max_value, vec_len, record_state=False)
         self.inner_solution = solution
         self.current_grid = current_grid
 
@@ -217,8 +217,8 @@ class OneStepSolution(SolutionBase):
 available_analytical_solutions = ["smooth_sine", "smooth_rare", "accelshock", "gaussian"]
 #TODO account for xmin, xmax in case they're not 0 and 1.
 class AnalyticalSolution(SolutionBase):
-    def __init__(self, nx, ng, xmin, xmax, init_type="schedule"):
-        super().__init__(nx=nx, ng=ng, xmin=xmin, xmax=xmax)
+    def __init__(self, nx, ng, xmin, xmax, vec_len=1, init_type="schedule"):
+        super().__init__(vec_len, nx=nx, ng=ng, xmin=xmin, xmax=xmax)
 
         if (not init_type in available_analytical_solutions 
                 and not init_type in ['schedule', 'sample']):

@@ -30,7 +30,8 @@ class Grid1d(GridBase):
     grid.x - The location values associated with each index in grid.u.
     """
 
-    def __init__(self, nx, ng, xmin=0.0, xmax=1.0, init_type="sine", boundary=None, deterministic_init=False):
+    def __init__(self, nx, ng, xmin=0.0, xmax=1.0,
+                 init_type="sine", boundary=None, deterministic_init=False):
         """
         Construct a 1D grid.
         
@@ -61,7 +62,8 @@ class Grid1d(GridBase):
             condition will vary or be the same, depending on this param.
         """
 
-        super().__init__(nx, ng, xmin, xmax, boundary)
+        vec_len = 1  # didn't put into init as a parameter because it should be fixed, also didn't put in
+        super().__init__(nx, ng, xmin, xmax, vec_len, boundary)
 
         # _init_type and _boundary do not change, init_type and boundary may
         # change if init_type is scheduled or sampled.
@@ -348,7 +350,8 @@ class EulerGrid1d(GridBase):
             condition will vary or be the same, depending on this param.
         """
 
-        super().__init__(nx, ng, xmin, xmax, boundary)
+        vec_len = 3  # didn't put into init as a parameter because it should be fixed
+        super().__init__(nx, ng, xmin, xmax, vec_len, boundary)
 
         # _init_type and _boundary do not change, init_type and boundary may
         # change if init_type is scheduled or sampled.

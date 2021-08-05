@@ -124,7 +124,7 @@ class AbstractBurgersEnv(AbstractScalarEnv):
         *args, **kwargs
             The remaining arguments are passed to AbstractScalarEnv.
         """
-        super().__init__(*args, **kwargs)
+        super().__init__(eqn_type='burgers', *args, **kwargs)
 
         self.nu = nu
 
@@ -144,7 +144,7 @@ class AbstractBurgersEnv(AbstractScalarEnv):
                  + " implemented.")
             else:
                 self.solution = AnalyticalSolution(self.grid.nx, self.grid.ng,
-                        self.grid.xmin, self.grid.xmax, init_type=init_type)
+                        self.grid.xmin, self.grid.xmax, vec_len=1, init_type=init_type)
         else:
             if self.grid.ndim == 1:
                 self.solution = PreciseWENOSolution(
@@ -152,24 +152,24 @@ class AbstractBurgersEnv(AbstractScalarEnv):
                             'boundary':self.grid.boundary},
                         precise_scale=precise_scale, precise_order=precise_weno_order,
                         flux_function=self.burgers_flux, source=self.source,
-                        nu=nu)
+                        nu=nu, vec_len=1)
             elif self.grid.ndim == 2:
                 self.solution = PreciseWENOSolution2D(
                         self.grid, {'init_type':self.grid.init_type,
                             'boundary':self.grid.boundary},
                         precise_scale=precise_scale, precise_order=precise_weno_order,
                         flux_function=self.burgers_flux, source=self.source,
-                        nu=nu)
+                        nu=nu, vec_len=1)
             else:
                 raise NotImplementedError("{}-dim solution".format(self.grid.ndim)
                         + " not implemented.")
 
         if "one-step" in self.reward_mode:
-            self.solution = OneStepSolution(self.solution, self.grid)
+            self.solution = OneStepSolution(self.solution, self.grid, vec_len=1)
             if memoize:
                 print("Note: can't memoize solution when using one-step reward.")
         elif memoize:
-            self.solution = MemoizedSolution(self.solution, self.episode_length)
+            self.solution = MemoizedSolution(self.solution, self.episode_length, vec_len=1)
 
         if self.analytical:
             show_separate_weno = True
@@ -194,17 +194,17 @@ class AbstractBurgersEnv(AbstractScalarEnv):
                             'boundary':self.grid.boundary},
                         precise_scale=1, precise_order=self.weno_order,
                         flux_function=self.burgers_flux, source=self.source,
-                        nu=nu)
+                        nu=nu, vec_len=1)
             elif self.grid.ndim == 2:
                 self.weno_solution = PreciseWENOSolution2D(
                         self.grid, {'init_type':self.grid.init_type,
                             'boundary':self.grid.boundary},
                         precise_scale=1, precise_order=self.weno_order,
                         flux_function=self.burgers_flux, source=self.source,
-                        nu=nu)
+                        nu=nu, vec_len=1)
 
             if memoize:
-                self.weno_solution = MemoizedSolution(self.weno_solution, self.episode_length)
+                self.weno_solution = MemoizedSolution(self.weno_solution, self.episode_length, vec_len=1)
         else:
             self.weno_solution = None
 
