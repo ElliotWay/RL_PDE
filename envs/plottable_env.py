@@ -595,14 +595,15 @@ class Plottable2DEnv(AbstractScalarEnv):
 
         self._state_axes = None
 
-        if "imagemagick" in animation.writers:
-            self.animation_writer = animation.writers["imagemagick"]
+        # Pillow is very likely to be available, but check for others just in case it's not.
+        if "pillow" in animation.writers:
+            self.animation_writer = animation.writers["pillow"]
             self.animation_extension = ".gif"
         elif "ffmpeg" in animation.writers:
             self.animation_writer = animation.writers["ffmpeg"]
-            self.animation_extension = ".gif"
-        elif "pillow" in animation.writers:
-            self.animation_writer = animation.writers["pillow"]
+            self.animation_extension = ".mp4"
+        elif "imagemagick" in animation.writers:
+            self.animation_writer = animation.writers["imagemagick"]
             self.animation_extension = ".gif"
         else:
             self.animation_writer = None
@@ -802,7 +803,8 @@ class Plottable2DEnv(AbstractScalarEnv):
             suffix="", title=None, num_frames=50):
 
         if self.animation_writer is None:
-            raise Exception("Can't plot 2D evolution: no animation writers available")
+            raise Exception("No familiar image libraries avilable to render evolution." + 
+                    " These are the available libraries: " + str(animation.writers.list()))
 
         if title is None:
             base_title = ""
