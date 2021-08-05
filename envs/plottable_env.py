@@ -6,7 +6,7 @@ matplotlib.use("Agg")
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 from matplotlib.ticker import LinearLocator
-from matplotlib.animation import FuncAnimation
+import matplotlib.animation as animation
 import numpy as np
 from stable_baselines import logger
 
@@ -595,8 +595,18 @@ class Plottable2DEnv(AbstractScalarEnv):
 
         self._state_axes = None
 
-        self.use_image_magick = True
-        self.use_ffmpeg = True
+        if "imagemagick" in animation.writers:
+            self.animation_writer = animation.writers["imagemagick"]
+            self.animation_extension = ".gif"
+        elif "ffmpeg" in animation.writers:
+            self.animation_writer = animation.writers["ffmpeg"]
+            self.animation_extension = ".gif"
+        elif "pillow" in animation.writers:
+            self.animation_writer = animation.writers["pillow"]
+            self.animation_extension = ".gif"
+        else:
+            self.animation_writer = None
+            self.animation_extension = None
 
     def render(self, mode='file', **kwargs):
         if mode is None:
@@ -791,6 +801,9 @@ class Plottable2DEnv(AbstractScalarEnv):
             show_ghost=False,
             suffix="", title=None, num_frames=50):
 
+        if self.animation_writer is None:
+            raise Exception("Can't plot 2D evolution: no animation writers available")
+
         if title is None:
             base_title = ""
         else:
@@ -800,9 +813,8 @@ class Plottable2DEnv(AbstractScalarEnv):
         # is always 0 the last is always len(state_history)-1, and the rest are evenly
         # spaced between them.
         timesteps = (np.arange(num_frames+1)*(len(self.state_history)-1)/num_frames).astype(int)
-        
+
         fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-        fig.tight_layout()
 
         def update_plot(timestep):
 
@@ -830,6 +842,9 @@ class Plottable2DEnv(AbstractScalarEnv):
 
             # TODO also plot error
 
+            if timestep == 0:
+                fig.tight_layout()
+
             return [ax]
 
         # In milliseconds.
@@ -842,44 +857,24 @@ class Plottable2DEnv(AbstractScalarEnv):
 
         frames = [0,] + start_delay_frames + list(timesteps[1:]) + end_delay_frames
 
-        animation = FuncAnimation(fig, update_plot, frames, interval=frame_interval)
+        ani = animation.FuncAnimation(fig, update_plot, frames, interval=frame_interval)
         # FuncAnimation has an argument "repeat_delay" which serves the same purpose as end_delay,
         # except repeat_delay doesn't work for saved animations.
 
-        writer = None
-        extension = ""
-
         fps = 1000.0 / frame_interval
-        if self.use_image_magick:
-            try:
-                from matplotlib.animation import ImageMagickWriter
-                writer = ImageMagickWriter(fps=fps)
-                extension = ".gif"
-            except ImportError:
-                self.use_image_magick = False
-                #print("Couldn't load imagemagick.")
-        if not self.use_image_magick and self.use_ffmpeg:
-            try:
-                from matplotlib.animation import FFMpegWriter
-                writer = FFMpegWriter(fps=fps)
-                extension = ".mp4"
-            except ImportError:
-                self.use_ffmpeg = False
-                #print("Couldn't load FFMpeg.")
-        # Otherwise, use whatever matplotlib has as the default.
+        writer = self.animation_writer(fps=fps)
 
         log_dir = logger.get_dir()
         filename = os.path.join(log_dir,
-                "evolution{}{}".format(suffix, extension))
+                "evolution{}{}".format(suffix, self.animation_extension))
 
         print("Saving animation to {}".format(filename), end='')
-                 
-        animation.save(filename, writer,
+        ani.save(filename, writer,
                 progress_callback = lambda i, n: print('.', end='', flush=True))
         print('Saved.')
 
         plt.close(fig)
-        animation = None
+        ani = None
 
         return filename
 
