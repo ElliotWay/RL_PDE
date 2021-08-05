@@ -68,8 +68,8 @@ class MemoizedSolution(SolutionBase):
         assert not isinstance(solution, OneStepSolution), ("Memoized solutions are not compatible"
         + " with one-step solutions. (Memoized solutions stay the same whereas one-step solutions"
         + " always change).")
-        super().__init__(vec_len, solution.num_cells, solution.num_ghosts, solution.min_value,
-                solution.max_value,
+        super().__init__(solution.num_cells, solution.num_ghosts, solution.min_value,
+                solution.max_value, vec_len,
                 # The inner solution should record the state history, not this wrapper.
                 record_state=False)
 
@@ -218,7 +218,7 @@ available_analytical_solutions = ["smooth_sine", "smooth_rare", "accelshock", "g
 #TODO account for xmin, xmax in case they're not 0 and 1.
 class AnalyticalSolution(SolutionBase):
     def __init__(self, nx, ng, xmin, xmax, vec_len=1, init_type="schedule"):
-        super().__init__(vec_len, nx=nx, ng=ng, xmin=xmin, xmax=xmax)
+        super().__init__(nx=nx, ng=ng, xmin=xmin, xmax=xmax, vec_len=vec_len)
 
         if (not init_type in available_analytical_solutions 
                 and not init_type in ['schedule', 'sample']):

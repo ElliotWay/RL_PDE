@@ -164,8 +164,8 @@ class PreciseWENOSolution2D(WENOSolution):
             flux_function,
             vec_len=1, nu=0.0, source=None,
             record_state=False, record_actions=None):
-        super().__init__(vec_len, base_grid.num_cells, base_grid.num_ghosts,
-                base_grid.min_value, base_grid.max_value, record_state=record_state)
+        super().__init__(base_grid.num_cells, base_grid.num_ghosts,
+                base_grid.min_value, base_grid.max_value, vec_len, record_state=record_state)
  
         assert (precise_scale % 2 == 1), "Precise scale must be odd for easier downsampling."
 
@@ -195,7 +195,7 @@ class PreciseWENOSolution2D(WENOSolution):
         self.precise_grid = create_grid(len(self.precise_num_cells),
                 self.precise_num_cells, self.precise_num_ghosts,
                 base_grid.min_value, base_grid.max_value,
-                eqn_type='burgers', init_type=self.init_type, boundary=self.boundary)
+                init_type=self.init_type, boundary=self.boundary)  # TODO: eqn_type missing here? -yiwei
 
         self.flux_function = flux_function
         self.nu = nu
@@ -394,8 +394,8 @@ class PreciseWENOSolution(WENOSolution):
                  precise_order, precise_scale, flux_function,
                  vec_len=1, nu=0.0, source=None,
                  record_state=False, record_actions=None):
-        super().__init__(vec_len, base_grid.num_cells, base_grid.num_ghosts,
-                base_grid.min_value, base_grid.max_value, record_state=record_state)
+        super().__init__(base_grid.num_cells, base_grid.num_ghosts,
+                base_grid.min_value, base_grid.max_value, vec_len, record_state=record_state)
 
         assert (precise_scale % 2 == 1), "Precise scale must be odd for easier downsampling."
 

@@ -55,7 +55,7 @@ class AbstractGrid:
         vec_len : int
             Length of the state vector, corresponding to the first dimension of grid.space
 
-        TODO: Add length of vector and names of each index.Could implement __getattr__ so e.g. grid.rho and grid.S work.
+        TODO: Add names of each index.Could implement __getattr__ so e.g. grid.rho and grid.S work. -yiwei
         """
 
         try:
