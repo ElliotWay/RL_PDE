@@ -327,7 +327,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
 
     @tf.function
     def tf_prep_state(self, state):
-        # Note the similarity to prep_state() above.
+        # Note the similarity to _prep_state() above.
 
         # state (the real physical state) does not have ghost cells, but agents operate on a stencil
         # that can spill beyond the boundary, so we need to add ghost cells to create the rl_state.

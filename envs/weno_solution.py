@@ -1,4 +1,5 @@
 import numpy as np
+import tensorflow as tf
 
 from envs.solutions import SolutionBase
 import envs.weno_coefficients as weno_coefficients
@@ -29,6 +30,22 @@ def lf_flux_split_nd(flux_array, values_array):
         return output[0]
     else:
         return output
+
+@tf.function
+def tf_lf_flux_split(flux_tensor, values_tensor):
+    output = []
+    abs_values = tf.abs(values_tensor)
+    for axis in range(flux_tensor.shape.ndims):
+        alpha = tf.expand_dims(tf.reduce_max(abs_values, axis=axis), axis=axis)
+        fm = (flux_tensor - alpha * values_tensor) / 2
+        fp = (flux_tensor + alpha * values_tensor) / 2
+        output.append((fm, fp))
+
+    if len(output) == 1:
+        return output[0]
+    else:
+        return output
+
 
 #TODO: Finish this function. It is not currently in use. I couldn't find a clean way of handling
 # this in a general case. - direction stencils need to be flipped and shifted. Unsplit flux has a
@@ -82,9 +99,20 @@ def weno_sub_stencils_nd(stencils_array, order):
     a_mat = np.flip(a_mat, axis=-1)
 
     sub_stencil_indexes = create_stencil_indexes(stencil_size=order, num_stencils=order)
-    sub_stencils = AxisSlice(stencils_array, -1)[sub_stencil_indexes]
+    sub_stencils = stencils_array[..., sub_stencil_indexes]
 
     interpolated = np.sum(a_mat * sub_stencils, axis=-1)
+    return interpolated
+
+@tf.function
+def tf_weno_sub_stencils(stencils_tensor, order):
+    a_mat = weno_coefficients.a_all[order]
+    a_mat = np.flip(a_mat, axis=-1)
+
+    sub_stencil_indexes = create_stencil_indexes(stencil_size=order, num_stencils=order)
+    sub_stencils = tf.gather(stencils_array, sub_stencil_indexes, axis=-1)
+
+    interpolated = tf.reduce_sum(a_mat * sub_stencils, axis=-1)
     return interpolated
 
 # Future note: we're wasting some computations.

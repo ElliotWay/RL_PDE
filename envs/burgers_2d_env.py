@@ -4,7 +4,9 @@ from gym import spaces
 
 from envs.burgers_env import AbstractBurgersEnv
 from envs.plottable_env import Plottable2DEnv
-from envs.weno_solution import lf_flux_split_nd, weno_sub_stencils_nd, WENOSolution
+from envs.weno_solution import lf_flux_split_nd, weno_sub_stencils_nd
+from envs.weno_solution import tf_lf_flux_split, tf_weno_sub_stencils
+from envs.weno_solution import WENOSolution
 from util.softmax_box import SoftmaxBox
 from util.misc import create_stencil_indexes
 
@@ -66,10 +68,12 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
                                                        num_stencils=num_x + 1,
                                                        offset=ghost_x - self.state_order)
         left_stencil_indexes = np.flip(right_stencil_indexes, axis=-1) + 1
-        # Indexing is tricky here. I couldn't find a way without transposing and then transposing
-        # back. (It might be possible, though.)
-        right_stencils = (flux_right.transpose()[:, right_stencil_indexes]).transpose([1,0,2])
-        left_stencils = (flux_left.transpose()[:, left_stencil_indexes]).transpose([1,0,2])
+        # Indexing is tricky here. It creates stencils on dimension 1, so we need to transpose them
+        # to the last axis.
+        #right_stencils = (flux_right.transpose()[:, right_stencil_indexes]).transpose([1,0,2])
+        #left_stencils = (flux_left.transpose()[:, left_stencil_indexes]).transpose([1,0,2])
+        right_stencils = flux_right[:, right_stencil_indexes].transpose([0,2,1])
+        left_stencils = flux_left[:, left_stencil_indexes].transpose([0,2,1])
         horizontal_state = np.stack([left_stencils, right_stencils], axis=2)
 
         flux_down = flux_down[ghost_x:-ghost_x, :]
@@ -125,3 +129,96 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
                 )
 
         return step
+
+    @tf.function
+    def tf_prep_state(self, state):
+        # Equivalent to _prep_state() above.
+
+        # state (the real physical state) does not have ghost cells, but agents operate on a stencil
+        # that can spill beyond the boundary, so we need to add ghost cells to create the rl_state.
+
+        # TODO Same as 1D version, this should handle boundary as a parameter instead of using the
+        # current grid value.
+        full_state = self.grid.tf_update_boundary(state, self.grid.boundary)
+        flux = 0.5 * (full_state ** 2)
+        num_x, num_y = self.grid.num_cells
+        ghost_x, ghost_y = self.grid.num_ghosts
+
+        (flux_left, flux_right), (flux_down, flux_up) = tf_lf_flux_split(flux, full_state)
+
+        flux_left = flux_left[:, ghost_y:-ghost_y]
+        flux_right = flux_right[:, ghost_y:-ghost_y]
+        right_stencil_indexes = create_stencil_indexes(stencil_size=self.state_order * 2 - 1,
+                                                       num_stencils=num_x + 1,
+                                                       offset=ghost_x - self.state_order)
+        left_stencil_indexes = np.flip(right_stencil_indexes, axis=-1) + 1
+        right_stencils = tf.transpose(tf.gather(flux_right, right_stencil_indexes), [0,2,1])
+        left_stencils = tf.transpose(tf.gather(flux_left, left_stencil_indexes), [0,2,1])
+        horizontal_state = tf.stack([left_stencils, right_stencils], axis=2)
+
+        flux_down = flux_down[ghost_x:-ghost_x, :]
+        flux_up = flux_up[ghost_x:-ghost_x, :]
+        up_stencil_indexes = create_stencil_indexes(stencil_size=self.state_order * 2 - 1,
+                                                    num_stencils=num_y + 1,
+                                                    offset=ghost_y - self.state_order)
+        down_stencil_indexes = np.flip(up_stencil_indexes, axis=-1) + 1
+        up_stencils = tf.gather(flux_up, up_stencil_indexes)
+        down_stencils = tf.gather(flux_down, down_stencil_indexes)
+        vertical_state = np.stack([down_stencils, up_stencils], axis=2)
+
+        rl_state = (horizontal_state, vertical_state)
+
+        return rl_state
+
+    @tf.function
+    def tf_integrate(self, args):
+        # (Mostly) equivalent to _rk_substep() above.
+        real_state, rl_state, rl_action = args
+
+        # Note that real_state does not contain ghost cells here, but rl_state DOES (and rl_action has
+        # weights corresponding to the ghost cells).
+
+        horizontal_stencils, vertical_stencils = rl_state
+        left_stencils = horizontal_stencils[:, :, 0]
+        right_stencils = horiztonal_stencils[:, :, 1]
+        down_stencils = vertical_stencils[:, :, 0]
+        up_stencils = vertical_stencils[:, :, 1]
+
+        horizontal_weights, vertical_weights = rl_action
+        left_weights = horizontal_weights[:, :, 0]
+        right_weights = horiztonal_weights[:, :, 1]
+        down_weights = vertical_weights[:, :, 0]
+        up_weights = vertical_weights[:, :, 1]
+
+        left_reconstructed = tf.reduce_sum(left_weights 
+                                * tf_weno_sub_stencils(left_stencils, self.weno_order), axis=-1)
+        right_reconstructed = tf.reduce_sum(right_weights
+                                * tf.weno_sub_stencils(right_stencils, self.weno_order), axis=-1)
+        down_reconstructed = tf.reduce_sum(down_weights
+                                * tf.weno_sub_stencils(down_stencils, self.weno_order), axis=-1)
+        up_reconstructed = tf.reduce_sum(up_weights
+                                * tf.weno_sub_stencils(up_stencils, self.weno_order), axis=-1)
+
+        horiztonal_flux_reconstructed = left_reconstructed + right_reconstructed
+        vertical_flux_reconstructed = down_reconstructed + up_reconstructed
+
+        cell_size_x, cell_size_y = self.grid.cell_size
+
+        step = (  (horizontal_flux_reconstructed[:-1, :]
+                    - horizontal_flux_reconstructed[1:, :]) / cell_size_x
+                + (vertical_flux_reconstructed[:, :-1]
+                    - vertical_flux_reconstructed[:, 1:]) / cell_size_y
+                )
+
+        step = self.dt * step
+
+        if self.nu != 0.0:
+            step += self.dt * self.nu * self.grid.tf_laplacian(real_state)
+        if self.source != None:
+            raise NotImplementedError("External source has not been implemented"
+                    + " in global backprop.")
+
+        new_state = real_state + step
+        return new_state
+
+
