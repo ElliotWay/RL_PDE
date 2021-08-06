@@ -134,7 +134,9 @@ def main():
     eval_env_args = Namespace(**vars(args))
     eval_env_args.follow_solution = False # Doesn't make sense for eval envs to do that.
     if args.eval_env == "std" or args.eval_env == "custom":
+        # Use standard default evaluation environments.
         eval_envs = []
+        eval_env_args.boundary = None
         smooth_sine_args = Namespace(**vars(eval_env_args))
         smooth_sine_args.init_type = "smooth_sine"
         smooth_sine_args.ep_length = args.ep_length * 2
