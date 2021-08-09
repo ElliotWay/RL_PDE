@@ -72,8 +72,8 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
         # to the last axis.
         #right_stencils = (flux_right.transpose()[:, right_stencil_indexes]).transpose([1,0,2])
         #left_stencils = (flux_left.transpose()[:, left_stencil_indexes]).transpose([1,0,2])
-        right_stencils = flux_right[:, right_stencil_indexes].transpose([0,2,1])
-        left_stencils = flux_left[:, left_stencil_indexes].transpose([0,2,1])
+        right_stencils = flux_right[right_stencil_indexes].transpose([0,2,1])
+        left_stencils = flux_left[left_stencil_indexes].transpose([0,2,1])
         horizontal_state = np.stack([left_stencils, right_stencils], axis=2)
 
         flux_down = flux_down[ghost_x:-ghost_x, :]
