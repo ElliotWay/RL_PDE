@@ -533,12 +533,13 @@ class PreciseWENOSolution(WENOSolution):
         # compute flux at each point
         f = self.flux_function(g.u)
 
-        # get maximum velocity
-        alpha = np.max(abs(g.u))
-
-        # Lax Friedrichs Flux Splitting
-        fp = (f + alpha * g.u) / 2
-        fm = (f - alpha * g.u) / 2
+        # # get maximum velocity
+        # alpha = np.max(abs(g.u))
+        #
+        # # Lax Friedrichs Flux Splitting
+        # fp = (f + alpha * g.u) / 2
+        # fm = (f - alpha * g.u) / 2
+        fm, fp = lf_flux_split_nd(f, g.u)
 
         fpr = g.scratch_array()
         fml = g.scratch_array()
@@ -550,6 +551,7 @@ class PreciseWENOSolution(WENOSolution):
         # compute f minus to the left
         # pass the data in reverse order
         fml[-1::-1], fm_weights = self.weno_new(fm[-1::-1])
+        # TODO: use weno_reconstruct_nd(). Currently that doesn't seem to work with 1D Env? -yiwei
 
         if self.record_actions is not None:
             action_weights = np.stack((fp_weights[:, self.ng-1:-(self.ng-1)], fm_weights[:, -(self.ng+1):self.ng-2:-1]))
