@@ -121,12 +121,20 @@ def set_contingent_env_defaults(main_args, env_args):
     env_args.reward_mode = AbstractScalarEnv.fill_default_reward_mode(env_args.reward_mode)
     print("Full reward mode is '{}'.".format(env_args.reward_mode))
 
-    if env_args.min_value is None or env_args.max_value is None:
-        if env_args.init_type == "jsz7":
+    # Some environments have specific defaults.
+    if env_args.init_type == "jsz7":
+        if env_args.min_value is None:
             env_args.min_value = (0.0,)
+        if env_args.max_value is None:
             env_args.max_value = (4.0,)
-        else:
+        if env_args.num_cells is None:
+            env_args.num_cells = (160,)
+        if env_args.time_max is None:
+            env_args.time_max = 0.5
+    else:
+        if env_args.min_value is None:
             env_args.min_value = (0.0,)
+        if env_args.max_value is None:
             env_args.max_value = (1.0,)
 
     dims = env_dimensions(main_args.env)
