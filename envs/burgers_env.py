@@ -391,7 +391,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         plus_stencils = rl_state[:, 0]
         minus_stencils = rl_state[:, 1]
 
-        #Note the similarity in this block to weno_i_stencils_batch().
+        # This block corresponds to envs/weno_solution.py#weno_sub_stencils_nd().
         a_mat = weno_coefficients.a_all[self.weno_order]
         a_mat = np.flip(a_mat, axis=-1)
         a_mat = tf.constant(a_mat, dtype=rl_state.dtype)
@@ -449,7 +449,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         real_state, rl_state, rl_action, next_real_state = args
         # Note that real_state and next_real_state do not include ghost cells, but rl_state does.
 
-        # This section is adapted from agents.py#StandardWENOAgent._weno_weights_batch()
+        # This section corresponds to envs/weno_solution.py#weno_weights_nd().
         C_values = weno_coefficients.C_all[self.weno_order]
         C_values = tf.constant(C_values, dtype=real_state.dtype)
         sigma_mat = weno_coefficients.sigma_all[self.weno_order]
@@ -463,6 +463,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
 
         # Here axis 0 is location/batch and axis 1 is stencil,
         # so to index substencils we gather on axis 1.
+        # Reverse because the constants expect that ordering (see weno_weights_nd()).
         sub_stencils_fp = tf.reverse(tf.gather(fp_stencils, sub_stencil_indexes, axis=1),
                 axis=(-1,)) # For some reason, axis MUST be iterable, can't be scalar -1.
         sub_stencils_fm = tf.reverse(tf.gather(fm_stencils, sub_stencil_indexes, axis=1),
@@ -481,11 +482,11 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         weights_fp = alpha_fp / (tf.reduce_sum(alpha_fp, axis=-1)[:, None])
         weights_fm = alpha_fm / (tf.reduce_sum(alpha_fm, axis=-1)[:, None])
         weno_action = tf.stack([weights_fp, weights_fm], axis=1)
-        # end adaptation of _weno_weights_batch()
+        # end adaptation of weno_weights_nd()
 
         weno_next_real_state = self.tf_integrate((real_state, rl_state, weno_action))
 
-        # This section is adapted from AbstactBurgersEnv.calculate_reward()
+        # This section is adapted from AbstactScalarEnv.calculate_reward()
         if "wenodiff" in self.reward_mode:
             last_action = rl_action
 
