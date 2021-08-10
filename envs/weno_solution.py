@@ -457,12 +457,12 @@ class PreciseWENOSolution(WENOSolution):
         """
         order = self.order
         a = weno_coefficients.a_all[order]
-        num_points = len(q) - 2 * order
-        q_stencils = np.zeros((order, len(q)))
+        num_points = q.shape[1] - 2 * order  # len(q) changed to q.shape[1] for new 0-th dimension vec state
+        q_stencils = np.zeros((order, q.shape[1]))  # q changed here
         for i in range(order, num_points + order):
             for k in range(order):
                 for l in range(order):
-                    q_stencils[k, i] += a[k, l] * q[i + k - l]
+                    q_stencils[k, i] += a[k, l] * q[0, i + k - l]  # q changed here
 
         return q_stencils
 
@@ -519,9 +519,9 @@ class PreciseWENOSolution(WENOSolution):
         weights = self.weno_weights(q)
         q_stencils = self.weno_stencils(q)
         qL = np.zeros_like(q)
-        num_points = len(q) - 2 * self.order
+        num_points = q.shape[1] - 2 * self.order  # changed here len(q) -> q.shape[1]
         for i in range(self.order, num_points + self.order):
-            qL[i] = np.dot(weights[:, i], q_stencils[:, i])
+            qL[0, i] = np.dot(weights[:, i], q_stencils[:, i])  # TODO: modify to accomodate vec state -yiwei
         return qL, weights
 
     def rk_substep(self):
