@@ -19,7 +19,7 @@ def lf_flux_split_nd(flux_array, values_array):
     """
     output = []
     abs_values = np.abs(values_array)
-    for dim in range(flux_array.ndim):
+    for dim in range(1, flux_array.ndim):  # now the 0-th dimension is state vector length
         alpha = np.expand_dims(np.max(abs_values, axis=dim), axis=dim)
         fm = (flux_array - alpha * values_array) / 2
         fp = (flux_array + alpha * values_array) / 2
@@ -487,14 +487,14 @@ class PreciseWENOSolution(WENOSolution):
         beta = np.zeros((order, q.shape[1]))
         # TODO: temp changes, 0-th dimension is now vec length, probably need to change here -yiwei
         w = np.zeros_like(beta)
-        num_points = len(q) - 2 * order
+        num_points = q.shape[1] - 2 * order  # Changed here
         epsilon = 1e-16
         for i in range(order, num_points + order):
             alpha = np.zeros(order)
             for k in range(order):
                 for l in range(order):
                     for m in range(l + 1):
-                        beta[k, i] += sigma[k, l, m] * q[i + k - l] * q[i + k - m]
+                        beta[k, i] += sigma[k, l, m] * q[0, i + k - l] * q[0, i + k - m]  # Changed here
                 alpha[k] = C[k] / (epsilon + beta[k, i] ** 2)
             w[:, i] = alpha / np.sum(alpha)
 
@@ -534,13 +534,13 @@ class PreciseWENOSolution(WENOSolution):
         # compute flux at each point
         f = self.flux_function(g.u)
 
-        # get maximum velocity
-        alpha = np.max(abs(g.u))
-
-        # Lax Friedrichs Flux Splitting
-        fp = (f + alpha * g.u) / 2
-        fm = (f - alpha * g.u) / 2
-        # fm, fp = lf_flux_split_nd(f, g.u)  # TODO: check this function again, doesn't work now -yiwei
+        # # get maximum velocity
+        # alpha = np.max(abs(g.u))
+        #
+        # # Lax Friedrichs Flux Splitting
+        # fp = (f + alpha * g.u) / 2
+        # fm = (f - alpha * g.u) / 2
+        fm, fp = lf_flux_split_nd(f, g.u)
 
         fpr = g.scratch_array()
         fml = g.scratch_array()
