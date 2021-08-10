@@ -267,8 +267,8 @@ class PreciseWENOSolution2D(WENOSolution):
         right_flux_reconstructed, right_weights = weno_reconstruct_nd(order, right_stencils)
         horizontal_flux_reconstructed = left_flux_reconstructed + right_flux_reconstructed
 
-        flux_down = flux_down[ghost_x:-ghost_x, :]
-        flux_up = flux_up[ghost_x:-ghost_x, :]
+        flux_down = flux_down[0, ghost_x:-ghost_x, :]
+        flux_up = flux_up[0, ghost_x:-ghost_x, :]
         up_stencil_indexes = create_stencil_indexes(stencil_size=order * 2 - 1,
                                                     num_stencils=num_y + 1,
                                                     offset=ghost_y - order)
