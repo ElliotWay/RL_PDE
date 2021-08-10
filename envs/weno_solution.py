@@ -484,7 +484,8 @@ class PreciseWENOSolution(WENOSolution):
         C = weno_coefficients.C_all[order]
         sigma = weno_coefficients.sigma_all[order]
 
-        beta = np.zeros((order, len(q)))
+        beta = np.zeros((order, q.shape[1]))
+        # TODO: temp changes, 0-th dimension is now vec length, probably need to change here -yiwei
         w = np.zeros_like(beta)
         num_points = len(q) - 2 * order
         epsilon = 1e-16
@@ -533,13 +534,13 @@ class PreciseWENOSolution(WENOSolution):
         # compute flux at each point
         f = self.flux_function(g.u)
 
-        # # get maximum velocity
-        # alpha = np.max(abs(g.u))
-        #
-        # # Lax Friedrichs Flux Splitting
-        # fp = (f + alpha * g.u) / 2
-        # fm = (f - alpha * g.u) / 2
-        fm, fp = lf_flux_split_nd(f, g.u)
+        # get maximum velocity
+        alpha = np.max(abs(g.u))
+
+        # Lax Friedrichs Flux Splitting
+        fp = (f + alpha * g.u) / 2
+        fm = (f - alpha * g.u) / 2
+        # fm, fp = lf_flux_split_nd(f, g.u)  # TODO: check this function again, doesn't work now -yiwei
 
         fpr = g.scratch_array()
         fml = g.scratch_array()
@@ -547,10 +548,10 @@ class PreciseWENOSolution(WENOSolution):
 
         # compute fluxes at the cell edges
         # compute f plus to the right
-        fpr[1:], fp_weights = self.weno_new(fp[:-1])
+        fpr[:, 1:], fp_weights = self.weno_new(fp[:, :-1])  # 0-th dimension is now vec length dim
         # compute f minus to the left
         # pass the data in reverse order
-        fml[-1::-1], fm_weights = self.weno_new(fm[-1::-1])
+        fml[:, -1::-1], fm_weights = self.weno_new(fm[:, -1::-1])
         # TODO: use weno_reconstruct_nd(). Currently that doesn't seem to work with 1D Env? -yiwei
 
         if self.record_actions is not None:
@@ -576,7 +577,7 @@ class PreciseWENOSolution(WENOSolution):
                 raise Exception("Unrecognized action type: '{}'".format(self.record_actions))
 
         # compute flux from fpr and fml
-        flux[1:-1] = fpr[1:-1] + fml[1:-1]
+        flux[:, 1:-1] = fpr[:, 1:-1] + fml[:, 1:-1]
         rhs = g.scratch_array()
 
         if self.nu > 0.0:
@@ -586,12 +587,12 @@ class PreciseWENOSolution(WENOSolution):
             # ghost cells). The ghost cells will be overwritten anyway.
             R = np.concatenate([np.zeros(self.precise_grid.ng),
                 R, np.zeros(self.precise_grid.ng)])
-            rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:]) + R[1:-1]
+            rhs[:, 1:-1] = 1 / g.dx * (flux[:, :, 1:-1] - flux[2:]) + R[:, 1:-1]
         else:
-            rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:])
+            rhs[:, 1:-1] = 1 / g.dx * (flux[:, 1:-1] - flux[:, 2:])
 
         if self.source is not None:
-            rhs[1:-1] += self.source.get_full()[1:-1]
+            rhs[:, 1:-1] += self.source.get_full()[:, 1:-1]
 
         return rhs
 
@@ -631,7 +632,7 @@ class PreciseWENOSolution(WENOSolution):
         return grid[middle::self.precise_scale]
 
     def get_real(self):
-        return self.get_full()[self.ng:-self.ng]
+        return self.get_full()[:, self.ng:-self.ng]  # 0-th dimension is now vector state length
 
     def _reset(self, init_params):
         self.precise_grid.reset(init_params)

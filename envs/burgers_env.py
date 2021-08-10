@@ -272,14 +272,14 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         g = self.grid
 
         # compute flux at each point
-        f = self.burgers_flux(g.u)
+        f = self.burgers_flux(g.u[0])
 
         # get maximum velocity
-        alpha = np.max(abs(g.u))
+        alpha = np.max(abs(g.u[0]))
 
         # Lax Friedrichs Flux Splitting
-        fp = (f + alpha * g.u) / 2
-        fm = (f - alpha * g.u) / 2
+        fp = (f + alpha * g.u[0]) / 2
+        fm = (f - alpha * g.u[0]) / 2
 
         fp_stencil_indexes = create_stencil_indexes(stencil_size=self.state_order * 2 - 1,
                                                     num_stencils=g.real_length() + 1,
@@ -340,13 +340,14 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
             # In the future, if we expand to multiple dimensions, then it won't be, so this will need
             # to be changed (probably use tf.tile instead).
             # Not 100% sure tf.fill can be used this way.
-            left_ghost = tf.fill(ghost_size, state[0])
-            right_ghost = tf.fill(ghost_size, state[-1])
-            full_state = tf.concat([left_ghost, state, right_ghost], axis=0)
+            left_ghost = tf.fill(ghost_size, state[0, 0])
+            right_ghost = tf.fill(ghost_size, state[0, -1])
+            full_state = tf.concat([left_ghost, state[0], right_ghost], axis=0)
+            # TODO: this needs to be changed for Euler, now only taking 0th dim for backward compatibility -yiwei
         elif self.grid.boundary == "periodic":
-            left_ghost = state[-ghost_size[0]:]
-            right_ghost = state[:ghost_size[0]]
-            full_state = tf.concat([left_ghost, state, right_ghost], axis=0)
+            left_ghost = state[0, -ghost_size[0]:]
+            right_ghost = state[0, :ghost_size[0]]
+            full_state = tf.concat([left_ghost, state[0], right_ghost], axis=0)
         else:
             raise NotImplementedError("{} boundary not implemented.".format(self.grid.boundary))
 
@@ -438,6 +439,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
                     + " in global backprop.")
 
         new_state = real_state + step
+        # shape broadcasting seems fine here, real_state shape=(1, 125), step shape=(125,), new_state shape=(1, 125)
         return new_state
 
     # TODO: modify this so less is in subclass? The reward section could go in the abstract class,
@@ -504,6 +506,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
             return -error
 
         error = weno_next_real_state - next_real_state
+        error = tf.reduce_sum(error, axis=0)  # check if this works for vector length -yiwei
 
         if "one-step" in self.reward_mode:
             pass
@@ -674,14 +677,14 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         g = self.grid
 
         # compute flux at each point
-        f = self.burgers_flux(g.u)
+        f = self.burgers_flux(g.u[0])
 
         # get maximum velocity
-        alpha = np.max(abs(g.u))
+        alpha = np.max(abs(g.u[0]))
 
         # Lax Friedrichs Flux Splitting
-        fp = (f + alpha * g.u) / 2
-        fm = (f - alpha * g.u) / 2
+        fp = (f + alpha * g.u[0]) / 2
+        fm = (f - alpha * g.u[0]) / 2
 
         fp_stencil_indexes = create_stencil_indexes(stencil_size=self.state_order * 2 - 1,
                                                     num_stencils=g.real_length() + 1,
@@ -749,7 +752,7 @@ class FluxBurgersEnv(AbstractBurgersEnv):
         g = self.grid
 
         # compute flux at each point
-        f = self.burgers_flux(g.u)
+        f = self.burgers_flux(g.u[0])
 
         # (Do not split flux for this version.)
 

@@ -654,9 +654,9 @@ class AbstractScalarEnv(gym.Env):
         # Average of error in two adjacent cells.
         if "adjacent" in self.reward_mode and "avg" in self.reward_mode:
             #TODO This should probably trim ghosts from other axes.
-            combined_error = tuple((AxisSlice(error, axis)[ng-1:ng]
-                                + AxisSlice(error, axis)[ng:-(ng-1)]) / 2
-                                    for axis, ng in enumerate(self.grid.num_ghosts))
+            combined_error = tuple((AxisSlice(error, axis + 1)[ng-1:ng]
+                                + AxisSlice(error, axis + 1)[ng:-(ng-1)]) / 2
+                                    for axis, ng in enumerate(self.grid.num_ghosts))  # 0th axis now vec length
         # Combine error across the WENO stencil.
         # (NOT the state stencil i.e. self.state_order * 2 - 1, even if we are using a wide state.)
         elif "stencil" in self.reward_mode:
@@ -666,7 +666,7 @@ class AbstractScalarEnv(gym.Env):
                         stencil_size=(self.weno_order * 2 - 1),
                         num_stencils=(nx + 1),
                         offset=(ng - self.weno_order))
-                error_stencils = AxisSlice(error, axis)[stencil_indexes]
+                error_stencils = AxisSlice(error, axis + 1)[stencil_indexes]
                 error_stencils = error[stencil_indexes]
                 if "max" in self.reward_mode:
                     combined_error.append(np.amax(error_stencils, axis=-1))

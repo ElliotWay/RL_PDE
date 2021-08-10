@@ -50,7 +50,7 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
                                     #for num in range(1, self.weno_order+1)]
 
     def _prep_state(self):
-        u_values = self.grid.get_full()
+        u_values = self.grid.get_full()[0]
         flux = self.burgers_flux(u_values)
         num_x, num_y = self.grid.num_cells
         ghost_x, ghost_y = self.grid.num_ghosts

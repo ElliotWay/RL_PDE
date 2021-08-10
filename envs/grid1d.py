@@ -125,7 +125,7 @@ class Burgers1DGrid(GridBase):
             assert boundary is not None, "Cannot use default boundary with custom init type."
             new_u, custom_params = self._init_type(params)
             self.init_params.update(custom_params)
-            self.u[self.ng:-self.ng] = new_u
+            self.space[0, self.ng:-self.ng] = new_u
 
         elif self.init_type == "smooth_sine":
             if boundary is None:
@@ -135,12 +135,12 @@ class Burgers1DGrid(GridBase):
             else:
                 A = float(1.0 / (2.0 * np.pi * 0.1))
             self.init_params['A'] = A
-            self.u = A*np.sin(2 * np.pi * self.x)
+            self.space[0] = A*np.sin(2 * np.pi * self.x)
 
         elif self.init_type == "gaussian":
             if boundary is None:
                 self.boundary = "periodic"
-            self.u = 1.0 + np.exp(-60.0 * (self.x - 0.5) ** 2)
+            self.space[0] = 1.0 + np.exp(-60.0 * (self.x - 0.5) ** 2)
 
         elif self.init_type == "random":
             if boundary is None:
@@ -165,7 +165,7 @@ class Burgers1DGrid(GridBase):
             else:
                 a = float(3.5 - np.abs(b))
             self.init_params['a'] = a
-            self.u = a + b * np.sin(k * np.pi * self.x / (self.xmax - self.xmin))
+            self.space[0] = a + b * np.sin(k * np.pi * self.x / (self.xmax - self.xmin))
 
         elif self.init_type == "random-many-shocks":
             if boundary is None:
@@ -194,7 +194,7 @@ class Burgers1DGrid(GridBase):
             else:
                 a = np.random.choice(np.linspace(-2.0, 2.0, 9))
             self.init_params['a'] = a
-            self.u = a + b * np.sin(k * np.pi * self.x / (self.xmax - self.xmin))
+            self.space[0] = a + b * np.sin(k * np.pi * self.x / (self.xmax - self.xmin))
 
         elif self.init_type == "smooth_rare":
             if boundary is None:
@@ -212,7 +212,7 @@ class Burgers1DGrid(GridBase):
                 #k = np.random.uniform(20, 100)
                 k = int(np.random.choice(np.arange(20, 100, 5)))
             self.init_params['k'] = k
-            self.u = A * np.tanh(k * (self.x - 0.5))
+            self.space[0] = A * np.tanh(k * (self.x - 0.5))
 
         elif self.init_type == "accelshock":
             if boundary is None:
@@ -226,34 +226,34 @@ class Burgers1DGrid(GridBase):
             self.init_params['u_R'] = u_R
 
             index = self.x > offset
-            self.u = np.full_like(self.x, u_L)
-            self.u[index] = u_R * (self.x[index] - 1)
+            self.space[0] = np.full_like(self.x, u_L)
+            self.space[0, index] = u_R * (self.x[index] - 1)
 
         elif self.init_type == "tophat":
             if boundary is None:
                 self.boundary = "outflow"
-            self.u[:] = 0.0
-            self.u[np.logical_and(self.x >= 0.333,
+            self.space[0, :] = 0.0
+            self.space[0, np.logical_and(self.x >= 0.333,
                                        self.x <= 0.666)] = 1.0
         elif self.init_type == "sine":
             if boundary is None:
                 self.boundary = "periodic"
-            self.u[:] = 1.0
+            self.space[0, :] = 1.0
             index = np.logical_and(self.x >= 0.333,
                                    self.x <= 0.666)
-            self.u[index] += \
+            self.space[0, index] += \
                 0.5 * np.sin(2.0 * np.pi * (self.x[index] - 0.333) / 0.333)
 
         elif self.init_type == "rarefaction":
             if boundary is None:
                 self.boundary = "outflow"
-            self.u[:] = 1.0
-            self.u[self.x > 0.5] = 2.0
+            self.space[0, :] = 1.0
+            self.space[0, self.x > 0.5] = 2.0
 
         elif self.init_type == "zero":
             if boundary is None:
                 self.boundary = "periodic"
-            self.u[:] = 0
+            self.space[0, :] = 0
 
         elif self.init_type == "flat":
             if boundary is None:
@@ -263,7 +263,7 @@ class Burgers1DGrid(GridBase):
             else:
                 a = 2.0
             self.init_params['a'] = a
-            self.u[:] = a
+            self.space[0, :] = a
 
         elif self.init_type == "line":
             if boundary is None:
@@ -278,7 +278,7 @@ class Burgers1DGrid(GridBase):
             else:
                 b = -0.1
             self.init_params['b'] = b
-            self.u = a + b * self.x
+            self.space[0] = a + b * self.x
         else:
             raise Exception("Initial condition type \"" + str(self.init_type) + "\" not recognized.")
 
@@ -287,10 +287,10 @@ class Burgers1DGrid(GridBase):
 
     def update_boundary(self):
         if self.boundary == "first":
-            left_d = self.u[self.ilo] - self.u[self.ilo+1]
-            self.u[0:self.ilo] = (self.u[self.ilo] + (1 + np.arange(self.ng))*left_d)[::-1]
-            right_d = self.u[self.ihi] - self.u[self.ihi-1]
-            self.u[self.ihi+1:] = (self.u[self.ihi] + (1 + np.arange(self.ng))*right_d)
+            left_d = self.space[0, self.ilo] - self.space[0, self.ilo+1]
+            self.space[0, 0:self.ilo] = (self.space[0, self.ilo] + (1 + np.arange(self.ng))*left_d)[::-1]
+            right_d = self.space[0, self.ihi] - self.space[0, self.ihi-1]
+            self.space[0, self.ihi+1:] = (self.space[0, self.ihi] + (1 + np.arange(self.ng))*right_d)
         else:
             super().update_boundary()
 
@@ -415,9 +415,9 @@ class Euler1DGrid(GridBase):
             e_r = p_r / rho_r / (self.eos_gamma - 1)
             E_l = rho_l * (e_l + v_l ** 2 / 2)
             E_r = rho_r * (e_r + v_r ** 2 / 2)
-            self.u[0] = np.where(self.x < 0, rho_l * np.ones_like(self.x), rho_r * np.ones_like(self.x))
-            self.u[1] = np.where(self.x < 0, S_l * np.ones_like(self.x), S_r * np.ones_like(self.x))
-            self.u[2] = np.where(self.x < 0, E_l * np.ones_like(self.x), E_r * np.ones_like(self.x))
+            self.space[0] = np.where(self.x < 0, rho_l * np.ones_like(self.x), rho_r * np.ones_like(self.x))
+            self.space[1] = np.where(self.x < 0, S_l * np.ones_like(self.x), S_r * np.ones_like(self.x))
+            self.space[2] = np.where(self.x < 0, E_l * np.ones_like(self.x), E_r * np.ones_like(self.x))
 
         elif self.init_type == "double_rarefaction":
             if boundary is None:
@@ -434,9 +434,9 @@ class Euler1DGrid(GridBase):
             e_r = p_r / rho_r / (self.eos_gamma - 1)
             E_l = rho_l * (e_l + v_l ** 2 / 2)
             E_r = rho_r * (e_r + v_r ** 2 / 2)
-            self.u[0] = np.where(self.x < 0,  rho_l * np.ones_like(self.x), rho_r * np.ones_like(self.x))
-            self.u[1] = np.where(self.x < 0, S_l * np.ones_like(self.x), S_r * np.ones_like(self.x))
-            self.u[2] = np.where(self.x < 0, E_l * np.ones_like(self.x), E_r * np.ones_like(self.x))
+            self.space[0] = np.where(self.x < 0,  rho_l * np.ones_like(self.x), rho_r * np.ones_like(self.x))
+            self.space[1] = np.where(self.x < 0, S_l * np.ones_like(self.x), S_r * np.ones_like(self.x))
+            self.space[2] = np.where(self.x < 0, E_l * np.ones_like(self.x), E_r * np.ones_like(self.x))
 
         elif self.init_type == "slow_shock":
             if boundary is None:
@@ -453,9 +453,9 @@ class Euler1DGrid(GridBase):
             e_r = p_r / rho_r / (self.eos_gamma - 1)
             E_l = rho_l * (e_l + v_l ** 2 / 2)
             E_r = rho_r * (e_r + v_r ** 2 / 2)
-            self.u[0] = np.where(self.x < 0, rho_l * np.ones_like(self.x), rho_r * np.ones_like(self.x))
-            self.u[1] = np.where(self.x < 0, S_l * np.ones_like(self.x), S_r * np.ones_like(self.x))
-            self.u[2] = np.where(self.x < 0, E_l * np.ones_like(self.x), E_r * np.ones_like(self.x))
+            self.space[0] = np.where(self.x < 0, rho_l * np.ones_like(self.x), rho_r * np.ones_like(self.x))
+            self.space[1] = np.where(self.x < 0, S_l * np.ones_like(self.x), S_r * np.ones_like(self.x))
+            self.space[2] = np.where(self.x < 0, E_l * np.ones_like(self.x), E_r * np.ones_like(self.x))
         
         elif type == "advection":
             if boundary is None:
@@ -471,21 +471,12 @@ class Euler1DGrid(GridBase):
             S = rho * v
             e = p / rho / (self.eos_gamma - 1)
             E = rho * (e + v ** 2 / 2)
-            self.u[0, :] = rho[:]
-            self.u[1, :] = S[:]
-            self.u[2, :] = E[:]
+            self.space[0, :] = rho[:]
+            self.space[1, :] = S[:]
+            self.space[2, :] = E[:]
 
         else:
             raise Exception("Initial condition type \"" + str(self.init_type) + "\" not recognized.")
 
         self.init_params['boundary'] = self.boundary
         self.update_boundary()
-
-    def update_boundary(self):
-        if self.boundary == "first":
-            left_d = self.u[self.ilo] - self.u[self.ilo + 1]
-            self.u[0:self.ilo] = (self.u[self.ilo] + (1 + np.arange(self.ng)) * left_d)[::-1]
-            right_d = self.u[self.ihi] - self.u[self.ihi - 1]
-            self.u[self.ihi + 1:] = (self.u[self.ihi] + (1 + np.arange(self.ng)) * right_d)
-        else:
-            super().update_boundary()

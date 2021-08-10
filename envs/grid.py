@@ -123,11 +123,12 @@ class AbstractGrid:
             inter_x = xmin + (np.arange(nx + 2 * ng + 1) - ng) * dx
             self.interfaces.append(inter_x)
 
-        self.real_slice = tuple([slice(ng, -ng) for ng in self.num_ghosts])
+        self.real_slice = tuple([slice(0, self.vec_len)] + [slice(ng, -ng) for ng in self.num_ghosts])
         """
         Slice for indexing only the real portion and not ghost cells of the space (or something
         of equivalent shape).
         So grid.space[grid.real_slice] should be equivalent to grid.get_real().
+        0-th dimension is the vector length dim, all needs to be in
         """
 
     # 1-dimensional shortcuts for compatability.
@@ -181,8 +182,8 @@ class AbstractGrid:
     def scratch_array(self):
         """ Return a zeroed array dimensioned for this grid. """
         space = np.zeros([self.vec_len] + [len(x) for x in self.coords], dtype=np.float64)
-        if len(space) == 1:
-            space = space[0]  # For backward compatibility, scalar state doesn't need 1st dim
+        # if len(space) == 1:
+        #     space = space[0]  # For backward compatibility, scalar state doesn't need 1st dim
         return space
 
     @property
@@ -277,6 +278,7 @@ class GridBase(AbstractGrid):
                     + " ({} vs {}).".format(len(boundary), len(self.num_cells)))
 
         for axis, (ng, bound) in enumerate(zip(self.num_ghosts, boundary)):
+            axis += 1  # With the current implementation, the 0-th dimension is taken as the vector length dim
             axis_slice = AxisSlice(self.space, axis)
             # Periodic - copying from the opposite end, as if the space wraps around
             if bound == "periodic":

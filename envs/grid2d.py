@@ -47,7 +47,7 @@ class Burgers2DGrid(GridBase):
             assert boundary is not None, "Cannot use default boundary with custom init type."
             new_values, custom_params = self._init_type(params)
             new_params.update(custom_params)
-            self.space[self.real_slice] = new_values
+            self.space[0, self.real_slice] = new_values
 
         elif self.init_type == "gaussian":
             if self.boundary is None:
@@ -74,7 +74,7 @@ class Burgers2DGrid(GridBase):
             else:
                 sigma = tuple(0.091 for _ in self.num_cells)
             new_params['sigma'] = sigma
-            self.space = a + b*np.exp(-(
+            self.space[0] = a + b*np.exp(-(
                 (self.x[:, None] - c[0])**2/(2.0*sigma[0]**2)
                 + (self.y[None, :] - c[1])**2/(2.0*sigma[1]**2)))
         # Jiang, Shu, Zhang, Example 7. (An alternative formulation of finite difference WENO
@@ -90,7 +90,7 @@ class Burgers2DGrid(GridBase):
             c = params['c'] if 'c' in params else (np.pi / 2.0,) * 2
             new_params['c'] = c
 
-            self.space = a + b * np.sin(c[0] * self.x[:, None] + c[1] * self.x[None, :])
+            self.space[0] = a + b * np.sin(c[0] * self.x[:, None] + c[1] * self.x[None, :])
 
         elif self.init_type.startswith("1d"):
             one_d_type = None
@@ -141,7 +141,7 @@ class Burgers2DGrid(GridBase):
                 x_bound = self.x_grid1d.boundary if type(self.x_grid1d.boundary) is str \
                             else self.x_grid1d.boundary[0]
                 x_grid = self.x_grid1d.get_real()
-                self.space[self.real_slice] = np.tile(x_grid[:, None], (1, self.num_cells[1]))
+                self.space[0, self.real_slice] = np.tile(x_grid[:, None], (1, self.num_cells[1]))
                 self.boundary = (x_bound, "outflow")
             elif one_d_axis == 'y':
                 if not hasattr(self, "y_grid1d"):
@@ -151,7 +151,7 @@ class Burgers2DGrid(GridBase):
                 y_bound = self.y_grid1d.boundary if type(self.y_grid1d.boundary) is str \
                             else self.y_grid1d.boundary[0]
                 y_grid = self.y_grid1d.get_real()
-                self.space[self.real_slice] = np.tile(y_grid, (self.num_cells[0], 1))
+                self.space[0, self.real_slice] = np.tile(y_grid, (self.num_cells[0], 1))
                 self.boundary = ("outflow", y_bound)
 
         new_params['boundary'] = self.boundary

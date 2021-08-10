@@ -214,11 +214,11 @@ class Plottable1DEnv(AbstractScalarEnv):
                     plt.plot(ghost_x_right, weno_state_history[-num_ghost_points:],
                             ls='-', color=self.weno_ghost_color)
 
-            state_history = state_history[self.ng:-self.ng]
+            state_history = state_history[0, self.ng:-self.ng]  # TODO: change for vec states (3 items here) -yiwei
             if solution_state_history is not None:
-                solution_state_history = solution_state_history[self.ng:-self.ng]
+                solution_state_history = solution_state_history[0, self.ng:-self.ng]
             if weno_state_history is not None:
-                weno_state_history = weno_state_history[self.ng:-self.ng]
+                weno_state_history = weno_state_history[0, self.ng:-self.ng]
 
         # Similarly here. With a specific timestep we still want physical x values. Should this
         # also be if location is None?
@@ -327,7 +327,7 @@ class Plottable1DEnv(AbstractScalarEnv):
         x_values = self.grid.x[self.ng:-self.ng]
 
         if not override_history:
-            state_history = np.array(self.state_history)[:, self.ng:-self.ng]
+            state_history = np.array(self.state_history)[:, 0, self.ng:-self.ng]  # TODO: change for vec states -yiwei
             solution_state_history = None
             weno_state_history = None
 
@@ -355,15 +355,16 @@ class Plottable1DEnv(AbstractScalarEnv):
                 # Decide whether to use solution or weno_solution, or both.
                 # Would it make sense to have this decision be external in the __init__ method?
                 if not isinstance(self.solution, OneStepSolution) and self.solution.is_recording_state():
-                    solution_state_history = np.array(self.solution.get_state_history())[:, self.ng:-self.ng]
+                    solution_state_history = np.array(self.solution.get_state_history())[:, 0, self.ng:-self.ng]
                     if (plot_weno and self.weno_solution is not None and
                                     self.weno_solution.is_recording_state()):
                         weno_state_history = np.array(
-                                self.weno_solution.get_state_history())[:, self.ng:-self.ng]
+                                self.weno_solution.get_state_history())[:, 0, self.ng:-self.ng]
 
                 elif self.weno_solution is not None and self.weno_solution.is_recording_state():
                     solution_state_history = np.array(
-                                self.weno_solution.get_state_history())[:, self.ng:-self.ng]
+                                self.weno_solution.get_state_history())[:, 0, self.ng:-self.ng]
+                    # TODO: change for vec states, 3 places in if (added 0 to second dim) -yiwei
                     weno_override = True
 
             if solution_state_history is not None:
@@ -404,7 +405,8 @@ class Plottable1DEnv(AbstractScalarEnv):
             if not override_history:
                 if not self.solution.is_recording_state():
                     raise Exception("Cannot plot evolution of error if solution state is not available.")
-                solution_state_history = np.array(self.solution.get_state_history())[:, self.ng:-self.ng]
+                solution_state_history = np.array(self.solution.get_state_history()[0])[:, self.ng:-self.ng]
+                # TODO: change for vec states -yiwei
                 state_history = np.abs(solution_state_history - state_history)
 
         if not plot_error:
