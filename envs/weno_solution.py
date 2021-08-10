@@ -232,8 +232,8 @@ class PreciseWENOSolution2D(WENOSolution):
 
         # Trim vertical ghost cells from horizontally split flux. (Should this be part of flux
         # splitting?)
-        flux_left = flux_left[:, ghost_y:-ghost_y]
-        flux_right = flux_right[:, ghost_y:-ghost_y]
+        flux_left = flux_left[0, :, ghost_y:-ghost_y]  # TODO: change for vec length, now only using 0th dim -yiwei
+        flux_right = flux_right[0, :, ghost_y:-ghost_y]
         right_stencil_indexes = create_stencil_indexes(stencil_size=order * 2 - 1,
                                                        num_stencils=num_x + 1,
                                                        offset=ghost_x - order)
@@ -552,7 +552,7 @@ class PreciseWENOSolution(WENOSolution):
         # compute f minus to the left
         # pass the data in reverse order
         fml[:, -1::-1], fm_weights = self.weno_new(fm[:, -1::-1])
-        # TODO: use weno_reconstruct_nd(). Currently that doesn't seem to work with 1D Env? -yiwei
+        # TODO: use weno_reconstruct_nd(). Currently doesn't seem to work with 1D Env, ask Elliot. -yiwei
 
         if self.record_actions is not None:
             action_weights = np.stack((fp_weights[:, self.ng-1:-(self.ng-1)], fm_weights[:, -(self.ng+1):self.ng-2:-1]))
@@ -682,7 +682,7 @@ if __name__ == "__main__":
             fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
             x, y = np.meshgrid(sol.real_x, sol.real_y, indexing='ij')
             z = sol.get_real()
-            surface = ax.plot_surface(x, y, z, cmap=cm.viridis,
+            surface = ax.plot_surface(x, y, z[0], cmap=cm.viridis,
                     linewidth=0, antialiased=False)
             #ax.set_zlim(-0.25, 1.25)
             ax.zaxis.set_major_locator(LinearLocator(10))

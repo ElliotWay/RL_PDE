@@ -7,7 +7,8 @@ from envs.grid1d import Burgers1DGrid
 class Burgers2DGrid(GridBase):
     def __init__(self, num_cells, num_ghosts, min_value, max_value, boundary=None,
             init_type="gaussian", deterministic_init=False):
-        super().__init__(num_cells, num_ghosts, min_value, max_value, boundary)
+        vec_len = 1
+        super().__init__(num_cells, num_ghosts, min_value, max_value, vec_len, boundary)
 
         # _init_type and _boundary do not change, init_type and boundary may
         # change if init_type is scheduled or sampled.
