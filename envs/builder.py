@@ -6,6 +6,7 @@ from util.misc import positive_int, nonnegative_float, positive_float, float_dic
 from envs.abstract_scalar_env import AbstractScalarEnv
 from envs import WENOBurgersEnv, SplitFluxBurgersEnv, FluxBurgersEnv
 from envs.burgers_2d_env import WENOBurgers2DEnv
+from envs.euler_env import WENOEulerEnv
 
 
 # Could pass name of env, and only have relevant parameters instead of allowing all of them?
@@ -241,6 +242,8 @@ def build_env(env_name, args, test=False):
         env = SplitFluxBurgersEnv(**kwargs)
     elif env_name == "flux_burgers":
         env = FluxBurgersEnv(**kwargs)
+    elif env_name == "weno_euler":
+        env = WENOEulerEnv(**kwargs)
     else:
         raise Exception("Unrecognized environment type: \"" + str(env_name) + "\".")
 
