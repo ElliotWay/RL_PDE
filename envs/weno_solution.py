@@ -21,7 +21,7 @@ def lf_flux_split_nd(flux_array, values_array):
     output = []
     abs_values = np.abs(values_array)
     for dim in range(flux_array.ndim):
-        alpha = np.expand_dims(np.max(abs_values, axis=dim), axis=dim)
+        alpha = np.max(abs_values, axis=dim, keepdims=True)
         fm = (flux_array - alpha * values_array) / 2
         fp = (flux_array + alpha * values_array) / 2
         output.append((fm, fp))
@@ -36,7 +36,7 @@ def tf_lf_flux_split(flux_tensor, values_tensor):
     output = []
     abs_values = tf.abs(values_tensor)
     for axis in range(flux_tensor.shape.ndims):
-        alpha = tf.expand_dims(tf.reduce_max(abs_values, axis=axis), axis=axis)
+        alpha = tf.reduce_max(abs_values, axis=axis, keepdims=True)
         fm = (flux_tensor - alpha * values_tensor) / 2
         fp = (flux_tensor + alpha * values_tensor) / 2
         output.append((fm, fp))
@@ -79,6 +79,7 @@ def create_stencils_nd(values_array, order, axis, source_grid):
     left_stencils = (flux_left.transpose()[:, left_stencil_indexes]).transpose([1,0,2])
     right_stencils = (flux_right.transpose()[:, right_stencil_indexes]).transpose([1,0,2])
 
+
 def weno_sub_stencils_nd(stencils_array, order):
     """
     Interpolate sub-stencils in an ndarray of stencils. (The stencils are 1D.)
@@ -114,6 +115,7 @@ def tf_weno_sub_stencils(stencils_tensor, order):
 
     interpolated = tf.reduce_sum(a_mat * sub_stencils, axis=-1)
     return interpolated
+
 
 # Future note: we're wasting some computations.
 # The q^2 matrix for the kth sub-stencil has a lot of overlap with the q^2 matrix with the k+1st sub-stencil.
@@ -159,18 +161,47 @@ def weno_weights_nd(stencils_array, order):
 
     alpha = C / (epsilon + beta ** 2)
 
-    # Add back in the sub-stencil dimension after the sum so numpy broadcasts there
+    # Keep the sub-stencil dimension after the sum so numpy broadcasts there
     # instead of on the stencil dimension.
-    weights = alpha / (np.sum(alpha, axis=-1)[..., None])
+    weights = alpha / np.sum(alpha, axis=-1, keepdims=True)
 
     return weights
 
+@tf.function
+def tf_weno_weights(stencils_tensor, order):
+    C = weno_coefficients.C_all[order]
+    sigma = weno_coefficients.sigma_all[order]
+    epsilon = 1e-16
+
+    sub_stencil_indexes = create_stencil_indexes(stencil_size=order, num_stencils=order)
+    sub_stencils = tf.gather(stencils_tensor, sub_stencil_indexes, axis=-1)
+    # For some reason, axis for tf.reverse MUST be iterable, can't be scalar -1.
+    sub_stencils_flipped = tf.reverse(sub_stencils, axis=(-1,))
+    
+    squared = (tf.expand_dims(sub_stencils_flipped, axis=-2)
+                * tf.expand_dims(sub_stencils_flipped, axis=-1))
+    beta = tf.reduce_sum(sigma * squared, axis=(-2, -1))
+    alpha = C / (epsilon + beta ** 2)
+    weights = alpha / tf.reduce_sum(alpha, axis=-1, keepdims=True)
+    return weights
+
+
 def weno_reconstruct_nd(order, stencils_array):
+    #TODO From Yiwei's comment: does something in this not work for 1D?
     sub_stencils = weno_sub_stencils_nd(stencils_array, order)
     weights = weno_weights_nd(stencils_array, order)
 
     reconstructed = np.sum(weights * sub_stencils, axis=-1)
     return reconstructed, weights
+
+@tf.function
+def tf_weno_reconstruct(stencils_tensor, order):
+    sub_stencils = tf_weno_sub_stencils(stencils_tensor, order)
+    weights = tf_weno_weights(stencils_tensor, order)
+
+    reconstructed = tf.reduce_sum(weights * sub_stencils, axis=-1)
+    return reconstructed, weights
+
 
 class WENOSolution(SolutionBase):
     """
@@ -178,11 +209,11 @@ class WENOSolution(SolutionBase):
     """
     def use_rk4(self, use_rk4):
         raise NotImplementedError()
-
     def set_record_actions(self, mode):
         raise NotImplementedError()
     def get_action_history(self):
         raise NotImplementedError()
+
 
 # Should be possible to convert this to ND instead of 2D.
 # rk_substep needs to be generalized.
@@ -330,8 +361,11 @@ class PreciseWENOSolution2D(WENOSolution):
 
         if self.record_actions is not None:
             if self.record_actions == "weno":
-                self.action_history.append((np.stack([left_weights, right_weights], axis=-2),
-                                                np.stack([down_weights, up_weights], axis=-1)))
+                # Changed this without testing, was the original version right?
+                #self.action_history.append((np.stack([left_weights, right_weights], axis=-2),
+                                                #np.stack([down_weights, up_weights], axis=-1)))
+                self.action_history.append((np.stack([left_weights, right_weights], axis=2),
+                                                np.stack([down_weights, up_weights], axis=2)))
             elif self.record_actions == "coef":
                 raise NotImplementedError()
                 # This corresponds to e.g. SplitFluxBurgersEnv.

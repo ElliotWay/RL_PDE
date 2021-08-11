@@ -9,6 +9,7 @@ from envs.weno_solution import tf_lf_flux_split, tf_weno_sub_stencils
 from envs.weno_solution import WENOSolution
 from util.softmax_box import SoftmaxBox
 from util.misc import create_stencil_indexes
+from util.misc import AxisSlice
 
 
 class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
@@ -32,7 +33,7 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
                 # num x interfaces X num y cells X (+,-) X stencil size
                 shape=(num_x + 1, num_y, 2, 2*self.state_order-1),
                 dtype=np.float64)
-        y_rl_state = SoftmaxBox(low=-1e7, high=1e7,
+        y_rl_state = spaces.Box(low=-1e7, high=1e7,
                 shape=(num_x, num_y + 1, 2, 2*self.state_order-1),
                 dtype=np.float64)
         self.observation_space = spaces.Tuple((x_rl_state, y_rl_state))
@@ -180,13 +181,13 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
 
         horizontal_stencils, vertical_stencils = rl_state
         left_stencils = horizontal_stencils[:, :, 0]
-        right_stencils = horiztonal_stencils[:, :, 1]
+        right_stencils = horizontal_stencils[:, :, 1]
         down_stencils = vertical_stencils[:, :, 0]
         up_stencils = vertical_stencils[:, :, 1]
 
         horizontal_weights, vertical_weights = rl_action
         left_weights = horizontal_weights[:, :, 0]
-        right_weights = horiztonal_weights[:, :, 1]
+        right_weights = horizontal_weights[:, :, 1]
         down_weights = vertical_weights[:, :, 0]
         up_weights = vertical_weights[:, :, 1]
 
@@ -199,7 +200,7 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
         up_reconstructed = tf.reduce_sum(up_weights
                                 * tf.weno_sub_stencils(up_stencils, self.weno_order), axis=-1)
 
-        horiztonal_flux_reconstructed = left_reconstructed + right_reconstructed
+        horizontal_flux_reconstructed = left_reconstructed + right_reconstructed
         vertical_flux_reconstructed = down_reconstructed + up_reconstructed
 
         cell_size_x, cell_size_y = self.grid.cell_size
@@ -220,5 +221,149 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
 
         new_state = real_state + step
         return new_state
+
+    @tf.function
+    def tf_calculate_reward(self, args):
+        real_state, rl_state, rl_action, next_real_state = args
+        # Note that real_state and next_real_state do not include ghost cells, but rl_state does.
+
+        horizontal_stencils, vertical_stencils = rl_state
+        left_stencils = horizontal_stencils[:, :, 0]
+        right_stencils = horizontal_stencils[:, :, 1]
+        down_stencils = vertical_stencils[:, :, 0]
+        up_stencils = vertical_stencils[:, :, 1]
+
+        left_weights = tf_weno_weights(left_stencils, self.order)
+        right_weights = tf_weno_weights(right_stencils, self.weno_order)
+        horizontal_weno_weights = tf.stack([left_weights, right_weights], axis=2)
+        down_weights = tf_weno_weights(down_stencils, self.weno_order)
+        up_weights = tf_weno_weights(up_stencils, self.weno_order)
+        vertical_weno_weights = tf.stack([down_weights, up_weights], axis=2)
+        weno_action = (horizontal_weno_weights, vertical_weno_weights)
+
+        weno_next_real_state = self.tf_integrate((real_state, rl_state, weno_action))
+
+        # This section is adapted from AbstactScalarEnv.calculate_reward()
+        if "wenodiff" in self.reward_mode:
+            horizontal_rl_weights, vertical_rl_weights = rl_action
+
+            horizontal_action_diff = horizontal_weno_weights - horizontal_rl_weights
+            vertical_action_diff = vertical_weno_weights = horizontal_rl_weights
+
+            horizontal_diff_partially_flattened = tf.reshape(horizontal_action_diff,
+                    self.action_space[0].shape[:2] + (np.prod(self.action_space[0].shape[2:]),))
+            vertical_diff_partially_flattened = tf.reshape(vertical_action_diff,
+                    self.action_space[1].shape[:2] + (np.prod(self.action_space[1].shape[2:]),))
+
+            if "L1" in self.reward_mode:
+                error = (tf.reduce_sum(tf.abs(horizontal_diff_partially_flattened), axis=-1),
+                        tf.reduce_sum(tf.abs(vertical_diff_partially_flattened), axis=-1))
+            elif "L2" in self.reward_mode:
+                error = (tf.sqrt(tf.reduce_sum(horizontal_diff_partially_flattened**2, axis=-1)),
+                        tf.sqrt(tf.reduce_sum(vertical_diff_partially_flattened**2, axis=-1)))
+            else:
+                raise Exception("reward_mode problem")
+
+            return -error
+
+        error = weno_next_real_state - next_real_state
+
+        if "one-step" in self.reward_mode:
+            pass
+            # This version is ALWAYS one-step - the others are tricky to implement in TF.
+        elif "full" in self.reward_mode:
+            raise Exception("Reward mode 'full' invalid - only 'one-step' reward implemented"
+                " in Tensorflow functions.")
+        elif "change" in self.reward_mode:
+            raise Exception("Reward mode 'change' invalid - only 'one-step' reward implemented"
+                " in Tensorflow functions.")
+        else:
+            raise Exception("reward_mode problem")
+
+        if "clip" in self.reward_mode:
+            raise Exception("Reward clipping not implemented in Tensorflow functions.")
+
+        # TODO need to handle changes to boundary at runtime
+
+        boundary = self.grid.boundary
+        if type(boundary) is str:
+            boundary = (boundary,) * self.grid.ndim
+
+        # Average of error in two adjacent cells.
+        if "adjacent" in self.reward_mode and "avg" in self.reward_mode:
+            error = tf.abs(error)
+            
+            combined_error = []
+            for axis, bound in enumerate(boundary):
+                error_slice = AxisSlice(error, axis)
+                avg_error = (error_slice[:-1] + error_slice[1:]) / 2
+                avg_slice = AxisSlice(avg_error, axis)
+
+                # We only need to handle the boundary on this axis.
+                if bound == "outflow":
+                    # Error beyond boundaries will be identical to error at edge, so average error
+                    # at edge interfaces is just the error at the edge.
+                    combined_error.append(tf.concat([avg_slice[:1], avg_error, avg_slice[-1:]],
+                            axis=axis))
+                elif bound == "periodic":
+                    # With a periodic environment, the first and last interfaces are actually the
+                    # same interface, so they get the same error.
+                    edge_error = (avg_slice[:1] + avg_slice[-1:]) / 2
+                    combined_error.append(tf.concat([edge_error, avg_error, edge_error],
+                            axis=axis))
+                else:
+                    raise NotImplementedError()
+        # Combine error across the stencil.
+        elif "stencil" in self.reward_mode:
+            full_error = self.grid.tf_update_boundary(error, boundary=boundary)
+            combined_error = []
+            for axis, (nx, ng) in enumerate(zip(self.grid.num_cells, self.grid.num_ghosts)):
+                stencil_indexes = create_stencil_indexes(
+                        stencil_size=(self.weno_order * 2 - 1),
+                        num_stencils=(nx + 1),
+                        offset=(ng - self.weno_order))
+                stencil_slice = list(self.grid.real_slice)
+                stencil_slice[axis] = stencil_indexes
+                stencil_slice = tuple(stencil_slice)
+                error_stencils = error[stencil_slice]
+
+                if "max" in self.reward_mode:
+                    error_stencils = tf.abs(error_stencils)
+                    combined_error.append(tf.reduce_max(error_stencils, axis=(axis+1)))
+                elif "avg" in self.reward_mode:
+                    error_stencils = tf.abs(error_stencils)
+                    combined_error.append(tf.reduce_mean(error_stencils, axis=(axis+1)))
+                elif "L2" in self.reward_mode:
+                    combined_error.append(tf.sqrt(tf.reduce_sum(error_stencils**2, axis=(axis+1))))
+                elif "L1" in self.reward_mode:
+                    error_stencils = tf.abs(error_stencils)
+                    combined_error.append(tf.reduce_sum(error_stencils, axis=(axis+1)))
+                else:
+                    raise Exception("reward_mode problem")
+        else:
+            raise Exception("reward_mode problem")
+
+        # Squash reward.
+        if "nosquash" in self.reward_mode:
+            reward = tuple(-error for error in combined_error)
+        elif "logsquash" in self.reward_mode:
+            epsilon = tf.constant(1e-16)
+            reward = tuple(-tf.log(error + epsilon) for error in combined_error)
+        elif "arctansquash" in self.reward_mode:
+            if "noadjust" in self.reward_mode:
+                reward = tuple(tf.atan(-error) for error in combined_error)
+            else:
+                reward_adjustment = tf.constant(self.reward_adjustment, dtype=real_state.dtype)
+                # The constant controls the relative importance of small rewards compared to large rewards.
+                # Towards infinity, all rewards (or penalties) are equally important.
+                # Towards 0, small rewards are increasingly less important.
+                # An alternative to arctan(C*x) with this property would be x^(1/C).
+                reward = tuple(tf.atan(reward_adjustment * -error) for error in combined_error)
+        else:
+            raise Exception("reward_mode problem")
+
+        # end adaptation of calculate_reward().
+
+        return reward
 
 

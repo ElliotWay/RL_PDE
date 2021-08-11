@@ -606,6 +606,7 @@ class AbstractScalarEnv(gym.Env):
         done = False
 
         # Use difference with WENO actions instead. (Might be useful for testing.)
+        # This makes some assumptions about the subclass that may not be true.
         if "wenodiff" in self.reward_mode:
             last_action = self.action_history[-1].copy()
 
@@ -616,12 +617,28 @@ class AbstractScalarEnv(gym.Env):
                 weno_action = self.weno_solution.get_action_history()[-1].copy()
             else:
                 raise Exception("AbstractBurgersEnv: reward_mode problem")
-            action_diff = weno_action - last_action
-            action_diff = action_diff.reshape((len(action_diff), -1))
+
+            if self.grid.ndim == 1:
+                action_diff = weno_action - last_action
+                action_diff = action_diff.reshape((len(action_diff), -1))
+            else:
+                reshape_sizes = tuple(weno_sub_action.shape[:self.grid.ndim] + (-1,) for
+                        weno_sub_action in weno_action)
+                action_diff = tuple((weno_sub_action - rl_sub_action).reshape(new_size) for
+                        weno_sub_action, rl_sub_action, new_size in
+                        zip(weno_action, last_action, reshape_sizes))
             if "L1" in self.reward_mode:
-                error = np.sum(np.abs(action_diff), axis=-1)
+                if self.grid.ndim == 1:
+                    error = np.sum(np.abs(action_diff), axis=-1)
+                else:
+                    error = tuple(np.sum(np.abs(action_diff_part), axis=-1) for
+                                action_diff_part in action_diff)
             elif "L2" in self.reward_mode:
-                error = np.sqrt(np.sum(action_diff**2, axis=-1))
+                if self.grid.ndim == 1:
+                    error = np.sqrt(np.sum(action_diff**2, axis=-1))
+                else:
+                    error = tuple(np.sqrt(np.sum(action_diff_part**2, axis=-1)) for
+                                action_diff_part in action_diff)
             else:
                 raise Exception("AbstractBurgersEnv: reward_mode problem")
 
@@ -652,9 +669,17 @@ class AbstractScalarEnv(gym.Env):
         # Average of error in two adjacent cells.
         if "adjacent" in self.reward_mode and "avg" in self.reward_mode:
             #TODO This should probably trim ghosts from other axes.
-            combined_error = tuple((AxisSlice(error, axis)[ng-1:ng]
-                                + AxisSlice(error, axis)[ng:-(ng-1)]) / 2
-                                    for axis, ng in enumerate(self.grid.num_ghosts))
+            combined_error = []
+            for axis, ng in enumerate(self.grid.num_ghosts):
+                left_slice = list(self.grid.real_slice)
+                left_slice[axis] = slice(ng-1, -ng)
+                left_slice = tuple(left_slice)
+                right_slice = list(self.grid.real_slice)
+                right_slice[axis] = slice(ng, -(ng-1))
+                right_slice = tuple(right_slice)
+                
+                combined_error.append((error[left_slice] + error[right_slice]) / 2)
+
         # Combine error across the WENO stencil.
         # (NOT the state stencil i.e. self.state_order * 2 - 1, even if we are using a wide state.)
         elif "stencil" in self.reward_mode:
@@ -664,14 +689,19 @@ class AbstractScalarEnv(gym.Env):
                         stencil_size=(self.weno_order * 2 - 1),
                         num_stencils=(nx + 1),
                         offset=(ng - self.weno_order))
-                error_stencils = AxisSlice(error, axis)[stencil_indexes]
-                error_stencils = error[stencil_indexes]
+                stencil_slice = list(self.grid.real_slice)
+                stencil_slice[axis] = stencil_indexes
+                stencil_slice = tuple(stencil_slice)
+                error_stencils = error[stencil_slice]
+
+                # Indexing the stencils on axis makes axis the index for the stencil, and 
+                # inserts axis+1 the index for inside the stencil, so we reduce over axis+1.
                 if "max" in self.reward_mode:
-                    combined_error.append(np.amax(error_stencils, axis=-1))
+                    combined_error.append(np.amax(error_stencils, axis=(axis+1)))
                 elif "avg" in self.reward_mode:
-                    combined_error.append(np.mean(error_stencils, axis=-1))
+                    combined_error.append(np.mean(error_stencils, axis=(axis+1)))
                 elif "L2" in self.reward_mode:
-                    combined_error.append(np.sqrt(np.sum(error_stencils**2, axis=-1)))
+                    combined_error.append(np.sqrt(np.sum(error_stencils**2, axis=(axis+1))))
                 else:
                     raise Exception("AbstractBurgersEnv: reward_mode problem")
         else:

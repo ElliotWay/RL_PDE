@@ -440,10 +440,12 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         new_state = real_state + step
         return new_state
 
-    # TODO: modify this so less is in subclass? The reward section could go in the abstract class,
-    # but this needs to be here because of how we calculate the WENO step. Not a high priority.
-    # (And anyway, if we're refactoring, this should probably be the one canonical function instead
-    # of having TF and non-TF versions.)
+    # TODO: modify this so less is in subclass?
+    # Could put in abstract super class which calls tf_solution() to compute the weno solution,
+    # except there are differences related to ghost cells.
+    # A future change could be to put the ghost cells in the real state after all.
+    # That said, there are still key differences to how different dimensions behave.
+    # Perhaps we need separate nD classes?
     @tf.function
     def tf_calculate_reward(self, args):
         real_state, rl_state, rl_action, next_real_state = args
