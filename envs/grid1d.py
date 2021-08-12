@@ -403,6 +403,10 @@ class Euler1DGrid(GridBase):
         if self.init_type == "sod":
             if boundary is None:
                 self.boundary = "outflow"
+            if 'eos_gamma' in self.init_params:
+                eos_gamma = self.init_params['eos_gamma']
+            else:
+                eos_gamma = 1.4  # Gamma law EOS
             rho_l = 1
             rho_r = 1 / 8
             v_l = 0
@@ -411,8 +415,8 @@ class Euler1DGrid(GridBase):
             p_r = 1 / 10
             S_l = rho_l * v_l
             S_r = rho_r * v_r
-            e_l = p_l / rho_l / (self.eos_gamma - 1)
-            e_r = p_r / rho_r / (self.eos_gamma - 1)
+            e_l = p_l / rho_l / (eos_gamma - 1)
+            e_r = p_r / rho_r / (eos_gamma - 1)
             E_l = rho_l * (e_l + v_l ** 2 / 2)
             E_r = rho_r * (e_r + v_r ** 2 / 2)
             self.space[0] = np.where(self.x < 0, rho_l * np.ones_like(self.x), rho_r * np.ones_like(self.x))
@@ -422,6 +426,10 @@ class Euler1DGrid(GridBase):
         elif self.init_type == "double_rarefaction":
             if boundary is None:
                 self.boundary = "outflow"
+            if 'eos_gamma' in self.init_params:
+                eos_gamma = self.init_params['eos_gamma']
+            else:
+                eos_gamma = 1.4  # Gamma law EOS
             rho_l = 1
             rho_r = 1
             v_l = -2
@@ -430,8 +438,8 @@ class Euler1DGrid(GridBase):
             p_r = 0.4
             S_l = rho_l * v_l
             S_r = rho_r * v_r
-            e_l = p_l / rho_l / (self.eos_gamma - 1)
-            e_r = p_r / rho_r / (self.eos_gamma - 1)
+            e_l = p_l / rho_l / (eos_gamma - 1)
+            e_r = p_r / rho_r / (eos_gamma - 1)
             E_l = rho_l * (e_l + v_l ** 2 / 2)
             E_r = rho_r * (e_r + v_r ** 2 / 2)
             self.space[0] = np.where(self.x < 0,  rho_l * np.ones_like(self.x), rho_r * np.ones_like(self.x))
@@ -441,6 +449,10 @@ class Euler1DGrid(GridBase):
         elif self.init_type == "slow_shock":
             if boundary is None:
                 self.boundary = "outflow"
+            if 'eos_gamma' in self.init_params:
+                eos_gamma = self.init_params['eos_gamma']
+            else:
+                eos_gamma = 1.4  # Gamma law EOS
             rho_l = 5.6698
             rho_r = 1.0
             v_l = -1.4701
@@ -449,8 +461,8 @@ class Euler1DGrid(GridBase):
             p_r = 1.0
             S_l = rho_l * v_l
             S_r = rho_r * v_r
-            e_l = p_l / rho_l / (self.eos_gamma - 1)
-            e_r = p_r / rho_r / (self.eos_gamma - 1)
+            e_l = p_l / rho_l / (eos_gamma - 1)
+            e_r = p_r / rho_r / (eos_gamma - 1)
             E_l = rho_l * (e_l + v_l ** 2 / 2)
             E_r = rho_r * (e_r + v_r ** 2 / 2)
             self.space[0] = np.where(self.x < 0, rho_l * np.ones_like(self.x), rho_r * np.ones_like(self.x))
@@ -460,6 +472,10 @@ class Euler1DGrid(GridBase):
         elif type == "advection":
             if boundary is None:
                 self.boundary = "outflow"
+            if 'eos_gamma' in self.init_params:
+                eos_gamma = self.init_params['eos_gamma']
+            else:
+                eos_gamma = 1.4  # Gamma law EOS
             x = self.x
             rho_0 = 1e-3
             rho_1 = 1
@@ -469,7 +485,7 @@ class Euler1DGrid(GridBase):
             v = np.ones_like(x)
             p = 1e-6 * np.ones_like(x)
             S = rho * v
-            e = p / rho / (self.eos_gamma - 1)
+            e = p / rho / (eos_gamma - 1)
             E = rho * (e + v ** 2 / 2)
             self.space[0, :] = rho[:]
             self.space[1, :] = S[:]

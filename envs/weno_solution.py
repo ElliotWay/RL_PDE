@@ -161,7 +161,7 @@ class WENOSolution(SolutionBase):
 class PreciseWENOSolution2D(WENOSolution):
     def __init__(self, base_grid, init_params,
             precise_order, precise_scale,
-            flux_function,
+            flux_function, eqn_type='burgers',
             vec_len=1, nu=0.0, source=None,
             record_state=False, record_actions=None):
         super().__init__(base_grid.num_cells, base_grid.num_ghosts,
@@ -195,7 +195,7 @@ class PreciseWENOSolution2D(WENOSolution):
         self.precise_grid = create_grid(len(self.precise_num_cells),
                 self.precise_num_cells, self.precise_num_ghosts,
                 base_grid.min_value, base_grid.max_value,
-                init_type=self.init_type, boundary=self.boundary)  # TODO: eqn_type missing here? -yiwei
+                init_type=self.init_type, boundary=self.boundary, eqn_type=eqn_type)
 
         self.flux_function = flux_function
         self.nu = nu
@@ -391,7 +391,7 @@ class PreciseWENOSolution(WENOSolution):
 
     def __init__(self,
                  base_grid, init_params,
-                 precise_order, precise_scale, flux_function,
+                 precise_order, precise_scale, flux_function, eqn_type='burgers',
                  vec_len=1, nu=0.0, source=None,
                  record_state=False, record_actions=None):
         super().__init__(base_grid.num_cells, base_grid.num_ghosts,
@@ -418,8 +418,10 @@ class PreciseWENOSolution(WENOSolution):
         else:
             self.init_type = None
 
-        self.precise_grid = Burgers1DGrid(self.precise_nx, self.precise_ng, base_grid.xmin, base_grid.xmax,
-                                          boundary=self.boundary, init_type=self.init_type)
+        self.precise_grid = create_grid(self.ndim,
+                self.precise_nx, self.precise_ng,
+                base_grid.min_value, base_grid.max_value,
+                init_type=self.init_type, boundary=self.boundary, eqn_type=eqn_type)
 
         self.flux_function = flux_function
         self.nu = nu

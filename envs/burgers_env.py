@@ -194,14 +194,14 @@ class AbstractBurgersEnv(AbstractScalarEnv):
                             'boundary':self.grid.boundary},
                         precise_scale=1, precise_order=self.weno_order,
                         flux_function=self.burgers_flux, source=self.source,
-                        nu=nu, vec_len=1)
+                        nu=nu, eqn_type='burgers', vec_len=1)
             elif self.grid.ndim == 2:
                 self.weno_solution = PreciseWENOSolution2D(
                         self.grid, {'init_type':self.grid.init_type,
                             'boundary':self.grid.boundary},
                         precise_scale=1, precise_order=self.weno_order,
                         flux_function=self.burgers_flux, source=self.source,
-                        nu=nu, vec_len=1)
+                        nu=nu, eqn_type='burgers', vec_len=1)
 
             if memoize:
                 self.weno_solution = MemoizedSolution(self.weno_solution, self.episode_length, vec_len=1)
@@ -343,7 +343,6 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
             left_ghost = tf.fill(ghost_size, state[0, 0])
             right_ghost = tf.fill(ghost_size, state[0, -1])
             full_state = tf.concat([left_ghost, state[0], right_ghost], axis=0)
-            # TODO: this needs to be changed for Euler, now only taking 0th dim for backward compatibility -yiwei
         elif self.grid.boundary == "periodic":
             left_ghost = state[0, -ghost_size[0]:]
             right_ghost = state[0, :ghost_size[0]]
@@ -506,7 +505,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
             return -error
 
         error = weno_next_real_state - next_real_state
-        error = tf.reduce_sum(error, axis=0)  # check if this works for vector length -yiwei
+        error = tf.reduce_sum(error, axis=0)
 
         if "one-step" in self.reward_mode:
             pass
