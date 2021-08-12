@@ -108,10 +108,12 @@ class GlobalBackpropModel(GlobalModel):
             self.actions = actions
             self.rewards = rewards
 
-            assert len(self.rewards.shape) == 3
+            assert len(self.rewards[0].shape) == 2 + env.dimensions
             # Sum over the timesteps in the trajectory (axis 0),
-            # then average over each location and the batch (axes 2 and 1).
-            self.loss = -tf.reduce_mean(tf.reduce_sum(rewards, axis=0))
+            # then average over the batch and each location and the batch (axes 1 and the rest).
+            # Also average over each reward part (e.g. each dimension).
+            self.loss = -tf.reduce_mean([tf.reduce_mean(tf.reduce_sum(reward_part, axis=0)) for
+                                            reward_part in self.rewards])
 
             gradients = tf.gradients(self.loss, self.policy_params)
             self.grads = list(zip(gradients, self.policy_params))
@@ -210,16 +212,24 @@ class GlobalBackpropModel(GlobalModel):
                 #raise Exception("All timesteps NaN. Stopping")
 
             num_samples = 1
-            ep_length = actions.shape[0]
-            num_inits = actions.shape[1]
-            spatial_width = actions.shape[2]
-            sample_rewards = np.sum(rewards[:, np.random.randint(num_inits, size=num_samples),
-                np.random.randint(spatial_width, size=num_samples)], axis=0)
+            ep_length = states.shape[0]
+            num_inits = states.shape[1]
+            ndims = len(states.shape[2:])
+
+            random_reward_part = rewards[random.randint(len(rewards))]
+            reward_spatial_dims = random_reward_part.shape[2:]
+            random_reward_indexes = ([slice(None), np.random.randint(num_inits, size=num_samples)]
+                        + [np.random.randint(nx, size=num_samples) for nx in reward_spatial_dims])
+            sample_rewards = np.sum(random_reward_part[random_reward_indexes], axis=0)
             for i, reward in enumerate(sample_rewards):
                 extra_info["sample_r"+str(i+1)] = reward
-            sample_actions = actions[np.random.randint(ep_length, size=num_samples),
-                    np.random.randint(num_inits, size=num_samples),
-                    np.random.randint(spatial_width, size=num_samples)]
+
+            random_action_part = actions[random.randint(len(actions))]
+            action_spatial_dims = random_action_part.shape[2:]
+            random_action_indexes = ([np.random.randint(ep_length, size=num_samples,
+                        np.random.randint(num_inits, size=num_samples)]
+                        + [np.random.randint(nx, size=num_samples) for nx in action_spatial_dims])
+            sample_actions = random_action_part[random_action_indexes]
             for i, action in enumerate(sample_actions):
                 csv_string = '"'+(np.array2string(action, separator=',', precision=3)
                                     .replace('\n', '').replace(' ', '')) + '"'
@@ -232,26 +242,31 @@ class GlobalBackpropModel(GlobalModel):
                     self.env.plot_state_evolution(state_history=state_history,
                             no_true=True, suffix=suffix)
 
-            if np.isnan(actions).any():
+            action_nan = reward_nan = state_nan = False
+            if any(np.isnan(action_part).any() for action_part in actions):
                 print("NaN in actions during training")
-                print("action shape", actions.shape)
-                print("timesteps with NaN:", np.isnan(actions).any(axis=(1,2,3,4)))
+                print("action shape", tuple(action_part.shape for actionpart in actions))
+                # These won't work in ND.
+                #print("timesteps with NaN:", np.isnan(actions).any(axis=(1,2,3,4)))
                 #print("episodes with NaN:", np.isnan(actions).any(axis=(0,2,3,4)))
                 #print("locations with NaN:", np.isnan(actions).any(axis=(0,1,3,4)))
-                print(actions[:27, 0, 65])
-            if np.isnan(rewards).any():
+                #print(actions[:27, 0, 65])
+                action_nan = True
+            if any(np.isnan(reward_part).any() for reward_part in rewards):
                 print("NaN in rewards during training")
                 #print("reward shape", rewards.shape)
                 #print("timesteps with NaN:", np.isnan(rewards).any(axis=(1,2)))
                 #print("episodes with NaN:", np.isnan(rewards).any(axis=(0,2)))
                 #print("locations with NaN:", np.isnan(rewards).any(axis=(0,1)))
+                reward_nan = True
             if np.isnan(states).any():
                 print("NaN in states during training")
                 #print("state shape", states.shape)
                 #print("timesteps with NaN:", np.isnan(states).any(axis=(1,2)))
                 #print("episodes with NaN:", np.isnan(states).any(axis=(0,2)))
                 #print("locations with NaN:", np.isnan(states).any(axis=(0,1)))
-            if np.isnan(states).any() or np.isnan(actions).any() or np.isnan(states).any():
+                state_nan = True
+            if (reward_nan or action_nan or state_nan):
                 print("NaNs detected this round :(")
                 raise Exception()
             #else:
@@ -385,9 +400,15 @@ class IntegrateRNN(Layer):
         super().build(input_size)
 
     def call(self, initial_state, num_steps):
-        states_ta = tf.TensorArray(dtype=self.dtype, size=num_steps)
-        actions_ta = tf.TensorArray(dtype=self.dtype, size=num_steps)
-        rewards_ta = tf.TensorArray(dtype=self.dtype, size=num_steps)
+        dimensions = initial_state.ndims - 1
+
+        real_states_ta = tf.TensorArray(dtype=self.dtype, size=num_steps)
+        #states_ta = tuple(tf.TensorArray(dtype=self.dtype, size=num_steps) for _ in
+                #range(dimensions))
+        actions_ta = tuple(tf.TensorArray(dtype=self.dtype, size=num_steps) for _ in
+                range(dimensions))
+        rewards_ta = tuple(tf.TensorArray(dtype=self.dtype, size=num_steps) for _ in
+                range(dimensions))
 
         def condition_fn(time, *_):
             return time < num_steps
@@ -398,27 +419,32 @@ class IntegrateRNN(Layer):
             # Overwriting the TensorArrays is necessary to keep connections
             # through the entire network graph.
             states_ta = states_ta.write(time, next_state)
-            actions_ta = actions_ta.write(time, next_action)
-            rewards_ta = rewards_ta.write(time, next_reward)
+            #states_ta = tuple(sub_state_ta.write(time, sub_state) for
+                    #sub_state_ta, sub_state in zip(states_ta, next_state))
+            actions_ta = tuple(sub_action_ta.write(time, sub_action) for
+                    sub_action_ta, sub_action in zip(actions_ta, next_action))
+            rewards_ta = tuple(sub_reward_ta.write(time, sub_reward) for 
+                    sub_reward_ta, sub_reward in zip(rewards_ta, next_reward))
 
             return (time + 1, states_ta, actions_ta, rewards_ta, next_state)
 
         initial_time = tf.constant(0, dtype=tf.int32)
 
-        _time, states_ta, actions_ta, rewards_ta, final_state = tf.while_loop(
+        _time, real_states_ta, actions_ta, rewards_ta, final_state = tf.while_loop(
                 cond=condition_fn,
                 body=loop_fn,
-                loop_vars=(initial_time, states_ta, actions_ta, rewards_ta, initial_state),
+                loop_vars=(initial_time, real_states_ta, actions_ta, rewards_ta, initial_state),
                 parallel_iterations=10, # Iterations of the loop to run in parallel?
                                         # I'm not sure how that works.
                                         # 10 is the default value. Keras backend uses 32.
                 swap_memory=self.swap_to_cpu,
                 return_same_structure=True)
 
-        states = states_ta.stack()
-        actions = actions_ta.stack()
-        rewards = rewards_ta.stack()
-        return states, actions, rewards
+        real_states = real_states_ta.stack()
+        #states = tuple(sub_state_ta.stack() for sub_state_ta in states_ta)
+        actions = tuple(sub_action_ta.stack() for sub_action_ta in actions_ta)
+        rewards = tuple(sub_reward_ta.stack() for sub_reward_ta in rewards_ta)
+        return real_states, actions, rewards
 
 
 class IntegrateCell(Layer):
@@ -438,28 +464,42 @@ class IntegrateCell(Layer):
         # (Batch shape may be unknown, other axes should be known.)
 
         real_state = state
+        dimensions = real_state.ndims - 1
+
         # Use tf.map_fn to apply function across every element in the batch.
-        rl_state = tf.map_fn(self.prep_state_fn, real_state, name='map_prep_state')
+        tuple_type = (real_state.dtype,) * dimensions
+        rl_state = tf.map_fn(self.prep_state_fn, real_state, dtype=tuple_type,
+                                name='map_prep_state')
 
-        # The policy expects a batch so we don't need to use tf.map_fn;
-        # however, it expects batches of INDIVIDUAL states, not every location at once, so we need
-        # to combine the batch and location axes first (and then reshape the actions back).
-        rl_state_shape = rl_state.shape.as_list()
-        new_state_shape = [-1,] + rl_state_shape[2:]
-        reshaped_state = tf.reshape(rl_state, new_state_shape)
+        rl_action = []
+        for rl_state_part in rl_state:
+            # The policy expects a batch so we don't need to use tf.map_fn;
+            # however, it expects batches of INDIVIDUAL states, not every location at once, so we need
+            # to combine the batch and location axes first (and then reshape the actions back).
+            rl_state_shape = rl_state_part.shape.as_list()
+            new_state_shape = [-1,] + rl_state_shape[dimensions + 1:]
+            reshaped_state = tf.reshape(rl_state, new_state_shape)
 
-        shaped_action = self.policy_net(reshaped_state)
+            # Future note: this works to apply a 1D agent along each dimension.
+            # However, if we want an agent that makes use of a 2D stencil, we'll need a different
+            # implementation of IntegrateCell that somehow combines multiple stencils at each
+            # location. (Or rather, something that can handle a prep_state function that does
+            # that.)
 
-        shaped_action_shape = shaped_action.shape.as_list()
-        rl_action_shape = [-1, rl_state_shape[1]] + shaped_action_shape[1:]
-        rl_action = tf.reshape(shaped_action, rl_action_shape)
+            shaped_action = self.policy_net(reshaped_state)
+
+            shaped_action_shape = shaped_action.shape.as_list()
+            rl_action_shape = rl_state_shape[:dimensions + 1] + shaped_action_shape[1:]
+            rl_action_part = tf.reshape(shaped_action, rl_action_shape)
+            rl_action.append(rl_action_part)
+        rl_action = tuple(rl_action)
 
         next_real_state = tf.map_fn(self.integrate_fn, (real_state, rl_state, rl_action),
                 dtype=real_state.dtype, # Specify dtype because different from input (not a tuple).
                 name='map_integrate')
 
         rl_reward = tf.map_fn(self.reward_fn, (real_state, rl_state, rl_action, next_real_state),
-                dtype=real_state.dtype,
+                dtype=tuple_type,
                 name='map_reward')
 
         return rl_action, rl_reward, next_real_state

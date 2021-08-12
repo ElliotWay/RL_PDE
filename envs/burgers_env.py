@@ -280,11 +280,15 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         # Stack on dim 1 to keep location dim 0.
         rl_state = tf.stack([plus_stencils, minus_stencils], axis=1)
 
-        return rl_state
+        #return rl_state
+        return (rl_state,) # Singleton because this is 1D.
 
     @tf.function
     def tf_integrate(self, args):
         real_state, rl_state, rl_action = args
+
+        rl_state = rl_state[0] # Extract 1st (and only) dimension.
+        rl_action = rl_action[0]
 
         # Note that real_state does not contain ghost cells here, but rl_state DOES (and rl_action has
         # weights corresponding to the ghost cells).
@@ -326,6 +330,9 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
     def tf_calculate_reward(self, args):
         real_state, rl_state, rl_action, next_real_state = args
         # Note that real_state and next_real_state do not include ghost cells, but rl_state does.
+
+        rl_state = rl_state[0] # Extract 1st (and only) dimension.
+        rl_action = rl_action[0]
 
         fp_stencils = rl_state[:, 0]
         fm_stencils = rl_state[:, 1]
@@ -442,7 +449,8 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
 
         # end adaptation of calculate_reward().
 
-        return reward
+        #return reward
+        return (reward,) # Singleton because this is 1D.
 
 class DiscreteWENOBurgersEnv(WENOBurgersEnv):
     def __init__(self, actions_per_dim=2, *args, **kwargs):
