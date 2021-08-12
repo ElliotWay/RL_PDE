@@ -460,13 +460,16 @@ class PreciseWENOSolution(WENOSolution):
         order = self.order
         a = weno_coefficients.a_all[order]
         num_points = q.shape[1] - 2 * order  # len(q) changed to q.shape[1] for new 0-th dimension vec state
-        q_stencils = np.zeros((order, q.shape[1]))  # q changed here
-        for i in range(order, num_points + order):
-            for k in range(order):
-                for l in range(order):
-                    q_stencils[k, i] += a[k, l] * q[0, i + k - l]  # q changed here
+        q_stencils_all = []
+        for nv in range(q.shape[0]):
+            q_stencils = np.zeros((order, q.shape[1]))
+            for i in range(order, num_points + order):
+                for k in range(order):
+                    for l in range(order):
+                        q_stencils[k, i] += a[k, l] * q[nv, i + k - l]
+            q_stencils_all.append(q_stencils)
 
-        return q_stencils
+        return np.array(q_stencils_all)
 
     def weno_weights(self, q):
         """
@@ -487,20 +490,24 @@ class PreciseWENOSolution(WENOSolution):
         sigma = weno_coefficients.sigma_all[order]
 
         beta = np.zeros((order, q.shape[1]))
-        # TODO: temp changes, 0-th dimension is now vec length, probably need to change here -yiwei
         w = np.zeros_like(beta)
-        num_points = q.shape[1] - 2 * order  # Changed here
+        num_points = q.shape[1] - 2 * order
         epsilon = 1e-16
-        for i in range(order, num_points + order):
-            alpha = np.zeros(order)
-            for k in range(order):
-                for l in range(order):
-                    for m in range(l + 1):
-                        beta[k, i] += sigma[k, l, m] * q[0, i + k - l] * q[0, i + k - m]  # Changed here
-                alpha[k] = C[k] / (epsilon + beta[k, i] ** 2)
-            w[:, i] = alpha / np.sum(alpha)
+        w_all = []
+        for nv in range(q.shape[0]):
+            for i in range(order, num_points + order):
+                alpha = np.zeros(order)
+                for k in range(order):
+                    for l in range(order):
+                        for m in range(l + 1):
+                            beta[k, i] += sigma[k, l, m] * q[nv, i + k - l] * q[nv, i + k - m]
+                    alpha[k] = C[k] / (epsilon + beta[k, i] ** 2)
+                    # TODO: why the reconstruction is different than below Euler implementation? Double check. -yiwei
+                    # https://github.com/python-hydro/hydro_examples/blob/master/compressible/weno_euler.py#L97
+                w[:, i] = alpha / np.sum(alpha)
+            w_all.append(w)
 
-        return w
+        return np.array(w_all)
 
     def weno_new(self, q):
         """
@@ -521,9 +528,10 @@ class PreciseWENOSolution(WENOSolution):
         weights = self.weno_weights(q)
         q_stencils = self.weno_stencils(q)
         qL = np.zeros_like(q)
-        num_points = q.shape[1] - 2 * self.order  # changed here len(q) -> q.shape[1]
-        for i in range(self.order, num_points + self.order):
-            qL[0, i] = np.dot(weights[:, i], q_stencils[:, i])  # TODO: modify to accomodate vec state -yiwei
+        num_points = q.shape[1] - 2 * self.order
+        for nv in range(q.shape[0]):
+            for i in range(self.order, num_points + self.order):
+                qL[nv, i] = np.dot(weights[nv, :, i], q_stencils[nv, :, i])
         return qL, weights
 
     def rk_substep(self):
@@ -557,10 +565,14 @@ class PreciseWENOSolution(WENOSolution):
         # TODO: use weno_reconstruct_nd(). Currently doesn't seem to work with 1D Env, ask Elliot. -yiwei
 
         if self.record_actions is not None:
-            action_weights = np.stack((fp_weights[:, self.ng-1:-(self.ng-1)], fm_weights[:, -(self.ng+1):self.ng-2:-1]))
-            # resulting array is (fp, fm) X stencil X location
-            # transpose to location X (fp, fm) X stencil
-            action_weights = action_weights.transpose((2, 0, 1))
+            action_weights = []
+            for nv in range(g.space.shape[0]):
+                action_weights_scalar = np.stack((fp_weights[nv, :, self.ng-1:-(self.ng-1)],
+                                                  fm_weights[nv, :, -(self.ng+1):self.ng-2:-1]))
+                # resulting array is (fp, fm) X stencil X location
+                # transpose to location X (fp, fm) X stencil
+                action_weights.append(action_weights_scalar.transpose((2, 0, 1)))
+            action_weights = np.array(action_weights)
 
             if self.record_actions == "weno":
                 self.action_history.append(action_weights)
