@@ -5,7 +5,7 @@ from gym import spaces
 from envs.burgers_env import AbstractBurgersEnv
 from envs.plottable_env import Plottable2DEnv
 from envs.weno_solution import lf_flux_split_nd, weno_sub_stencils_nd
-from envs.weno_solution import tf_lf_flux_split, tf_weno_sub_stencils
+from envs.weno_solution import tf_lf_flux_split, tf_weno_sub_stencils, tf_weno_weights
 from envs.weno_solution import WENOSolution
 from util.softmax_box import SoftmaxBox
 from util.misc import create_stencil_indexes

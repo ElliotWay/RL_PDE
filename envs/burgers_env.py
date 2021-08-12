@@ -6,82 +6,13 @@ from gym import spaces
 from envs.abstract_scalar_env import AbstractScalarEnv
 from envs.plottable_env import Plottable1DEnv
 from envs.weno_solution import WENOSolution, PreciseWENOSolution, PreciseWENOSolution2D
+from envs.weno_solution import lf_flux_split_nd, weno_sub_stencils_nd
+from envs.weno_solution import tf_lf_flux_split, tf_weno_sub_stencils, tf_weno_weights
 from envs.solutions import AnalyticalSolution
 from envs.solutions import MemoizedSolution, OneStepSolution
 import envs.weno_coefficients as weno_coefficients
 from util.softmax_box import SoftmaxBox
 from util.misc import create_stencil_indexes
-
-#TODO Have a common declaration for these - in weno_solution.py perhaps?
-# Used in step function to extract all the stencils.
-def weno_i_stencils_batch(order, q_batch):
-    """
-    Take a batch of of stencils and approximate the target value in each sub-stencil.
-    That is, for each stencil, approximate the target value multiple times using polynomial interpolation
-    for different subsets of the stencil.
-    This function relies on external coefficients for the polynomial interpolation.
-  
-    Parameters
-    ----------
-    order : int
-      WENO sub-stencil width.
-    q_batch : numpy array
-      stencils for each location, shape is [grid_width+1, stencil_width].
-  
-    Returns
-    -------
-    Return a batch of stencils of shape [grid_width+1, number of sub-stencils (order)].
-  
-    """
-
-    a_mat = weno_coefficients.a_all[order]
-
-    # These weights are "backwards" in the original formulation.
-    # This is easier in the original formulation because we can add the k for our kth stencil to the index,
-    # then subtract by a variable amount to get each value, but there's no need to do that here, and flipping
-    # it back around makes the expression simpler.
-    a_mat = np.flip(a_mat, axis=-1)
-
-    stencil_indexes = create_stencil_indexes(stencil_size=order, num_stencils=order)
-
-    stencils = np.sum(a_mat * q_batch[:, stencil_indexes], axis=-1)
-
-    return stencils
-
-# Used in step to calculate actual weights to compare learned and weno weights.
-def weno_weights_batch(order, q_batch):
-    """
-    Compute WENO weights
-
-    Parameters
-    ----------
-    order : int
-      The stencil width.
-    q : np array
-      Batch of flux stencils ((nx+1) X (2*order-1))
-
-    Returns
-    -------
-    stencil weights ((nx+1) X (order))
-
-    """
-    C = weno_coefficients.C_all[order]
-    sigma = weno_coefficients.sigma_all[order]
-
-    num_points = q_batch.shape[0]
-    beta = np.zeros((num_points, order))
-    w = np.zeros_like(beta)
-    epsilon = 1e-16
-    for i in range(num_points):
-        alpha = np.zeros(order)
-        for k in range(order):
-            for l in range(order):
-                for m in range(l + 1):
-                    beta[i, k] += sigma[k, l, m] * q_batch[i][(order - 1) + k - l] * q_batch[i][(order - 1) + k - m]
-            alpha[k] = C[k] / (epsilon + beta[i, k] ** 2)
-        w[i, :] = alpha / np.sum(alpha)
-
-    return w
 
 class AbstractBurgersEnv(AbstractScalarEnv):
     """
@@ -268,29 +199,18 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
             Example: order =3, grid = 128
   
         """
-        # get the solution data
-        g = self.grid
-
         # compute flux at each point
-        f = self.burgers_flux(g.u)
+        u_values = self.grid.get_full()
+        flux = self.burgers_flux(u_values)
 
-        # get maximum velocity
-        alpha = np.max(abs(g.u))
-
-        # Lax Friedrichs Flux Splitting
-        fp = (f + alpha * g.u) / 2
-        fm = (f - alpha * g.u) / 2
+        fm, fp = lf_flux_split_nd(flux, u_values)
 
         fp_stencil_indexes = create_stencil_indexes(stencil_size=self.state_order * 2 - 1,
-                                                    num_stencils=g.real_length() + 1,
-                                                    offset=g.ng - self.state_order)
-        fm_stencil_indexes = fp_stencil_indexes + 1
-
+                                                    num_stencils=self.grid.real_length() + 1,
+                                                    offset=self.grid.ng - self.state_order)
+        fm_stencil_indexes = np.flip(fp_stencil_indexes, axis=-1) + 1
         fp_stencils = fp[fp_stencil_indexes]
         fm_stencils = fm[fm_stencil_indexes]
-
-        # Flip fm stencils. Not sure how I missed this originally?
-        fm_stencils = np.flip(fm_stencils, axis=-1)
 
         # Stack fp and fm on axis 1 so grid position is still axis 0.
         state = np.stack([fp_stencils, fm_stencils], axis=1)
@@ -310,8 +230,8 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         #TODO state_order != weno_order has never worked well.
         # Is this why? Should this be state order? Or possibly it should be weno order but we still
         # need to compensate for a larger state order somehow?
-        fp_stencils = weno_i_stencils_batch(self.weno_order, fp_state)
-        fm_stencils = weno_i_stencils_batch(self.weno_order, fm_state)
+        fp_stencils = weno_sub_stencils_nd(fp_state, self.weno_order)
+        fm_stencils = weno_sub_stencils_nd(fm_state, self.weno_order)
 
         fp_weights = weights[:, 0, :]
         fm_weights = weights[:, 1, :]
@@ -333,34 +253,16 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         # that can spill beyond the boundary, so we need to add ghost cells to create the rl_state.
 
         # TODO: get boundary from initial condition, somehow, as diff inits have diff bounds
-        #  Would need to use tf.cond so graph can handle different boundaries at runtime.
-        ghost_size = tf.constant(self.ng, shape=(1,))
-        if self.grid.boundary == "outflow":
-            # This implementation assumes that state is a 1-D Tensor of scalars.
-            # In the future, if we expand to multiple dimensions, then it won't be, so this will need
-            # to be changed (probably use tf.tile instead).
-            # Not 100% sure tf.fill can be used this way.
-            left_ghost = tf.fill(ghost_size, state[0])
-            right_ghost = tf.fill(ghost_size, state[-1])
-            full_state = tf.concat([left_ghost, state, right_ghost], axis=0)
-        elif self.grid.boundary == "periodic":
-            left_ghost = state[-ghost_size[0]:]
-            right_ghost = state[:ghost_size[0]]
-            full_state = tf.concat([left_ghost, state, right_ghost], axis=0)
-        else:
-            raise NotImplementedError("{} boundary not implemented.".format(self.grid.boundary))
+        boundary = self.grid.boundary
+        full_state = self.grid.tf_update_boundary(state, boundary)
 
         # Compute flux. Burgers specific!!!
         flux = 0.5 * (full_state ** 2)
 
-        alpha = tf.reduce_max(tf.abs(flux))
+        flux_minus, flux_plus = tf_lf_flux_split(flux, full_state)
 
-        flux_plus = (flux + alpha * full_state) / 2
-        flux_minus = (flux - alpha * full_state) / 2
-
-        #TODO Could change things to use traditional convolutions instead.
-        # Maybe if this whole thing actually works.
-
+        #TODO Could change things to use traditional convolutions instead of going through these
+        # stencil indexes to do the same thing.
         plus_indexes = create_stencil_indexes(
                         stencil_size=self.state_order * 2 - 1,
                         num_stencils=self.nx + 1,
@@ -369,8 +271,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
                         #stencil_size=(self.weno_order * 2 - 1),
                         #num_stencils=(self.nx + 1),
                         #offset=(self.ng - self.weno_order))
-        minus_indexes = plus_indexes + 1
-        minus_indexes = np.flip(minus_indexes, axis=-1)
+        minus_indexes = np.flip(plus_indexes, axis=-1) + 1
 
         plus_stencils = tf.gather(flux_plus, plus_indexes)
         minus_stencils = tf.gather(flux_minus, minus_indexes)
@@ -390,26 +291,13 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
 
         plus_stencils = rl_state[:, 0]
         minus_stencils = rl_state[:, 1]
-
-        # This block corresponds to envs/weno_solution.py#weno_sub_stencils_nd().
-        a_mat = weno_coefficients.a_all[self.weno_order]
-        a_mat = np.flip(a_mat, axis=-1)
-        a_mat = tf.constant(a_mat, dtype=rl_state.dtype)
-        sub_stencil_indexes = create_stencil_indexes(stencil_size=self.weno_order,
-                num_stencils=self.weno_order)
-        # Here axis 0 is location/batch and axis 1 is stencil,
-        # so to index substencils we gather on axis 1.
-        plus_sub_stencils = tf.gather(plus_stencils, sub_stencil_indexes, axis=1)
-        minus_sub_stencils = tf.gather(minus_stencils, sub_stencil_indexes, axis=1)
-        plus_interpolated = tf.reduce_sum(a_mat * plus_sub_stencils, axis=-1)
-        minus_interpolated = tf.reduce_sum(a_mat * minus_sub_stencils, axis=-1)
-
         plus_action = rl_action[:, 0]
         minus_action = rl_action[:, 1]
 
-        fpr = tf.reduce_sum(plus_action * plus_interpolated, axis=-1)
-        fml = tf.reduce_sum(minus_action * minus_interpolated, axis=-1)
-
+        fpr = tf.reduce_sum(plus_action * tf_weno_sub_stencils(plus_stencils, self.weno_order),
+                                axis=-1)
+        fml = tf.reduce_sum(minus_action * tf_weno_sub_stencils(minus_stencils, self.weno_order),
+                                axis=-1)
         reconstructed_flux = fpr + fml
 
         derivative_u_t = (reconstructed_flux[:-1] - reconstructed_flux[1:]) / self.grid.dx
@@ -419,19 +307,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         step = self.dt * derivative_u_t
 
         if self.nu != 0.0:
-            # Compute the Laplacian. This involves the first ghost cell past the boundary.
-            central_lap = (real_state[:-2] - 2.0*real_state[1:-1] + real_state[2:]) / (self.grid.dx**2)
-            if self.grid.boundary == "outflow":
-                left_lap = (-real_state[0] + real_state[1]) / (self.grid.dx**2) # X-2X+Y = -X+Y
-                right_lap = (real_state[-2] - real_state[-1]) / (self.grid.dx**2) # X-2Y+Y = X-Y
-            elif self.grid.boundary == "periodic":
-                left_lap = (real_state[-1] - 2.0*real_state[0] + real_state[1]) / (self.grid.dx**2)
-                right_lap = (real_state[-2] - 2.0*real_state[-1] + real_state[0]) / (self.grid.dx**2)
-            else:
-                raise NotImplementedError()
-            lap = tf.concat([[left_lap], central_lap, [right_lap]], axis=0)
-
-            step += self.dt * self.nu * lap
+            step += self.dt * self.nu * self.grid.tf_laplacian(real_state)
         #TODO implement random source?
         if self.source != None:
             raise NotImplementedError("External source has not been implemented"
@@ -451,41 +327,12 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         real_state, rl_state, rl_action, next_real_state = args
         # Note that real_state and next_real_state do not include ghost cells, but rl_state does.
 
-        # This section corresponds to envs/weno_solution.py#weno_weights_nd().
-        C_values = weno_coefficients.C_all[self.weno_order]
-        C_values = tf.constant(C_values, dtype=real_state.dtype)
-        sigma_mat = weno_coefficients.sigma_all[self.weno_order]
-        sigma_mat = tf.constant(sigma_mat, dtype=real_state.dtype)
-
         fp_stencils = rl_state[:, 0]
         fm_stencils = rl_state[:, 1]
 
-        sub_stencil_indexes = create_stencil_indexes(stencil_size=self.weno_order,
-                num_stencils=self.weno_order)
-
-        # Here axis 0 is location/batch and axis 1 is stencil,
-        # so to index substencils we gather on axis 1.
-        # Reverse because the constants expect that ordering (see weno_weights_nd()).
-        sub_stencils_fp = tf.reverse(tf.gather(fp_stencils, sub_stencil_indexes, axis=1),
-                axis=(-1,)) # For some reason, axis MUST be iterable, can't be scalar -1.
-        sub_stencils_fm = tf.reverse(tf.gather(fm_stencils, sub_stencil_indexes, axis=1),
-                axis=(-1,))
-
-        q_squared_fp = sub_stencils_fp[:, :, None, :] * sub_stencils_fp[:, :, :, None]
-        q_squared_fm = sub_stencils_fm[:, :, None, :] * sub_stencils_fm[:, :, :, None]
-
-        beta_fp = tf.reduce_sum(sigma_mat * q_squared_fp, axis=(-2, -1))
-        beta_fm = tf.reduce_sum(sigma_mat * q_squared_fm, axis=(-2, -1))
-
-        epsilon = tf.constant(1e-16, dtype=tf.float64)
-        alpha_fp = C_values / (epsilon + beta_fp ** 2)
-        alpha_fm = C_values / (epsilon + beta_fm ** 2)
-
-        weights_fp = alpha_fp / (tf.reduce_sum(alpha_fp, axis=-1)[:, None])
-        weights_fm = alpha_fm / (tf.reduce_sum(alpha_fm, axis=-1)[:, None])
-        weno_action = tf.stack([weights_fp, weights_fm], axis=1)
-        # end adaptation of weno_weights_nd()
-
+        fp_weights = tf_weno_weights(fp_stencils, self.weno_order)
+        fm_weights = tf_weno_weights(fm_stencils, self.weno_order)
+        weno_action = tf.stack([fp_weights, fm_weights], axis=1)
         weno_next_real_state = self.tf_integrate((real_state, rl_state, weno_action))
 
         # This section is adapted from AbstactScalarEnv.calculate_reward()

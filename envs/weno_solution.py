@@ -31,7 +31,10 @@ def lf_flux_split_nd(flux_array, values_array):
     else:
         return output
 
-@tf.function
+# Actually important that this is NOT a tf.function.
+# Something about the way it handles tuples causes problems when TF tries to optimize it.
+# Not sure what the ramifications of this are.
+#@tf.function
 def tf_lf_flux_split(flux_tensor, values_tensor):
     output = []
     abs_values = tf.abs(values_tensor)
@@ -111,7 +114,7 @@ def tf_weno_sub_stencils(stencils_tensor, order):
     a_mat = np.flip(a_mat, axis=-1)
 
     sub_stencil_indexes = create_stencil_indexes(stencil_size=order, num_stencils=order)
-    sub_stencils = tf.gather(stencils_array, sub_stencil_indexes, axis=-1)
+    sub_stencils = tf.gather(stencils_tensor, sub_stencil_indexes, axis=-1)
 
     interpolated = tf.reduce_sum(a_mat * sub_stencils, axis=-1)
     return interpolated

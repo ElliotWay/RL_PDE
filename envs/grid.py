@@ -318,6 +318,8 @@ class GridBase(AbstractGrid):
             else:
                 raise Exception("GridBase: Boundary type \"" + str(bound) + "\" not recognized.")
 
+        return filled_state
+
     def laplacian(self):
         """
         Compute the Laplacian of the current grid.
