@@ -3,7 +3,7 @@ import tensorflow as tf
 from gym import spaces
 
 import envs.weno_coefficients as weno_coefficients
-from envs.abstract_vector_env import AbstractVectorEnv
+from envs.abstract_pde_env import AbstractPDEEnv
 from envs.burgers_env import weno_i_stencils_batch
 from envs.plottable_env import Plottable1DEnv
 from envs.solutions import AnalyticalSolution
@@ -13,7 +13,7 @@ from util.misc import create_stencil_indexes
 from util.softmax_box import SoftmaxBox
 
 
-class AbstractEulerEnv(AbstractVectorEnv):
+class AbstractEulerEnv(AbstractPDEEnv):
     """
     Environment of an N-dimensional Euler equation.
 
@@ -52,7 +52,7 @@ class AbstractEulerEnv(AbstractVectorEnv):
             Keep the state identical to the solution state, while calculating rewards as if we had
             followed the RL action. Possibly useful for debugging.
         *args, **kwargs
-            The remaining arguments are passed to AbstractScalarEnv.
+            The remaining arguments are passed to AbstractPDEEnv.
         """
         super().__init__(eqn_type='euler', *args, **kwargs)
 

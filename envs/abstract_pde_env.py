@@ -11,7 +11,7 @@ from util.misc import AxisSlice
 
 #TODO adapt to vector quantities. What would need to change?
 # Will state be a tuple like the action? Or is it better to have the vector as the last dimension?
-class AbstractScalarEnv(gym.Env):
+class AbstractPDEEnv(gym.Env):
     """
     Environment modelling a scalar conservation equation of arbitrary dimensions.
 

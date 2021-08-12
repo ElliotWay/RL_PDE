@@ -9,19 +9,19 @@ from matplotlib.ticker import LinearLocator
 import numpy as np
 from stable_baselines import logger
 
-from envs.abstract_scalar_env import AbstractScalarEnv
+from envs.abstract_pde_env import AbstractPDEEnv
 from envs.solutions import OneStepSolution
 
 
 
-class Plottable1DEnv(AbstractScalarEnv):
+class Plottable1DEnv(AbstractPDEEnv):
     """
     Extension of PDE environment with plotting functions for 1D scalars.
 
     Can probably be extended to plotting vectors without too much reworking.
     Note that this is an abstract class - you can't declare a Plottable1DEnv.
     A subclass should extend this (and possibly other classes), then implement the requirements
-    of subclasses of AbstractScalarEnv.
+    of subclasses of AbstractPDEEnv.
     """
     metadata = {'render.modes': ['file']}
 
@@ -582,13 +582,13 @@ class Plottable1DEnv(AbstractScalarEnv):
         plt.close(fig)
         return filename
 
-class Plottable2DEnv(AbstractScalarEnv):
+class Plottable2DEnv(AbstractPDEEnv):
     """
     Extension of PDE environment with plotting functions for scalars in 2 dimensions.
 
     Note that this is an abstract class - you can't declare a Plottable2DEnv.
     A subclass should extend this (and possibly other classes), then implement the requirements
-    of subclasses of AbstractScalarEnv.
+    of subclasses of AbstractPDEEnv.
     """
 
     metadata = {'render.modes': ['file']}

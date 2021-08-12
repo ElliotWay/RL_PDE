@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 from gym import spaces
 
-from envs.abstract_scalar_env import AbstractScalarEnv
+from envs.abstract_pde_env import AbstractPDEEnv
 from envs.plottable_env import Plottable1DEnv
 from envs.weno_solution import WENOSolution, PreciseWENOSolution, PreciseWENOSolution2D
 from envs.solutions import AnalyticalSolution
@@ -83,7 +83,7 @@ def weno_weights_batch(order, q_batch):
 
     return w
 
-class AbstractBurgersEnv(AbstractScalarEnv):
+class AbstractBurgersEnv(AbstractPDEEnv):
     """
     Environment of an N-dimensional Burgers equation.
 
@@ -122,7 +122,7 @@ class AbstractBurgersEnv(AbstractScalarEnv):
             Keep the state identical to the solution state, while calculating rewards as if we had
             followed the RL action. Possibly useful for debugging.
         *args, **kwargs
-            The remaining arguments are passed to AbstractScalarEnv.
+            The remaining arguments are passed to AbstractPDEEnv.
         """
         super().__init__(eqn_type='burgers', *args, **kwargs)
 
