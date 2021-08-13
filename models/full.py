@@ -198,7 +198,6 @@ class GlobalBackpropModel(GlobalModel):
         # rewards, actions, states are [timestep, initial_condition, ...]
 
         debug_mode = True
-        training_plot_freq = self.log_freq * 5
         if debug_mode:
             #print("loss", loss)
             nans_in_grads = np.sum([np.sum(np.isnan(grad)) for grad in grads])
@@ -236,8 +235,9 @@ class GlobalBackpropModel(GlobalModel):
                                     .replace('\n', '').replace(' ', '')) + '"'
                 extra_info["sample_a"+str(i+1)] = csv_string
 
+            training_plot_freq = self.log_freq * 10
             if self.iteration % training_plot_freq == 0:
-                for initial_condition_index in [0]:#range(states.shape[1]):
+                for initial_condition_index in range(states.shape[1]): #[0]:
                     state_history = states[:, initial_condition_index]
                     suffix = "_train_iter{}_init{}".format(self.iteration, initial_condition_index)
                     self.env.plot_state_evolution(state_history=state_history,
