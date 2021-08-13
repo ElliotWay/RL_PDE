@@ -177,3 +177,22 @@ class StandardEMI(EMI):
 
     def get_policy(self):
         return self.policy
+
+
+class OneDimensionalStencil():
+    """
+    Interface/mixin for an EMI with a policy that can act in a 1-dimensional way.
+
+    I.e., a policy that acts on a 1-dimensional stencil. The policy returned by get_policy() can be
+    configured to act in a higher dimensional environment, but get_1D_policy() should access the
+    underlying policy that can act in a 1-dimensional environment.
+
+    Intended to be multiply inherited from along with another EMI class. If get_policy() already
+    returns a 1-dimensional agent, the subclass need only inherit from this class. If not, then
+    get_1D_policy() must be implemented to return a 1-dimensional agent.
+
+    This is useful for creating the 'action snapshot' plots when environments may be 1 or more
+    dimensions.
+    """
+    def get_1D_policy(self):
+        return self.get_policy()

@@ -6,6 +6,7 @@ from rl_pde.run import rollout
 from rl_pde.policy import Policy
 from rl_pde.agents import ExtendAgent2D
 from rl_pde.emi.emi import EMI
+from rl_pde.emi.emi import OneDimensionalStencil
 from rl_pde.emi.batch import UnbatchedPolicy
 
 # Not currently used, may be needed for training in 2D environments.
@@ -124,7 +125,7 @@ class Unbatched2DPolicy(Policy):
         return self._policy(obs, deterministic=deterministic)
 
 
-class DimensionalAdapterEMI(EMI):
+class DimensionalAdapterEMI(EMI, OneDimensionalStencil):
     """
     EMI pseudo-decorator* that adapts a 1-dimensional EMI to 2 dimensions.
 
@@ -147,7 +148,11 @@ class DimensionalAdapterEMI(EMI):
         self._model = self.sub_emi._model # Needed for loading.
 
     def training_episode(self, env):
-        raise Exception("DimensionalAdapterEMI: This adapter cannot be used for training.")
+        return self.sub_emi.training_episode(env)
+        #raise Exception("DimensionalAdapterEMI: This adapter cannot be used for training.")
 
     def get_policy(self):
         return self.policy
+
+    def get_1D_policy(self):
+        return self.sub_emi.get_policy()

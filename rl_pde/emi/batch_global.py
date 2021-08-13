@@ -4,9 +4,10 @@ from argparse import Namespace
 from envs import build_env
 from rl_pde.run import rollout
 from rl_pde.emi.emi import EMI, PolicyWrapper
+from rl_pde.emi.emi import OneDimensionalStencil
 from rl_pde.emi.batch import UnbatchedEnvPL, UnbatchedPolicy
 
-class BatchGlobalEMI(EMI):
+class BatchGlobalEMI(EMI, OneDimensionalStencil):
     """
     EMI that breaks samples along the first dimension (the physical dimension). However, unlike
     BatchEMI, BatchGlobalEMI is built to handle a GlobalModel. The GlobalModel needs information
@@ -99,7 +100,8 @@ class BatchGlobalEMI(EMI):
         # Note that information coming from the model
         # has dimensions [timestep, initial_condition, ...], so reducing across time is reducing
         # across axis 0.
-        info_dict['reward'] = np.mean(np.sum(rewards, axis=0), axis=0)
+        info_dict['reward'] = np.mean([np.mean(np.sum(reward_part, axis=0), axis=0) for
+                                        reward_part in rewards])
         info_dict['l2_error'] = avg_l2_error
         info_dict['timesteps'] = num_inits * self.args.ep_length
         info_dict.update(extra_info)

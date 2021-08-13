@@ -12,6 +12,7 @@ from matplotlib.ticker import SymmetricalLogLocator
 from stable_baselines import logger
 
 from rl_pde.agents import StandardWENOAgent
+from rl_pde.emi import OneDimensionalStencil
 from util import action_snapshot
 from util.misc import human_readable_time_delta
 
@@ -254,11 +255,12 @@ def train(env, eval_envs, emi, args):
 
             ep_string = ("{:0" + str(ep_precision) + "}").format(ep)
 
-            if args.emi != "std":
-                # The action snapshot doesn't make sense if EMI is not batched,
-                # because a standard EMI has a fixed input size.
+            if isinstance(args.emi, OneDimensionalStencil):
+                # The action snapshot only makes sense when the underlying policy can be applied to
+                # 1D environments of arbitrary length, e.g. if it is applied to each 1D stencil in
+                # an environment.
                 action_snapshot.save_action_snapshot(
-                        agent=emi.get_policy(), weno_agent=weno_agent,
+                        agent=emi.get_1D_policy(), weno_agent=weno_agent,
                         suffix="_ep_" + ep_string)
 
             # Run eval episodes.
