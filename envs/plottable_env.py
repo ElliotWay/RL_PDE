@@ -384,7 +384,7 @@ class Plottable1DEnv(AbstractPDEEnv):
 
                     for i in range(vec_len):
                         for state_values, color in zip(sliced_solution_history[1:-1], true_color_sequence[1:-1]):
-                            plt.plot(x_values, state_values[i], ls='-', linewidth=1, color=color)
+                            ax[i].plot(x_values, state_values[i], ls='-', linewidth=1, color=color)
                         true = ax[i].plot(x_values, solution_state_history[-1, i], ls='-', linewidth=1, color=true_rgb)
                 else:
                     for i in range(vec_len):
