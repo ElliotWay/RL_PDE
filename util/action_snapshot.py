@@ -83,7 +83,7 @@ def save_action_snapshot(agent, weno_agent=None, suffix=""):
         raise Exception("Need to pass args to action_snapshot.declare_standard_envs"
                 + " before saving an action snapshot.")
 
-    action_dimensions = np.prod(list(standard_envs[0].action_space.shape)[1:])
+    action_dimensions = np.prod(list(standard_envs[0].action_space.shape)[2:])
     fig, axes = plt.subplots(1 + action_dimensions, len(standard_envs), sharex='col', sharey='row', gridspec_kw={'wspace':0, 'hspace':0})
 
     agent_color = "tab:orange"
