@@ -324,6 +324,10 @@ class Plottable1DEnv(AbstractPDEEnv):
 
         vec_len = self.grid.space.shape[0]
         fig, ax = plt.subplots(nrows=vec_len, ncols=1, figsize=[6.4, 4.8 * vec_len], dpi=100)
+        try:
+            len(ax)
+        except TypeError:
+            ax = [ax]  # a hacky way to make subplots work with only one subplot
 
         x_values = self.grid.x[self.ng:-self.ng]
 
@@ -369,7 +373,7 @@ class Plottable1DEnv(AbstractPDEEnv):
 
             if solution_state_history is not None:
                 assert len(state_history) == len(solution_state_history), "History mismatch."
-                
+
                 true_color = self.true_color
                 if weno_override:
                     true_color = self.weno_color
@@ -377,7 +381,7 @@ class Plottable1DEnv(AbstractPDEEnv):
                     true_rgb = matplotlib.colors.to_rgb(true_color)
                     true_color_sequence = color_sequence(start_rgb, true_rgb, num_states)
                     sliced_solution_history = solution_state_history[slice_indexes]
-                    
+
                     for i in range(vec_len):
                         for state_values, color in zip(sliced_solution_history[1:-1], true_color_sequence[1:-1]):
                             plt.plot(x_values, state_values[i], ls='-', linewidth=1, color=color)
@@ -451,14 +455,14 @@ class Plottable1DEnv(AbstractPDEEnv):
             ax[i].set_xmargin(0.0)
             ax[i].set_xlabel('x')
             ax[i].set_ylabel('u{}'.format(i))
-        
+
         log_dir = logger.get_dir()
         error_or_state = "error" if plot_error else "state"
         filename = os.path.join(log_dir,
                 "burgers_evolution_{}{}.png".format(error_or_state, suffix))
         plt.savefig(filename)
         print('Saved plot to ' + filename + '.')
-        
+
         plt.close(fig)
         return filename
 

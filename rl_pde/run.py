@@ -254,7 +254,7 @@ def train(env, eval_envs, emi, args):
 
             ep_string = ("{:0" + str(ep_precision) + "}").format(ep)
 
-            if args.emi != "std" and 'burgers' in str(env):  # temporary limiting to only burgers env -yiwei
+            if args.emi != "std" and 'Burgers' in str(env):  # temporary limiting to only burgers env -yiwei
                 # The action snapshot doesn't make sense if EMI is not batched,
                 # because a standard EMI has a fixed input size.
                 action_snapshot.save_action_snapshot(
