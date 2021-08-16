@@ -77,6 +77,7 @@ def rollout(env, policy, num_rollouts=1, rk4=False, deterministic=False, every_s
 
 from rl_pde.agents import StandardWENOAgent
 from rl_pde.emi import OneDimensionalStencil
+from envs.plottable_env import Plottable1DEnv, Plottable2DEnv
 from util import action_snapshot
 from util.misc import human_readable_time_delta
 
@@ -241,6 +242,12 @@ def train(env, eval_envs, emi, args):
     total_timesteps = 0
     best_models = []
 
+    eval_plot_kwargs = {}
+    if isinstance(env, Plottable1DEnv):
+        eval_plot_kwargs = {'full_true': True, 'num_states': 10}
+    elif isinstance(env, Plottable2DEnv):
+        eval_plot_kwargs = {'num_frames': 50}
+
     #TODO run eval step before any training?
 
     start_time = time.time()
@@ -251,7 +258,8 @@ def train(env, eval_envs, emi, args):
         # when there is a SIGINT, but not in the middle of training.
         train_info = emi.training_episode(env)
 
-        training_rewards.append(train_info['reward'])
+        avg_reward = np.mean([np.mean(reward_part) for reward_part in train_info['reward']])
+        training_rewards.append(avg_reward)
         training_l2.append(train_info['l2_error'])
         total_timesteps += train_info['timesteps']
 
@@ -273,7 +281,9 @@ def train(env, eval_envs, emi, args):
             eval_plots = []
             for eval_index, eval_env in enumerate(eval_envs):
                 _, _, rewards, _, _ = rollout(eval_env, emi.get_policy(), deterministic=True)
-                avg_total_reward = np.mean(np.sum(rewards, axis=0))
+                reward_parts = list(zip(*rewards))
+                avg_total_reward = np.mean([np.mean(np.sum(reward_part, axis=0))
+                                                for reward_part in reward_parts])
                 eval_rewards.append(avg_total_reward)
                 eval_l2.append(eval_env.compute_l2_error())
 
@@ -281,9 +291,10 @@ def train(env, eval_envs, emi, args):
                 if len(eval_envs) > 1:
                     eval_suffix = "_eval{}".format(eval_index) + eval_suffix
                 plot_file_name = eval_env.plot_state_evolution(
-                        num_states=10, full_true=True, suffix=eval_suffix,
+                        suffix=eval_suffix,
                         title="{:03d} training episodes, t = {:05.4f}"
-                        .format(ep, eval_env.t))
+                        .format(ep, eval_env.t),
+                        **eval_plot_kwargs)
                 eval_plots.append(plot_file_name)
 
             # Log stats.

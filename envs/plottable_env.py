@@ -808,9 +808,6 @@ class Plottable2DEnv(AbstractScalarEnv):
                     " These are the available libraries: " + str(animation.writers.list()))
 
         override_history = (state_history is not None)
-        if override_history:
-            print("state history shape:", state_history.shape)
-        print("original history shape:", np.array(self.state_history).shape)
 
         if not override_history:
             state_history = np.array(self.state_history)

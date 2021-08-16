@@ -100,7 +100,7 @@ class BatchGlobalEMI(EMI, OneDimensionalStencil):
         # Note that information coming from the model
         # has dimensions [timestep, initial_condition, ...], so reducing across time is reducing
         # across axis 0.
-        info_dict['reward'] = np.mean([np.mean(np.sum(reward_part, axis=0), axis=0) for
+        info_dict['reward'] = tuple([np.mean(np.sum(reward_part, axis=0), axis=0) for
                                         reward_part in rewards])
         info_dict['l2_error'] = avg_l2_error
         info_dict['timesteps'] = num_inits * self.args.ep_length
