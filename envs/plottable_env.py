@@ -622,12 +622,12 @@ class Plottable2DEnv(AbstractScalarEnv):
             plot_error,
             title,
             fixed_axes, no_borders,
-            state_history,
-            history_includes_ghost):
+            state,
+            state_includes_ghost):
 
         ax = axes
 
-        if history_includes_ghost:
+        if state_includes_ghost:
             x_values = self.grid.x
             y_values = self.grid.y
         else:
@@ -636,7 +636,7 @@ class Plottable2DEnv(AbstractScalarEnv):
 
         #fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
         x, y = np.meshgrid(x_values, y_values, indexing='ij')
-        z = state_history
+        z = state
         surface = ax.plot_surface(x, y, z, cmap=cm.viridis,
                 linewidth=0, antialiased=False)
 
@@ -646,12 +646,12 @@ class Plottable2DEnv(AbstractScalarEnv):
             ax.set_xmargin(0.0)
             ax.set_ymargin(0.0)
 
-        # plot_error == True means state_history is actually abs(error), not the state.
+        # plot_error == True means state is actually abs(error), not the state.
         # Restrict z-axis if plotting error.
         # Can't have negative, cut off extreme errors.
         if plot_error:
             extreme_cutoff = 3.0
-            max_not_extreme = np.max(state_history[state_history < extreme_cutoff])
+            max_not_extreme = np.max(state[state < extreme_cutoff])
             zmax = max_not_extreme*1.05 if max_not_extreme > 0.0 else 0.01
             ax.set_zlim((0.0, ymax))
 
@@ -784,8 +784,8 @@ class Plottable2DEnv(AbstractScalarEnv):
 
         self._plot_state(axes=ax, plot_error=plot_error, title=title,
                 fixed_axes=fixed_axes, no_borders=no_borders,
-                state_history=state_history,
-                history_includes_ghost=(override_history and history_includes_ghost))
+                state=state_history,
+                state_includes_ghost=(override_history and history_includes_ghost))
 
         fig.tight_layout()
 
@@ -799,12 +799,21 @@ class Plottable2DEnv(AbstractScalarEnv):
         return filename
 
     def plot_state_evolution(self, plot_error=False,
-            show_ghost=False,
-            suffix="", title=None, num_frames=50):
+            show_ghost=False, no_true=False,
+            suffix="", title=None, num_frames=50,
+            state_history=None, history_includes_ghost=False):
 
         if self.animation_writer is None:
             raise Exception("No familiar image libraries avilable to render evolution." + 
                     " These are the available libraries: " + str(animation.writers.list()))
+
+        override_history = (state_history is not None)
+        if override_history:
+            print("state history shape:", state_history.shape)
+        print("original history shape:", np.array(self.state_history).shape)
+
+        if not override_history:
+            state_history = np.array(self.state_history)
 
         if title is None:
             base_title = ""
@@ -823,7 +832,7 @@ class Plottable2DEnv(AbstractScalarEnv):
             if timestep == -1:
                 return []
 
-            state = self.state_history[timestep]
+            state = state_history[timestep]
 
             if self.C is None:
                 actual_time = timestep * self.fixed_step
@@ -834,15 +843,19 @@ class Plottable2DEnv(AbstractScalarEnv):
                 time_str = " step {:0" + str(self._step_precision) + "d}".format(timestep)
             title = base_title + time_str
 
-            if not show_ghost:
+            if not show_ghost and (not override_history or history_includes_ghost):
                 state = state[self.grid.real_slice]
+
+            state_includes_ghost = (show_ghost and (not override_history or
+                history_includes_ghost))
 
             ax.cla()
             self._plot_state(axes=ax, plot_error=False, title=title,
                     fixed_axes=True, no_borders=True,
-                    state_history=state, history_includes_ghost=show_ghost)
+                    state=state,
+                    state_includes_ghost=state_includes_ghost)
 
-            # TODO also plot error
+            # TODO also plot error (unless no_true == True)
 
             if timestep == 0:
                 fig.tight_layout()

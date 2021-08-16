@@ -859,10 +859,9 @@ class AbstractScalarEnv(gym.Env):
             self.grid.set(self.solution.get_real().copy())
             self.state_history.append(self.grid.get_full().copy())
 
-            if self.solution.is_recording_actions():
-                self.action_history.append(self.solution.get_action_history()[-1].copy())
-
             self.steps += 1
+        if self.solution.is_recording_actions():
+            self.action_history = self.solution.get_action_history().copy()
 
     def seed(self):
         # The official Env class has this as part of its interface, but I don't think we need it.

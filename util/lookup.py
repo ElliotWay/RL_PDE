@@ -34,6 +34,9 @@ def get_model_class(model_name):
 def get_model_dims(model_name):
     # Currently, they're ALL 1-dimensionsal.
     # We'll need to change this later when 2-dimensional models exist.
+    # Note that this refers to the dimensions of the underlying policy, i.e. the stencil that the
+    # policy operates on.
+    # We only need to worry about this when we have a policy using a multi-dimensional stencil.
     return 1
 
 def get_emi_class(emi_name):

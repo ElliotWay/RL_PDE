@@ -340,7 +340,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         fp_weights = tf_weno_weights(fp_stencils, self.weno_order)
         fm_weights = tf_weno_weights(fm_stencils, self.weno_order)
         weno_action = tf.stack([fp_weights, fm_weights], axis=1)
-        weno_next_real_state = self.tf_integrate((real_state, rl_state, weno_action))
+        weno_next_real_state = self.tf_integrate((real_state, (rl_state,), (weno_action,)))
 
         # This section is adapted from AbstactScalarEnv.calculate_reward()
         if "wenodiff" in self.reward_mode:

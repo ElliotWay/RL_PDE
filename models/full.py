@@ -96,7 +96,7 @@ class GlobalBackpropModel(GlobalModel):
             # (It should not contain ghost cells - those should be handled by the prep_state function
             # that converts real state to rl state.)
             self.initial_state_ph = tf.placeholder(dtype=self.dtype,
-                    shape=(None, self.env.grid.nx), name="init_real_state")
+                    shape=(None,) + self.env.grid.num_cells, name="init_real_state")
 
             #TODO possibly restrict num_steps to something smaller?
             # We'd then need to sample timesteps from a WENO trajectory.
@@ -108,7 +108,7 @@ class GlobalBackpropModel(GlobalModel):
             self.actions = actions
             self.rewards = rewards
 
-            assert len(self.rewards[0].shape) == 2 + env.dimensions
+            assert len(self.rewards[0].shape) == 2 + self.env.dimensions
             # Sum over the timesteps in the trajectory (axis 0),
             # then average over the batch and each location and the batch (axes 1 and the rest).
             # Also average over each reward part (e.g. each dimension).
@@ -138,6 +138,9 @@ class GlobalBackpropModel(GlobalModel):
         if not self._policy_ready:
             #TODO This is the kind of thing that ought to be handled by the EMI.
             # Can we extract this responsibility from the global model?
+            # Notably, the 2D vs 1D responibility IS being handled by the EMI.
+            # Surely there is a way to handle the spatial dimension there as well? At least for
+            # this part?
             action_shape = self.env.action_space.shape[1:]
 
             #TODO Use ReLU? A field in args with ReLU as the default might make sense.
@@ -207,26 +210,28 @@ class GlobalBackpropModel(GlobalModel):
             else:
                 self.iteration += 1
 
-            safe_state = states[np.logical_not(np.isnan(states).any(axis=(1,2)))]
-            #if len(safe_state) == 0:
-                #raise Exception("All timesteps NaN. Stopping")
-
             num_samples = 1
             ep_length = states.shape[0]
             num_inits = states.shape[1]
             ndims = len(states.shape[2:])
 
-            random_reward_part = rewards[random.randint(len(rewards))]
+            #safe_state = states[np.logical_not(np.isnan(states).any(axis=
+                                                                #tuple(range(ndims+2)[1:])))]
+            #if len(safe_state) == 0:
+                #raise Exception("All timesteps NaN. Stopping")
+
+            random_reward_part = rewards[np.random.randint(len(rewards))]
             reward_spatial_dims = random_reward_part.shape[2:]
-            random_reward_indexes = ([slice(None), np.random.randint(num_inits, size=num_samples)]
+            random_reward_indexes = tuple([slice(None), 
+                        np.random.randint(num_inits, size=num_samples)]
                         + [np.random.randint(nx, size=num_samples) for nx in reward_spatial_dims])
             sample_rewards = np.sum(random_reward_part[random_reward_indexes], axis=0)
             for i, reward in enumerate(sample_rewards):
                 extra_info["sample_r"+str(i+1)] = reward
 
-            random_action_part = actions[random.randint(len(actions))]
+            random_action_part = actions[np.random.randint(len(actions))]
             action_spatial_dims = random_action_part.shape[2:]
-            random_action_indexes = ([np.random.randint(ep_length, size=num_samples,
+            random_action_indexes = tuple([np.random.randint(ep_length, size=num_samples),
                         np.random.randint(num_inits, size=num_samples)]
                         + [np.random.randint(nx, size=num_samples) for nx in action_spatial_dims])
             sample_actions = random_action_part[random_action_indexes]
@@ -400,7 +405,7 @@ class IntegrateRNN(Layer):
         super().build(input_size)
 
     def call(self, initial_state, num_steps):
-        dimensions = initial_state.ndims - 1
+        dimensions = initial_state.get_shape().ndims - 1
 
         real_states_ta = tf.TensorArray(dtype=self.dtype, size=num_steps)
         #states_ta = tuple(tf.TensorArray(dtype=self.dtype, size=num_steps) for _ in
@@ -464,7 +469,7 @@ class IntegrateCell(Layer):
         # (Batch shape may be unknown, other axes should be known.)
 
         real_state = state
-        dimensions = real_state.ndims - 1
+        dimensions = real_state.get_shape().ndims - 1
 
         # Use tf.map_fn to apply function across every element in the batch.
         tuple_type = (real_state.dtype,) * dimensions
@@ -478,18 +483,19 @@ class IntegrateCell(Layer):
             # to combine the batch and location axes first (and then reshape the actions back).
             rl_state_shape = rl_state_part.shape.as_list()
             new_state_shape = [-1,] + rl_state_shape[dimensions + 1:]
-            reshaped_state = tf.reshape(rl_state, new_state_shape)
+            reshaped_state = tf.reshape(rl_state_part, new_state_shape)
 
             # Future note: this works to apply a 1D agent along each dimension.
             # However, if we want an agent that makes use of a 2D stencil, we'll need a different
             # implementation of IntegrateCell that somehow combines multiple stencils at each
             # location. (Or rather, something that can handle a prep_state function that does
             # that.)
+            # This block is effectively equivalent to ExtendAgent2D.
 
             shaped_action = self.policy_net(reshaped_state)
 
             shaped_action_shape = shaped_action.shape.as_list()
-            rl_action_shape = rl_state_shape[:dimensions + 1] + shaped_action_shape[1:]
+            rl_action_shape = [-1,] + rl_state_shape[1:dimensions + 1] + shaped_action_shape[1:]
             rl_action_part = tf.reshape(shaped_action, rl_action_shape)
             rl_action.append(rl_action_part)
         rl_action = tuple(rl_action)

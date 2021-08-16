@@ -11,10 +11,7 @@ from matplotlib.ticker import SymmetricalLogLocator
 
 from stable_baselines import logger
 
-from rl_pde.agents import StandardWENOAgent
-from rl_pde.emi import OneDimensionalStencil
-from util import action_snapshot
-from util.misc import human_readable_time_delta
+# More imports below rollout() to avoid circular dependency.
 
 def rollout(env, policy, num_rollouts=1, rk4=False, deterministic=False, every_step_hook=None):
     """
@@ -76,6 +73,13 @@ def rollout(env, policy, num_rollouts=1, rk4=False, deterministic=False, every_s
             steps += 1
 
     return state_list, action_list, reward_list, done_list, next_state_list
+
+
+from rl_pde.agents import StandardWENOAgent
+from rl_pde.emi import OneDimensionalStencil
+from util import action_snapshot
+from util.misc import human_readable_time_delta
+
 
 def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs):
     #TODO This is a hack. Consider adapting the SB logger class to our own purposes

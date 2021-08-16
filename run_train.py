@@ -21,11 +21,12 @@ from stable_baselines import logger
 #from stable_baselines.ddpg.noise import AdaptiveParamNoiseSpec, OrnsteinUhlenbeckActionNoise, NormalActionNoise
 
 from rl_pde.run import train
+from rl_pde.emi import DimensionalAdapterEMI
 from envs import builder as env_builder
 from models import get_model_arg_parser
 from util import metadata, action_snapshot
 from util.function_dict import numpy_fn
-from util.lookup import get_model_class, get_emi_class
+from util.lookup import get_model_class, get_emi_class, get_model_dims
 from util.misc import rescale, set_global_seed
 
 ON_POSIX = 'posix' in sys.builtin_module_names
@@ -114,20 +115,12 @@ def main():
     if len(rest) > 0:
         raise Exception("Unrecognized arguments: " + " ".join(rest))
 
-    dims = env_builder.env_dimensions(args.env)
-    if dims > 1:
-        raise NotImplementedError("Training with >1 dimensions is not yet implemented!"
-                + " Various things need to be added and changed for that to happen:"
-                + " TF functions for the 2D env need to be implemented,"
-                + " the Global Backprop model needs to be adapted so that it does not assume"
-                + " only one spatial dimension,"
-                + " the run() function needs to be modified to handle either 1 or 2 dimensions,"
-                + " and probably other things besides.")
-
     if args.repeat is not None:
         metadata.load_to_namespace(args.repeat, args)
 
     set_global_seed(args.seed)
+
+    dims = env_builder.env_dimensions(args.env)
 
     env = env_builder.build_env(args.env, args)
 
@@ -160,10 +153,11 @@ def main():
     action_snapshot.declare_standard_envs(args)
 
     # Fill in default args that depend on other args.
-    if args.buffer_size is None:
-        args.buffer_size = 10000 if args.emi == "std" else 500000
-    if args.train_freq is None:
-        args.train_freq = 1 if args.emi == "std" else env.action_space.shape[0]
+    if args.model == "sac":
+        if args.buffer_size is None:
+            args.buffer_size = 10000 if args.emi == "std" else 500000
+        if args.train_freq is None:
+            args.train_freq = 1 if args.emi == "std" else env.action_space.shape[0]
     if args.batch_size is None:
         args.batch_size = 10 if args.model == "full" else 64
 
@@ -214,7 +208,16 @@ def main():
     action_adjust = numpy_fn(args.action_scale)
 
     emi_cls = get_emi_class(args.emi)
-    emi = emi_cls(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
+    model_dims = get_model_dims(args.model)
+    if model_dims < dims:
+        if model_dims == 1:
+            emi = DimensionalAdapterEMI(emi_cls, env, model_cls, args,
+                    obs_adjust=obs_adjust, action_adjust=action_adjust)
+        else:
+            raise Exception("Cannot adapt {}-dimensional model to {}-dimensional environment."
+                    .format(model_dims, dims))
+    else:
+        emi = emi_cls(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
 
     #DDPG stuff.
     """
@@ -303,7 +306,7 @@ def main():
         sys.exit(0)
     except Exception as e:
         metadata.log_finish_time(args.log_dir, status="stopped by exception: {}".format(type(e).__name__))
-        raise  # Re-raise so excption is also printed.
+        raise  # Re-raise so exception is also printed.
 
     print("Finished!")
     metadata.log_finish_time(args.log_dir, status="finished cleanly")

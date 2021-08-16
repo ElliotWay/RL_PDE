@@ -20,10 +20,11 @@ def declare_standard_envs(args):
     # Make a copy - we need to change the args, but the caller should not
     # have to worry about args changing.
     args = Namespace(**vars(args))
-    # No point memoizing any these environments.
-    args.memoize = False
-    # These environments are not analytical, though they could be.
+    args.env = "weno_burgers" # Should we allow for other sorts of 1D environments here?
+    args.memoize = False # No point memoizing any of these environments.
     args.analytical = False
+    args.min_value = 0.0
+    args.max_value = 1.0
 
     global standard_envs
 

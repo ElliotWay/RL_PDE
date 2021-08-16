@@ -91,14 +91,13 @@ class DimensionalFakeEnv(gym.Env):
                 high=real_env.observation_space[0].high.flat[0],
                 dtype=real_env.observation_space[0].dtype)
 
-    def step(self, action):
-        raise Exception("This is a fake env - you can only access the spaces.")
-    def reset(self):
-        raise Exception("This is a fake env - you can only access the spaces.")
-    def render(self, **kwargs):
-        raise Exception("This is a fake env - you can only access the spaces.")
-    def seed(self, seed):
-        raise Exception("This is a fake env - you can only access the spaces.")
+    def __getattr__(self, attr):
+        return getattr(self.real_env, attr)
+
+    #def step(self, action):
+        #raise Exception("This is a fake env - you can only access the spaces.")
+    #def reset(self):
+        #raise Exception("This is a fake env - you can only access the spaces.")
 
 
 # Not currently used, may be needed for training in 2D environments.

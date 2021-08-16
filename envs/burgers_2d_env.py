@@ -9,7 +9,7 @@ from envs.weno_solution import tf_lf_flux_split, tf_weno_sub_stencils, tf_weno_w
 from envs.weno_solution import WENOSolution
 from util.softmax_box import SoftmaxBox
 from util.misc import create_stencil_indexes
-from util.misc import AxisSlice
+from util.misc import TensorAxisSlice
 
 
 class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
@@ -153,8 +153,8 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
                                                        num_stencils=num_x + 1,
                                                        offset=ghost_x - self.state_order)
         left_stencil_indexes = np.flip(right_stencil_indexes, axis=-1) + 1
-        right_stencils = tf.transpose(tf.gather(flux_right, right_stencil_indexes), [0,2,1])
-        left_stencils = tf.transpose(tf.gather(flux_left, left_stencil_indexes), [0,2,1])
+        right_stencils = tf.transpose(tf.gather(flux_right, right_stencil_indexes, axis=0), [0,2,1])
+        left_stencils = tf.transpose(tf.gather(flux_left, left_stencil_indexes, axis=0), [0,2,1])
         horizontal_state = tf.stack([left_stencils, right_stencils], axis=2)
 
         flux_down = flux_down[ghost_x:-ghost_x, :]
@@ -163,9 +163,9 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
                                                     num_stencils=num_y + 1,
                                                     offset=ghost_y - self.state_order)
         down_stencil_indexes = np.flip(up_stencil_indexes, axis=-1) + 1
-        up_stencils = tf.gather(flux_up, up_stencil_indexes)
-        down_stencils = tf.gather(flux_down, down_stencil_indexes)
-        vertical_state = np.stack([down_stencils, up_stencils], axis=2)
+        up_stencils = tf.gather(flux_up, up_stencil_indexes, axis=1)
+        down_stencils = tf.gather(flux_down, down_stencil_indexes, axis=1)
+        vertical_state = tf.stack([down_stencils, up_stencils], axis=2)
 
         rl_state = (horizontal_state, vertical_state)
 
@@ -194,11 +194,11 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
         left_reconstructed = tf.reduce_sum(left_weights 
                                 * tf_weno_sub_stencils(left_stencils, self.weno_order), axis=-1)
         right_reconstructed = tf.reduce_sum(right_weights
-                                * tf.weno_sub_stencils(right_stencils, self.weno_order), axis=-1)
+                                * tf_weno_sub_stencils(right_stencils, self.weno_order), axis=-1)
         down_reconstructed = tf.reduce_sum(down_weights
-                                * tf.weno_sub_stencils(down_stencils, self.weno_order), axis=-1)
+                                * tf_weno_sub_stencils(down_stencils, self.weno_order), axis=-1)
         up_reconstructed = tf.reduce_sum(up_weights
-                                * tf.weno_sub_stencils(up_stencils, self.weno_order), axis=-1)
+                                * tf_weno_sub_stencils(up_stencils, self.weno_order), axis=-1)
 
         horizontal_flux_reconstructed = left_reconstructed + right_reconstructed
         vertical_flux_reconstructed = down_reconstructed + up_reconstructed
@@ -233,7 +233,7 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
         down_stencils = vertical_stencils[:, :, 0]
         up_stencils = vertical_stencils[:, :, 1]
 
-        left_weights = tf_weno_weights(left_stencils, self.order)
+        left_weights = tf_weno_weights(left_stencils, self.weno_order)
         right_weights = tf_weno_weights(right_stencils, self.weno_order)
         horizontal_weno_weights = tf.stack([left_weights, right_weights], axis=2)
         down_weights = tf_weno_weights(down_stencils, self.weno_order)
@@ -295,9 +295,9 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
             
             combined_error = []
             for axis, bound in enumerate(boundary):
-                error_slice = AxisSlice(error, axis)
+                error_slice = TensorAxisSlice(error, axis)
                 avg_error = (error_slice[:-1] + error_slice[1:]) / 2
-                avg_slice = AxisSlice(avg_error, axis)
+                avg_slice = TensorAxisSlice(avg_error, axis)
 
                 # We only need to handle the boundary on this axis.
                 if bound == "outflow":
