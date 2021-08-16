@@ -85,6 +85,7 @@ class GlobalBackpropModel(GlobalModel):
             reward_list = []
             ph_list = []
             for boundary in ['periodic', 'outflow']:
+                print("Create {}".format(boundary))
                 self.env.reset()
 
                 cell = IntegrateCell(
@@ -93,13 +94,13 @@ class GlobalBackpropModel(GlobalModel):
                         integrate_fn=self.env.tf_integrate,
                         reward_fn=self.env.tf_calculate_reward,
                         )
-                rnn = IntegrateRNN(cell)
+                rnn = IntegrateRNN(cell, name="rnn_{}".format(boundary))
 
                 # initial_state_ph is the REAL physical initial state
                 # (It should not contain ghost cells - those should be handled by the prep_state function
                 # that converts real state to rl state.)
                 ph = tf.placeholder(dtype=self.dtype,
-                        shape=(None, self.args.nx), name="init_real_state")
+                        shape=(None, self.args.nx), name="init_real_state_{}".format(boundary))
 
                 states, actions, rewards = rnn(ph, num_steps=self.args.ep_length)
 
@@ -360,7 +361,7 @@ class GlobalBackpropModel(GlobalModel):
         self.preloaded = True
 
 class IntegrateRNN(Layer):
-    def __init__(self, cell, dtype=tf.float64, swap_to_cpu=True):
+    def __init__(self, cell, name, dtype=tf.float64, swap_to_cpu=True):
         """
         Declare the RNN for PDE integration.
         
@@ -378,7 +379,7 @@ class IntegrateRNN(Layer):
           performance by keeping the Tensors on the GPU instead. True by default. Does nothing if
           only using the CPU anyway.
         """
-        super().__init__(dtype=dtype)
+        super().__init__(name=name, dtype=dtype)
         self.cell = cell
         self.swap_to_cpu = swap_to_cpu
 

@@ -1504,7 +1504,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         return state, reward, done
 
-    @tf.function
+    #@tf.function
     def tf_prep_state(self, state):
         # Note the similarity to prep_state() above.
 
@@ -1514,6 +1514,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
         # TODO: get boundary from initial condition, somehow, as diff inits have diff bounds
         #  Would need to use tf.cond so graph can handle different boundaries at runtime.
         ghost_size = tf.constant(self.ng, shape=(1,))
+        print("Using {}".format(self.grid.boundary))
         if self.grid.boundary == "outflow":
             # This implementation assumes that state is a 1-D Tensor of scalars.
             # In the future, if we expand to multiple dimensions, then it won't be, so this will need
@@ -1556,7 +1557,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
 
         return rl_state
 
-    @tf.function
+    #@tf.function
     def tf_integrate(self, args):
         real_state, rl_state, rl_action = args
 
@@ -1607,7 +1608,7 @@ class WENOBurgersEnv(AbstractBurgersEnv):
     # but this needs to be here because of how we calculate the WENO step. Not a high priority.
     # (And anyway, if we're refactoring, this should probably be the one canonical function instead
     # of having TF and non-TF versions.)
-    @tf.function
+    #@tf.function
     def tf_calculate_reward(self, args):
         real_state, rl_state, rl_action, next_real_state = args
         # Note that real_state and next_real_state do not include ghost cells, but rl_state does.
