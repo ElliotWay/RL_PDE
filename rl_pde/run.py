@@ -254,7 +254,7 @@ def train(env, eval_envs, emi, args):
 
             ep_string = ("{:0" + str(ep_precision) + "}").format(ep)
 
-            if args.emi != "std":
+            if args.emi != "std" and 'Burgers' in str(env):  # temporary limiting to only burgers env -yiwei
                 # The action snapshot doesn't make sense if EMI is not batched,
                 # because a standard EMI has a fixed input size.
                 action_snapshot.save_action_snapshot(
@@ -343,8 +343,9 @@ def train(env, eval_envs, emi, args):
     #endfor episodes
     write_summary_plots(log_dir=log_dir, summary_plot_dir=summary_plot_dir,
             total_episodes=args.total_episodes, num_eval_envs=len(eval_envs))
-    write_final_plots(log_dir=log_dir, summary_plot_dir=summary_plot_dir,
-            total_episodes=args.total_episodes, num_eval_envs=len(eval_envs))
+    if 'Burgers' in str(env):  # Disable final plot for Euler env for now
+        write_final_plots(log_dir=log_dir, summary_plot_dir=summary_plot_dir,
+                total_episodes=args.total_episodes, num_eval_envs=len(eval_envs))
 
     print("Training complete!")
     print("Training took {}, and {} timesteps.".format(

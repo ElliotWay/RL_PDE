@@ -3,7 +3,7 @@ import numpy as np
 from envs.solutions import SolutionBase
 import envs.weno_coefficients as weno_coefficients
 from envs.grid import AbstractGrid, create_grid
-from envs.grid1d import Grid1d
+from envs.grid1d import Burgers1DGrid
 from util.misc import create_stencil_indexes
 from util.misc import AxisSlice
 
@@ -19,7 +19,7 @@ def lf_flux_split_nd(flux_array, values_array):
     """
     output = []
     abs_values = np.abs(values_array)
-    for dim in range(flux_array.ndim):
+    for dim in range(1, flux_array.ndim):  # now the 0-th dimension is state vector length
         alpha = np.expand_dims(np.max(abs_values, axis=dim), axis=dim)
         fm = (flux_array - alpha * values_array) / 2
         fp = (flux_array + alpha * values_array) / 2
@@ -161,11 +161,11 @@ class WENOSolution(SolutionBase):
 class PreciseWENOSolution2D(WENOSolution):
     def __init__(self, base_grid, init_params,
             precise_order, precise_scale,
-            flux_function,
-            nu=0.0, source=None,
+            flux_function, eqn_type='burgers',
+            vec_len=1, nu=0.0, source=None,
             record_state=False, record_actions=None):
         super().__init__(base_grid.num_cells, base_grid.num_ghosts,
-                base_grid.min_value, base_grid.max_value, record_state=record_state)
+                base_grid.min_value, base_grid.max_value, vec_len, record_state=record_state)
  
         assert (precise_scale % 2 == 1), "Precise scale must be odd for easier downsampling."
 
@@ -195,7 +195,7 @@ class PreciseWENOSolution2D(WENOSolution):
         self.precise_grid = create_grid(len(self.precise_num_cells),
                 self.precise_num_cells, self.precise_num_ghosts,
                 base_grid.min_value, base_grid.max_value,
-                init_type=self.init_type, boundary=self.boundary)
+                init_type=self.init_type, boundary=self.boundary, eqn_type=eqn_type)
 
         self.flux_function = flux_function
         self.nu = nu
@@ -232,8 +232,8 @@ class PreciseWENOSolution2D(WENOSolution):
 
         # Trim vertical ghost cells from horizontally split flux. (Should this be part of flux
         # splitting?)
-        flux_left = flux_left[:, ghost_y:-ghost_y]
-        flux_right = flux_right[:, ghost_y:-ghost_y]
+        flux_left = flux_left[0, :, ghost_y:-ghost_y]  # TODO: change for vec length, now only using 0th dim -yiwei
+        flux_right = flux_right[0, :, ghost_y:-ghost_y]
         right_stencil_indexes = create_stencil_indexes(stencil_size=order * 2 - 1,
                                                        num_stencils=num_x + 1,
                                                        offset=ghost_x - order)
@@ -267,8 +267,8 @@ class PreciseWENOSolution2D(WENOSolution):
         right_flux_reconstructed, right_weights = weno_reconstruct_nd(order, right_stencils)
         horizontal_flux_reconstructed = left_flux_reconstructed + right_flux_reconstructed
 
-        flux_down = flux_down[ghost_x:-ghost_x, :]
-        flux_up = flux_up[ghost_x:-ghost_x, :]
+        flux_down = flux_down[0, ghost_x:-ghost_x, :]
+        flux_up = flux_up[0, ghost_x:-ghost_x, :]
         up_stencil_indexes = create_stencil_indexes(stencil_size=order * 2 - 1,
                                                     num_stencils=num_y + 1,
                                                     offset=ghost_y - order)
@@ -391,11 +391,11 @@ class PreciseWENOSolution(WENOSolution):
 
     def __init__(self,
                  base_grid, init_params,
-                 precise_order, precise_scale, flux_function,
-                 nu=0.0, source=None,
+                 precise_order, precise_scale, flux_function, eqn_type='burgers',
+                 vec_len=1, nu=0.0, source=None,
                  record_state=False, record_actions=None):
         super().__init__(base_grid.num_cells, base_grid.num_ghosts,
-                base_grid.min_value, base_grid.max_value, record_state=record_state)
+                base_grid.min_value, base_grid.max_value, vec_len, record_state=record_state)
 
         assert (precise_scale % 2 == 1), "Precise scale must be odd for easier downsampling."
 
@@ -418,8 +418,10 @@ class PreciseWENOSolution(WENOSolution):
         else:
             self.init_type = None
 
-        self.precise_grid = Grid1d(self.precise_nx, self.precise_ng, base_grid.xmin, base_grid.xmax,
-                                   boundary=self.boundary, init_type=self.init_type)
+        self.precise_grid = create_grid(self.ndim,
+                self.precise_nx, self.precise_ng,
+                base_grid.min_value, base_grid.max_value,
+                init_type=self.init_type, boundary=self.boundary, eqn_type=eqn_type)
 
         self.flux_function = flux_function
         self.nu = nu
@@ -457,14 +459,17 @@ class PreciseWENOSolution(WENOSolution):
         """
         order = self.order
         a = weno_coefficients.a_all[order]
-        num_points = len(q) - 2 * order
-        q_stencils = np.zeros((order, len(q)))
-        for i in range(order, num_points + order):
-            for k in range(order):
-                for l in range(order):
-                    q_stencils[k, i] += a[k, l] * q[i + k - l]
+        num_points = q.shape[1] - 2 * order  # len(q) changed to q.shape[1] for new 0-th dimension vec state
+        q_stencils_all = []
+        for nv in range(q.shape[0]):
+            q_stencils = np.zeros((order, q.shape[1]))
+            for i in range(order, num_points + order):
+                for k in range(order):
+                    for l in range(order):
+                        q_stencils[k, i] += a[k, l] * q[nv, i + k - l]
+            q_stencils_all.append(q_stencils)
 
-        return q_stencils
+        return np.array(q_stencils_all)
 
     def weno_weights(self, q):
         """
@@ -484,20 +489,25 @@ class PreciseWENOSolution(WENOSolution):
         C = weno_coefficients.C_all[order]
         sigma = weno_coefficients.sigma_all[order]
 
-        beta = np.zeros((order, len(q)))
+        beta = np.zeros((order, q.shape[1]))
         w = np.zeros_like(beta)
-        num_points = len(q) - 2 * order
+        num_points = q.shape[1] - 2 * order
         epsilon = 1e-16
-        for i in range(order, num_points + order):
-            alpha = np.zeros(order)
-            for k in range(order):
-                for l in range(order):
-                    for m in range(l + 1):
-                        beta[k, i] += sigma[k, l, m] * q[i + k - l] * q[i + k - m]
-                alpha[k] = C[k] / (epsilon + beta[k, i] ** 2)
-            w[:, i] = alpha / np.sum(alpha)
+        w_all = []
+        for nv in range(q.shape[0]):
+            for i in range(order, num_points + order):
+                alpha = np.zeros(order)
+                for k in range(order):
+                    for l in range(order):
+                        for m in range(l + 1):
+                            beta[k, i] += sigma[k, l, m] * q[nv, i + k - l] * q[nv, i + k - m]
+                    alpha[k] = C[k] / (epsilon + beta[k, i] ** 2)
+                    # TODO: why the reconstruction is different than below Euler implementation? Double check. -yiwei
+                    # https://github.com/python-hydro/hydro_examples/blob/master/compressible/weno_euler.py#L97
+                w[:, i] = alpha / np.sum(alpha)
+            w_all.append(w)
 
-        return w
+        return np.array(w_all)
 
     def weno_new(self, q):
         """
@@ -518,9 +528,10 @@ class PreciseWENOSolution(WENOSolution):
         weights = self.weno_weights(q)
         q_stencils = self.weno_stencils(q)
         qL = np.zeros_like(q)
-        num_points = len(q) - 2 * self.order
-        for i in range(self.order, num_points + self.order):
-            qL[i] = np.dot(weights[:, i], q_stencils[:, i])
+        num_points = q.shape[1] - 2 * self.order
+        for nv in range(q.shape[0]):
+            for i in range(self.order, num_points + self.order):
+                qL[nv, i] = np.dot(weights[nv, :, i], q_stencils[nv, :, i])
         return qL, weights
 
     def rk_substep(self):
@@ -533,12 +544,13 @@ class PreciseWENOSolution(WENOSolution):
         # compute flux at each point
         f = self.flux_function(g.u)
 
-        # get maximum velocity
-        alpha = np.max(abs(g.u))
-
-        # Lax Friedrichs Flux Splitting
-        fp = (f + alpha * g.u) / 2
-        fm = (f - alpha * g.u) / 2
+        # # get maximum velocity
+        # alpha = np.max(abs(g.u))
+        #
+        # # Lax Friedrichs Flux Splitting
+        # fp = (f + alpha * g.u) / 2
+        # fm = (f - alpha * g.u) / 2
+        fm, fp = lf_flux_split_nd(f, g.u)
 
         fpr = g.scratch_array()
         fml = g.scratch_array()
@@ -546,16 +558,21 @@ class PreciseWENOSolution(WENOSolution):
 
         # compute fluxes at the cell edges
         # compute f plus to the right
-        fpr[1:], fp_weights = self.weno_new(fp[:-1])
+        fpr[:, 1:], fp_weights = self.weno_new(fp[:, :-1])  # 0-th dimension is now vec length dim
         # compute f minus to the left
         # pass the data in reverse order
-        fml[-1::-1], fm_weights = self.weno_new(fm[-1::-1])
+        fml[:, -1::-1], fm_weights = self.weno_new(fm[:, -1::-1])
+        # TODO: use weno_reconstruct_nd(). Currently doesn't seem to work with 1D Env, ask Elliot. -yiwei
 
         if self.record_actions is not None:
-            action_weights = np.stack((fp_weights[:, self.ng-1:-(self.ng-1)], fm_weights[:, -(self.ng+1):self.ng-2:-1]))
-            # resulting array is (fp, fm) X stencil X location
-            # transpose to location X (fp, fm) X stencil
-            action_weights = action_weights.transpose((2, 0, 1))
+            action_weights = []
+            for nv in range(g.space.shape[0]):
+                action_weights_scalar = np.stack((fp_weights[nv, :, self.ng-1:-(self.ng-1)],
+                                                  fm_weights[nv, :, -(self.ng+1):self.ng-2:-1]))
+                # resulting array is (fp, fm) X stencil X location
+                # transpose to location X (fp, fm) X stencil
+                action_weights.append(action_weights_scalar.transpose((2, 0, 1)))
+            action_weights = np.array(action_weights)
 
             if self.record_actions == "weno":
                 self.action_history.append(action_weights)
@@ -574,7 +591,7 @@ class PreciseWENOSolution(WENOSolution):
                 raise Exception("Unrecognized action type: '{}'".format(self.record_actions))
 
         # compute flux from fpr and fml
-        flux[1:-1] = fpr[1:-1] + fml[1:-1]
+        flux[:, 1:-1] = fpr[:, 1:-1] + fml[:, 1:-1]
         rhs = g.scratch_array()
 
         if self.nu > 0.0:
@@ -584,12 +601,12 @@ class PreciseWENOSolution(WENOSolution):
             # ghost cells). The ghost cells will be overwritten anyway.
             R = np.concatenate([np.zeros(self.precise_grid.ng),
                 R, np.zeros(self.precise_grid.ng)])
-            rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:]) + R[1:-1]
+            rhs[:, 1:-1] = 1 / g.dx * (flux[:, :, 1:-1] - flux[2:]) + R[:, 1:-1]
         else:
-            rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:])
+            rhs[:, 1:-1] = 1 / g.dx * (flux[:, 1:-1] - flux[:, 2:])
 
         if self.source is not None:
-            rhs[1:-1] += self.source.get_full()[1:-1]
+            rhs[:, 1:-1] += self.source.get_full()[:, 1:-1]
 
         return rhs
 
@@ -629,7 +646,7 @@ class PreciseWENOSolution(WENOSolution):
         return grid[middle::self.precise_scale]
 
     def get_real(self):
-        return self.get_full()[self.ng:-self.ng]
+        return self.get_full()[:, self.ng:-self.ng]  # 0-th dimension is now vector state length
 
     def _reset(self, init_params):
         self.precise_grid.reset(init_params)
@@ -649,12 +666,12 @@ if __name__ == "__main__":
     from mpl_toolkits.mplot3d import Axes3D
     from matplotlib import cm
     from matplotlib.ticker import LinearLocator
-    from envs.grid2d import Grid2d
+    from envs.grid2d import Burgers2DGrid
 
     order = 2
     ng = order + 1
 
-    base_grid = Grid2d((128, 128), ng, 0.0, 1.0)
+    base_grid = Burgers2DGrid((128, 128), ng, 0.0, 1.0)
     flux_function = lambda x: 0.5 * x ** 2
     sol = PreciseWENOSolution2D(base_grid, {}, order, 1, flux_function)
     #sol.reset({'init_type': '1d-accelshock-x'})
@@ -679,7 +696,7 @@ if __name__ == "__main__":
             fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
             x, y = np.meshgrid(sol.real_x, sol.real_y, indexing='ij')
             z = sol.get_real()
-            surface = ax.plot_surface(x, y, z, cmap=cm.viridis,
+            surface = ax.plot_surface(x, y, z[0], cmap=cm.viridis,
                     linewidth=0, antialiased=False)
             #ax.set_zlim(-0.25, 1.25)
             ax.zaxis.set_major_locator(LinearLocator(10))

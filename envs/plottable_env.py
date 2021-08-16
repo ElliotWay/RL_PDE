@@ -9,19 +9,19 @@ from matplotlib.ticker import LinearLocator
 import numpy as np
 from stable_baselines import logger
 
-from envs.abstract_scalar_env import AbstractScalarEnv
+from envs.abstract_pde_env import AbstractPDEEnv
 from envs.solutions import OneStepSolution
 
 
 
-class Plottable1DEnv(AbstractScalarEnv):
+class Plottable1DEnv(AbstractPDEEnv):
     """
     Extension of PDE environment with plotting functions for 1D scalars.
 
     Can probably be extended to plotting vectors without too much reworking.
     Note that this is an abstract class - you can't declare a Plottable1DEnv.
     A subclass should extend this (and possibly other classes), then implement the requirements
-    of subclasses of AbstractScalarEnv.
+    of subclasses of AbstractPDEEnv.
     """
     metadata = {'render.modes': ['file']}
 
@@ -214,11 +214,11 @@ class Plottable1DEnv(AbstractScalarEnv):
                     plt.plot(ghost_x_right, weno_state_history[-num_ghost_points:],
                             ls='-', color=self.weno_ghost_color)
 
-            state_history = state_history[self.ng:-self.ng]
+            state_history = state_history[0, self.ng:-self.ng]  # TODO: change for vec states (3 items here) -yiwei
             if solution_state_history is not None:
-                solution_state_history = solution_state_history[self.ng:-self.ng]
+                solution_state_history = solution_state_history[0, self.ng:-self.ng]
             if weno_state_history is not None:
-                weno_state_history = weno_state_history[self.ng:-self.ng]
+                weno_state_history = weno_state_history[0, self.ng:-self.ng]
 
         # Similarly here. With a specific timestep we still want physical x values. Should this
         # also be if location is None?
@@ -322,12 +322,17 @@ class Plottable1DEnv(AbstractScalarEnv):
 
         override_history = (state_history is not None)
 
-        fig = plt.figure()
+        vec_len = self.grid.space.shape[0]
+        fig, ax = plt.subplots(nrows=vec_len, ncols=1, figsize=[6.4, 4.8 * vec_len], dpi=100)
+        try:
+            len(ax)
+        except TypeError:
+            ax = [ax]  # a hacky way to make subplots work with only one subplot
 
         x_values = self.grid.x[self.ng:-self.ng]
 
         if not override_history:
-            state_history = np.array(self.state_history)[:, self.ng:-self.ng]
+            state_history = np.array(self.state_history)[:, :, self.ng:-self.ng]
             solution_state_history = None
             weno_state_history = None
 
@@ -355,20 +360,20 @@ class Plottable1DEnv(AbstractScalarEnv):
                 # Decide whether to use solution or weno_solution, or both.
                 # Would it make sense to have this decision be external in the __init__ method?
                 if not isinstance(self.solution, OneStepSolution) and self.solution.is_recording_state():
-                    solution_state_history = np.array(self.solution.get_state_history())[:, self.ng:-self.ng]
+                    solution_state_history = np.array(self.solution.get_state_history())[:, :, self.ng:-self.ng]
                     if (plot_weno and self.weno_solution is not None and
                                     self.weno_solution.is_recording_state()):
                         weno_state_history = np.array(
-                                self.weno_solution.get_state_history())[:, self.ng:-self.ng]
+                                self.weno_solution.get_state_history())[:, :, self.ng:-self.ng]
 
                 elif self.weno_solution is not None and self.weno_solution.is_recording_state():
                     solution_state_history = np.array(
-                                self.weno_solution.get_state_history())[:, self.ng:-self.ng]
+                                self.weno_solution.get_state_history())[:, :, self.ng:-self.ng]
                     weno_override = True
 
             if solution_state_history is not None:
                 assert len(state_history) == len(solution_state_history), "History mismatch."
-                
+
                 true_color = self.true_color
                 if weno_override:
                     true_color = self.weno_color
@@ -376,14 +381,14 @@ class Plottable1DEnv(AbstractScalarEnv):
                     true_rgb = matplotlib.colors.to_rgb(true_color)
                     true_color_sequence = color_sequence(start_rgb, true_rgb, num_states)
                     sliced_solution_history = solution_state_history[slice_indexes]
-                    
-                    for state_values, color in zip(sliced_solution_history[1:-1], true_color_sequence[1:-1]):
-                        plt.plot(x_values, state_values, ls='-', linewidth=1, color=color)
-                    true = plt.plot(x_values, solution_state_history[-1],
-                                    ls='-', linewidth=1, color=true_rgb)
+
+                    for i in range(vec_len):
+                        for state_values, color in zip(sliced_solution_history[1:-1], true_color_sequence[1:-1]):
+                            ax[i].plot(x_values, state_values[i], ls='-', linewidth=1, color=color)
+                        true = ax[i].plot(x_values, solution_state_history[-1, i], ls='-', linewidth=1, color=true_rgb)
                 else:
-                    true = plt.plot(x_values, solution_state_history[-1], 
-                                    ls='-', linewidth=4, color=true_color)
+                    for i in range(vec_len):
+                        true = ax[i].plot(x_values, solution_state_history[-1, i],  ls='-', linewidth=4, color=true_color)
 
                 if weno_state_history is not None:
                     assert len(state_history) == len(weno_state_history), "History mismatch."
@@ -391,24 +396,27 @@ class Plottable1DEnv(AbstractScalarEnv):
                         weno_rgb = matplotlib.colors.to_rgb(self.weno_color)
                         weno_color_sequence = color_sequence(start_rgb, weno_rgb, num_states)
                         sliced_solution_history = weno_state_history[slice_indexes]
-                        
-                        for state_values, color in zip(sliced_solution_history[1:-1], weno_color_sequence[1:-1]):
-                            plt.plot(x_values, state_values, ls='-', linewidth=1, color=color)
-                        weno = plt.plot(x_values, weno_state_history[-1],
-                                        ls='-', linewidth=1, color=self.weno_color)
+
+                        for i in range(vec_len):
+                            for state_values, color in zip(sliced_solution_history[1:-1], weno_color_sequence[1:-1]):
+                                ax[i].plot(x_values, state_values[i], ls='-', linewidth=1, color=color)
+                            weno = ax[i].plot(x_values, weno_state_history[-1, i],
+                                              ls='-', linewidth=1, color=self.weno_color)
                     else:
-                        weno = plt.plot(x_values, weno_state_history[-1], 
-                                        ls='-', linewidth=4, color=self.weno_color)
+                        for i in range(vec_len):
+                            weno = ax[i].plot(x_values, weno_state_history[-1, i],
+                                              ls='-', linewidth=4, color=self.weno_color)
 
         if plot_error:
             if not override_history:
                 if not self.solution.is_recording_state():
                     raise Exception("Cannot plot evolution of error if solution state is not available.")
-                solution_state_history = np.array(self.solution.get_state_history())[:, self.ng:-self.ng]
+                solution_state_history = np.array(self.solution.get_state_history())[:, :, self.ng:-self.ng]
                 state_history = np.abs(solution_state_history - state_history)
 
         if not plot_error:
-            init = plt.plot(x_values, state_history[0], ls='--', color=start_rgb)
+            for i in range(vec_len):
+                init = ax[i].plot(x_values, state_history[0, i], ls='--', color=start_rgb)
 
         if full_true and not plot_error and not no_true:
             agent_rgb = matplotlib.colors.to_rgb(self.agent_color)
@@ -417,11 +425,11 @@ class Plottable1DEnv(AbstractScalarEnv):
             agent_rgb = (0.0, 0.0, 0.0)
         agent_color_sequence = color_sequence(start_rgb, agent_rgb, num_states)
         sliced_history = state_history[slice_indexes]
-        for state_values, color in zip(sliced_history[1:-1], agent_color_sequence[1:-1]):
-            plt.plot(x_values, state_values, ls='-', color=color)
-        agent = plt.plot(x_values, state_history[-1], ls='-', color=agent_rgb)
+        for i in range(vec_len):
+            for state_values, color in zip(sliced_history[1:-1], agent_color_sequence[1:-1]):
+                ax[i].plot(x_values, state_values[i, :], ls='-', color=color)
+            agent = ax[i].plot(x_values, state_history[-1, i], ls='-', color=agent_rgb)
 
-        ax = plt.gca()
         if plot_error:
             plots = [agent[0]]
             labels = ["|error|"]
@@ -437,22 +445,24 @@ class Plottable1DEnv(AbstractScalarEnv):
             if weno is not None:
                 plots.append(weno[0])
                 labels.append(self.weno_solution_label)
-        ax.legend(plots, labels)
+
 
         if title is not None:
-            ax.set_title(title)
+            ax[0].set_title(title)
 
-        ax.set_xmargin(0.0)
-        ax.set_xlabel('x')
-        ax.set_ylabel('u')
-        
+        for i in range(vec_len):
+            ax[i].legend(plots, labels)
+            ax[i].set_xmargin(0.0)
+            ax[i].set_xlabel('x')
+            ax[i].set_ylabel('u{}'.format(i))
+
         log_dir = logger.get_dir()
         error_or_state = "error" if plot_error else "state"
         filename = os.path.join(log_dir,
                 "burgers_evolution_{}{}.png".format(error_or_state, suffix))
         plt.savefig(filename)
         print('Saved plot to ' + filename + '.')
-        
+
         plt.close(fig)
         return filename
 
@@ -580,13 +590,13 @@ class Plottable1DEnv(AbstractScalarEnv):
         plt.close(fig)
         return filename
 
-class Plottable2DEnv(AbstractScalarEnv):
+class Plottable2DEnv(AbstractPDEEnv):
     """
     Extension of PDE environment with plotting functions for scalars in 2 dimensions.
 
     Note that this is an abstract class - you can't declare a Plottable2DEnv.
     A subclass should extend this (and possibly other classes), then implement the requirements
-    of subclasses of AbstractScalarEnv.
+    of subclasses of AbstractPDEEnv.
     """
 
     metadata = {'render.modes': ['file']}

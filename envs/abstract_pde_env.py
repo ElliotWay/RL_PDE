@@ -11,7 +11,7 @@ from util.misc import AxisSlice
 
 #TODO adapt to vector quantities. What would need to change?
 # Will state be a tuple like the action? Or is it better to have the vector as the last dimension?
-class AbstractScalarEnv(gym.Env):
+class AbstractPDEEnv(gym.Env):
     """
     Environment modelling a scalar conservation equation of arbitrary dimensions.
 
@@ -37,7 +37,7 @@ class AbstractScalarEnv(gym.Env):
     """
 
     def __init__(self,
-            num_cells=(128, 128), num_ghosts=None, min_value=0.0, max_value=1.0,
+            num_cells=(128, 128), num_ghosts=None, min_value=0.0, max_value=1.0, eqn_type='burgers',
             boundary=None, init_type="gaussian",
             init_params=None,
             fixed_step=0.0004, C=None, #C=0.5,
@@ -58,6 +58,8 @@ class AbstractScalarEnv(gym.Env):
             Lower bounds of the physical space.
         max_value : float OR [float]
             Upper bounds of the physical space.
+        eqn_type: str, choices = ['burgers', 'euler']
+            Equation type for creating the grid.
         boundary : string OR [string]
             Type of boundary condition (periodic/outflow).
         init_type : string
@@ -111,7 +113,7 @@ class AbstractScalarEnv(gym.Env):
         else:
             dims = len(num_cells)
 
-        self.grid = create_grid(dims,
+        self.grid = create_grid(dims, eqn_type=eqn_type,
                                 num_cells=num_cells, min_value=min_value, max_value=max_value,
                                 num_ghosts=self.ng,
                                 boundary=boundary, init_type=init_type,
@@ -652,9 +654,9 @@ class AbstractScalarEnv(gym.Env):
         # Average of error in two adjacent cells.
         if "adjacent" in self.reward_mode and "avg" in self.reward_mode:
             #TODO This should probably trim ghosts from other axes.
-            combined_error = tuple((AxisSlice(error, axis)[ng-1:ng]
-                                + AxisSlice(error, axis)[ng:-(ng-1)]) / 2
-                                    for axis, ng in enumerate(self.grid.num_ghosts))
+            combined_error = tuple((AxisSlice(error, axis + 1)[ng-1:ng]
+                                + AxisSlice(error, axis + 1)[ng:-(ng-1)]) / 2
+                                    for axis, ng in enumerate(self.grid.num_ghosts))  # 0th axis now vec length
         # Combine error across the WENO stencil.
         # (NOT the state stencil i.e. self.state_order * 2 - 1, even if we are using a wide state.)
         elif "stencil" in self.reward_mode:
@@ -664,7 +666,7 @@ class AbstractScalarEnv(gym.Env):
                         stencil_size=(self.weno_order * 2 - 1),
                         num_stencils=(nx + 1),
                         offset=(ng - self.weno_order))
-                error_stencils = AxisSlice(error, axis)[stencil_indexes]
+                error_stencils = AxisSlice(error, axis + 1)[stencil_indexes]
                 error_stencils = error[stencil_indexes]
                 if "max" in self.reward_mode:
                     combined_error.append(np.amax(error_stencils, axis=-1))

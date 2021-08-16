@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 from gym import spaces
 
-from envs.abstract_scalar_env import AbstractScalarEnv
+from envs.abstract_pde_env import AbstractPDEEnv
 from envs.plottable_env import Plottable1DEnv
 from envs.weno_solution import WENOSolution, PreciseWENOSolution, PreciseWENOSolution2D
 from envs.solutions import AnalyticalSolution
@@ -83,7 +83,7 @@ def weno_weights_batch(order, q_batch):
 
     return w
 
-class AbstractBurgersEnv(AbstractScalarEnv):
+class AbstractBurgersEnv(AbstractPDEEnv):
     """
     Environment of an N-dimensional Burgers equation.
 
@@ -122,9 +122,9 @@ class AbstractBurgersEnv(AbstractScalarEnv):
             Keep the state identical to the solution state, while calculating rewards as if we had
             followed the RL action. Possibly useful for debugging.
         *args, **kwargs
-            The remaining arguments are passed to AbstractScalarEnv.
+            The remaining arguments are passed to AbstractPDEEnv.
         """
-        super().__init__(*args, **kwargs)
+        super().__init__(eqn_type='burgers', *args, **kwargs)
 
         self.nu = nu
 
@@ -144,7 +144,7 @@ class AbstractBurgersEnv(AbstractScalarEnv):
                  + " implemented.")
             else:
                 self.solution = AnalyticalSolution(self.grid.nx, self.grid.ng,
-                        self.grid.xmin, self.grid.xmax, init_type=init_type)
+                        self.grid.xmin, self.grid.xmax, vec_len=1, init_type=init_type)
         else:
             if self.grid.ndim == 1:
                 self.solution = PreciseWENOSolution(
@@ -152,24 +152,24 @@ class AbstractBurgersEnv(AbstractScalarEnv):
                             'boundary':self.grid.boundary},
                         precise_scale=precise_scale, precise_order=precise_weno_order,
                         flux_function=self.burgers_flux, source=self.source,
-                        nu=nu)
+                        nu=nu, vec_len=1)
             elif self.grid.ndim == 2:
                 self.solution = PreciseWENOSolution2D(
                         self.grid, {'init_type':self.grid.init_type,
                             'boundary':self.grid.boundary},
                         precise_scale=precise_scale, precise_order=precise_weno_order,
                         flux_function=self.burgers_flux, source=self.source,
-                        nu=nu)
+                        nu=nu, vec_len=1)
             else:
                 raise NotImplementedError("{}-dim solution".format(self.grid.ndim)
                         + " not implemented.")
 
         if "one-step" in self.reward_mode:
-            self.solution = OneStepSolution(self.solution, self.grid)
+            self.solution = OneStepSolution(self.solution, self.grid, vec_len=1)
             if memoize:
                 print("Note: can't memoize solution when using one-step reward.")
         elif memoize:
-            self.solution = MemoizedSolution(self.solution, self.episode_length)
+            self.solution = MemoizedSolution(self.solution, self.episode_length, vec_len=1)
 
         if self.analytical:
             show_separate_weno = True
@@ -194,17 +194,17 @@ class AbstractBurgersEnv(AbstractScalarEnv):
                             'boundary':self.grid.boundary},
                         precise_scale=1, precise_order=self.weno_order,
                         flux_function=self.burgers_flux, source=self.source,
-                        nu=nu)
+                        nu=nu, eqn_type='burgers', vec_len=1)
             elif self.grid.ndim == 2:
                 self.weno_solution = PreciseWENOSolution2D(
                         self.grid, {'init_type':self.grid.init_type,
                             'boundary':self.grid.boundary},
                         precise_scale=1, precise_order=self.weno_order,
                         flux_function=self.burgers_flux, source=self.source,
-                        nu=nu)
+                        nu=nu, eqn_type='burgers', vec_len=1)
 
             if memoize:
-                self.weno_solution = MemoizedSolution(self.weno_solution, self.episode_length)
+                self.weno_solution = MemoizedSolution(self.weno_solution, self.episode_length, vec_len=1)
         else:
             self.weno_solution = None
 
@@ -272,14 +272,14 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         g = self.grid
 
         # compute flux at each point
-        f = self.burgers_flux(g.u)
+        f = self.burgers_flux(g.u[0])
 
         # get maximum velocity
-        alpha = np.max(abs(g.u))
+        alpha = np.max(abs(g.u[0]))
 
         # Lax Friedrichs Flux Splitting
-        fp = (f + alpha * g.u) / 2
-        fm = (f - alpha * g.u) / 2
+        fp = (f + alpha * g.u[0]) / 2
+        fm = (f - alpha * g.u[0]) / 2
 
         fp_stencil_indexes = create_stencil_indexes(stencil_size=self.state_order * 2 - 1,
                                                     num_stencils=g.real_length() + 1,
@@ -340,13 +340,13 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
             # In the future, if we expand to multiple dimensions, then it won't be, so this will need
             # to be changed (probably use tf.tile instead).
             # Not 100% sure tf.fill can be used this way.
-            left_ghost = tf.fill(ghost_size, state[0])
-            right_ghost = tf.fill(ghost_size, state[-1])
-            full_state = tf.concat([left_ghost, state, right_ghost], axis=0)
+            left_ghost = tf.fill(ghost_size, state[0, 0])
+            right_ghost = tf.fill(ghost_size, state[0, -1])
+            full_state = tf.concat([left_ghost, state[0], right_ghost], axis=0)
         elif self.grid.boundary == "periodic":
-            left_ghost = state[-ghost_size[0]:]
-            right_ghost = state[:ghost_size[0]]
-            full_state = tf.concat([left_ghost, state, right_ghost], axis=0)
+            left_ghost = state[0, -ghost_size[0]:]
+            right_ghost = state[0, :ghost_size[0]]
+            full_state = tf.concat([left_ghost, state[0], right_ghost], axis=0)
         else:
             raise NotImplementedError("{} boundary not implemented.".format(self.grid.boundary))
 
@@ -438,6 +438,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
                     + " in global backprop.")
 
         new_state = real_state + step
+        # shape broadcasting seems fine here, real_state shape=(1, 125), step shape=(125,), new_state shape=(1, 125)
         return new_state
 
     # TODO: modify this so less is in subclass? The reward section could go in the abstract class,
@@ -504,6 +505,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
             return -error
 
         error = weno_next_real_state - next_real_state
+        error = tf.reduce_sum(error, axis=0)
 
         if "one-step" in self.reward_mode:
             pass
@@ -674,14 +676,14 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         g = self.grid
 
         # compute flux at each point
-        f = self.burgers_flux(g.u)
+        f = self.burgers_flux(g.u[0])
 
         # get maximum velocity
-        alpha = np.max(abs(g.u))
+        alpha = np.max(abs(g.u[0]))
 
         # Lax Friedrichs Flux Splitting
-        fp = (f + alpha * g.u) / 2
-        fm = (f - alpha * g.u) / 2
+        fp = (f + alpha * g.u[0]) / 2
+        fm = (f - alpha * g.u[0]) / 2
 
         fp_stencil_indexes = create_stencil_indexes(stencil_size=self.state_order * 2 - 1,
                                                     num_stencils=g.real_length() + 1,
@@ -749,7 +751,7 @@ class FluxBurgersEnv(AbstractBurgersEnv):
         g = self.grid
 
         # compute flux at each point
-        f = self.burgers_flux(g.u)
+        f = self.burgers_flux(g.u[0])
 
         # (Do not split flux for this version.)
 

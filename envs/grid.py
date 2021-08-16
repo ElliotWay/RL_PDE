@@ -26,7 +26,7 @@ class AbstractGrid:
     AbstractGrid itself.
     """
 
-    def __init__(self, num_cells, num_ghosts, min_value, max_value):
+    def __init__(self, num_cells, num_ghosts, min_value, max_value, vec_len):
         """
         Construct a new Grid of arbitrary physical dimensions.
 
@@ -52,6 +52,10 @@ class AbstractGrid:
             The upper bound of the grid for each dimension. Either a list that gives the upper
             bound for each dimension, or a single float to give each dimension the same upper
             bound.
+        vec_len : int
+            Length of the state vector, corresponding to the first dimension of grid.space
+
+        TODO: Add names of each index.Could implement __getattr__ so e.g. grid.rho and grid.S work. -yiwei
         """
 
         try:
@@ -90,6 +94,8 @@ class AbstractGrid:
         except TypeError:
             self.max_value = (max_value,) * len(self.num_cells)
 
+        self.vec_len = vec_len
+
         self.cell_size = []
         # Physical coordinates: cell-centered
         # Note that for >1 dimension, these are not the coordinates themselves - 
@@ -117,11 +123,12 @@ class AbstractGrid:
             inter_x = xmin + (np.arange(nx + 2 * ng + 1) - ng) * dx
             self.interfaces.append(inter_x)
 
-        self.real_slice = tuple([slice(ng, -ng) for ng in self.num_ghosts])
+        self.real_slice = tuple([slice(0, self.vec_len)] + [slice(ng, -ng) for ng in self.num_ghosts])
         """
         Slice for indexing only the real portion and not ghost cells of the space (or something
         of equivalent shape).
         So grid.space[grid.real_slice] should be equivalent to grid.get_real().
+        0-th dimension is the vector length dim, all needs to be in
         """
 
     # 1-dimensional shortcuts for compatability.
@@ -174,7 +181,10 @@ class AbstractGrid:
 
     def scratch_array(self):
         """ Return a zeroed array dimensioned for this grid. """
-        return np.zeros([len(x) for x in self.coords], dtype=np.float64)
+        space = np.zeros([self.vec_len] + [len(x) for x in self.coords], dtype=np.float64)
+        # if len(space) == 1:
+        #     space = space[0]  # For backward compatibility, scalar state doesn't need 1st dim
+        return space
 
     @property
     def ndim(self): return len(self.num_cells)
@@ -193,8 +203,8 @@ class GridBase(AbstractGrid):
     other boundary conditions are required.
     """
 
-    def __init__(self, num_cells, num_ghosts, min_value, max_value, boundary="outflow"):
-        super().__init__(num_cells, num_ghosts, min_value, max_value)
+    def __init__(self, num_cells, num_ghosts, min_value, max_value, vec_len, boundary="outflow"):
+        super().__init__(num_cells, num_ghosts, min_value, max_value, vec_len)
      
         if type(boundary) is str:
             if len(self.num_cells) == 1:
@@ -268,6 +278,7 @@ class GridBase(AbstractGrid):
                     + " ({} vs {}).".format(len(boundary), len(self.num_cells)))
 
         for axis, (ng, bound) in enumerate(zip(self.num_ghosts, boundary)):
+            axis += 1  # With the current implementation, the 0-th dimension is taken as the vector length dim
             axis_slice = AxisSlice(self.space, axis)
             # Periodic - copying from the opposite end, as if the space wraps around
             if bound == "periodic":
@@ -313,17 +324,26 @@ def _is_list(thing):
         return False
 
 # Import down here to avoid circular import.
-from envs.grid1d import Grid1d
-from envs.grid2d import Grid2d
+from envs.grid1d import Burgers1DGrid, Euler1DGrid
+from envs.grid2d import Burgers2DGrid
 
-def create_grid(num_dimensions, num_cells, num_ghosts, min_value, max_value,
+def create_grid(num_dimensions, num_cells, num_ghosts, min_value, max_value, eqn_type='burgers',
         boundary=None, init_type=None,
         deterministic_init=False):
-    if num_dimensions == 1:
-        return Grid1d(num_cells, num_ghosts, min_value, max_value,
-                init_type=init_type, boundary=boundary, deterministic_init=deterministic_init)
-    elif num_dimensions == 2:
-        return Grid2d(num_cells, num_ghosts, min_value, max_value,
-                init_type=init_type, boundary=boundary, deterministic_init=deterministic_init)
+    if eqn_type == 'burgers':
+        if num_dimensions == 1:
+            return Burgers1DGrid(num_cells, num_ghosts, min_value, max_value,
+                                 init_type=init_type, boundary=boundary, deterministic_init=deterministic_init)
+        elif num_dimensions == 2:
+            return Burgers2DGrid(num_cells, num_ghosts, min_value, max_value,
+                                 init_type=init_type, boundary=boundary, deterministic_init=deterministic_init)
+        else:
+            raise NotImplementedError()
+    elif eqn_type == 'euler':
+        if num_dimensions == 1:
+            return Euler1DGrid(num_cells, num_ghosts, min_value, max_value,
+                               init_type=init_type, boundary=boundary, deterministic_init=deterministic_init)
+        else:
+            raise NotImplementedError()
     else:
         raise NotImplementedError()

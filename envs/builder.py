@@ -3,9 +3,10 @@ import sys
 import re
 
 from util.misc import positive_int, nonnegative_float, positive_float, float_dict
-from envs.abstract_scalar_env import AbstractScalarEnv
+from envs.abstract_pde_env import AbstractPDEEnv
 from envs import WENOBurgersEnv, SplitFluxBurgersEnv, FluxBurgersEnv
 from envs.burgers_2d_env import WENOBurgers2DEnv
+from envs.euler_env import WENOEulerEnv
 
 
 # Could pass name of env, and only have relevant parameters instead of allowing all of them?
@@ -86,7 +87,7 @@ def get_env_arg_parser():
     parser.add_argument('--reward-adjustment', type=nonnegative_float, default=1000.0,
                         help="Constant that affects the relative importance of small errors compared to big errors."
                         + " Larger values mean that smaller errors are still important compared to big errors.")
-    default_reward_mode = AbstractScalarEnv.fill_default_reward_mode("")
+    default_reward_mode = AbstractPDEEnv.fill_default_reward_mode("")
     parser.add_argument('--reward-mode', '--reward_mode', type=str, default=None,
                         help="String that controls how the reward is calculated."
                         + " The curent default is '{}'.".format(default_reward_mode)
@@ -118,7 +119,7 @@ def set_contingent_env_defaults(main_args, env_args):
         print("Reward mode forced to use 'one-step' to work with 'full' model.")
         env_args.reward_mode = "one-step"
     
-    env_args.reward_mode = AbstractScalarEnv.fill_default_reward_mode(env_args.reward_mode)
+    env_args.reward_mode = AbstractPDEEnv.fill_default_reward_mode(env_args.reward_mode)
     print("Full reward mode is '{}'.".format(env_args.reward_mode))
 
     # Some environments have specific defaults.
@@ -156,7 +157,7 @@ def set_contingent_env_defaults(main_args, env_args):
         if env_args.time_max is not None:
             main_args.ep_length = None
 
-        num_cells, dt, ep_length = AbstractScalarEnv.fill_default_time_vs_space(
+        num_cells, dt, ep_length = AbstractPDEEnv.fill_default_time_vs_space(
                 env_args.num_cells, env_args.min_value, env_args.max_value,
                 dt=env_args.timestep, C=env_args.C, ep_length=main_args.ep_length,
                 time_max=env_args.time_max)
@@ -241,6 +242,8 @@ def build_env(env_name, args, test=False):
         env = SplitFluxBurgersEnv(**kwargs)
     elif env_name == "flux_burgers":
         env = FluxBurgersEnv(**kwargs)
+    elif env_name == "weno_euler":
+        env = WENOEulerEnv(**kwargs)
     else:
         raise Exception("Unrecognized environment type: \"" + str(env_name) + "\".")
 

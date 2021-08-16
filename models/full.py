@@ -96,7 +96,7 @@ class GlobalBackpropModel(GlobalModel):
             # (It should not contain ghost cells - those should be handled by the prep_state function
             # that converts real state to rl state.)
             self.initial_state_ph = tf.placeholder(dtype=self.dtype,
-                    shape=(None, self.env.grid.nx), name="init_real_state")
+                    shape=(None, self.env.grid.vec_len, self.env.grid.nx), name="init_real_state")
 
             #TODO possibly restrict num_steps to something smaller?
             # We'd then need to sample timesteps from a WENO trajectory.
@@ -205,7 +205,7 @@ class GlobalBackpropModel(GlobalModel):
             else:
                 self.iteration += 1
 
-            safe_state = states[np.logical_not(np.isnan(states).any(axis=(1,2)))]
+            safe_state = states[np.logical_not(np.isnan(states).any(axis=(2,3)))]
             #if len(safe_state) == 0:
                 #raise Exception("All timesteps NaN. Stopping")
 
@@ -228,6 +228,7 @@ class GlobalBackpropModel(GlobalModel):
             if self.iteration % training_plot_freq == 0:
                 for initial_condition_index in [0]:#range(states.shape[1]):
                     state_history = states[:, initial_condition_index]
+                    # TODO: do we want to convert the states to (rho, u, e) for Euler equation before plotting? -yiwei
                     suffix = "_train_iter{}_init{}".format(self.iteration, initial_condition_index)
                     self.env.plot_state_evolution(state_history=state_history,
                             no_true=True, suffix=suffix)
