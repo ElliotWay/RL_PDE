@@ -82,7 +82,7 @@ from util import action_snapshot
 from util.misc import human_readable_time_delta
 
 
-def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs):
+def write_summary_plots(log_dir, summary_plot_dir, total_episodes, eval_env_names):
     #TODO This is a hack. Consider adapting the SB logger class to our own purposes
     # so we can fetch this file name instead of hardcoding it here.
     csv_file = os.path.join(log_dir, "progress.csv")
@@ -100,11 +100,11 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs
     ax.plot(episodes, train_reward, color=train_color, label="train")
     avg_eval_reward = csv_df['avg_eval_total_reward']
     ax.plot(episodes, avg_eval_reward, color=eval_color, label="eval avg")
-    if num_eval_envs > 1:
-        for i in range(num_eval_envs):
+    if len(eval_env_names) > 1:
+        for i, name in enumerate(eval_env_names):
             eval_reward = csv_df['eval{}_reward'.format(i+1)]
             ax.plot(episodes, eval_reward,
-                    color=envs_colors[i], ls='--', label="eval env{}".format(i+1))
+                    color=envs_colors[i], ls='--', label=name)
 
     reward_fig.legend(loc="lower right")
     ax.set_xlim((0, total_episodes))
@@ -135,11 +135,11 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs
     ax.plot(episodes, train_l2, color=train_color, label="train")
     avg_eval_l2 = csv_df['avg_eval_end_l2']
     ax.plot(episodes, avg_eval_l2, color=eval_color, label="eval avg")
-    if num_eval_envs > 1:
-        for i in range(num_eval_envs):
+    if len(eval_env_names) > 1:
+        for i, name in enumerate(eval_env_names):
             eval_l2 = csv_df['eval{}_end_l2'.format(i+1)]
             ax.plot(episodes, eval_l2,
-                    color=envs_colors[i], ls='--', label="eval env{}".format(i+1))
+                    color=envs_colors[i], ls='--', label=name)
 
     l2_fig.legend(loc="upper right")
     ax.set_xlim((0, total_episodes))
@@ -185,7 +185,7 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs
 
     print("Summary plots updated in {}.".format(summary_plot_dir))
 
-def write_final_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs):
+def write_final_plots(log_dir, summary_plot_dir, total_episodes, eval_env_names):
     """ Create final plots that are different from the summary plots in some way. """ 
     csv_file = os.path.join(log_dir, "progress.csv")
     csv_df = pd.read_csv(csv_file, comment='#')
@@ -203,14 +203,11 @@ def write_final_plots(log_dir, summary_plot_dir, total_episodes, num_eval_envs):
     #ax.plot(episodes, train_l2, color=train_color, label="train")
     #avg_eval_l2 = csv_df['avg_eval_end_l2']
     #ax.plot(episodes, avg_eval_l2, color=eval_color, label="eval avg")
-    assert num_eval_envs == 3
-    eval_names = ['smooth_sine', 'smooth_rare', 'accelshock']
-    for i in range(num_eval_envs):
+    for i, name in enumerate(eval_env_names):
         eval_l2 = csv_df['eval{}_end_l2'.format(i+1)]
-        label = eval_names[i]
         # Use solid lines instead of dashed lines for this version.
         ax.plot(episodes, eval_l2,
-                color=envs_colors[i], ls='-', label=label)
+                color=envs_colors[i], ls='-', label=name)
 
     l2_fig.legend(loc="upper right")
     ax.set_xlim((0, total_episodes))
@@ -234,6 +231,8 @@ def train(env, eval_envs, emi, args):
     ep_precision = int(np.ceil(np.log(1+args.total_episodes) / np.log(10)))
     log_dir = logger.get_dir()
 
+    eval_env_names = [env.grid.init_type for env in eval_envs]
+
     summary_plot_dir = os.path.join(log_dir, "summary_plots")
     os.makedirs(summary_plot_dir)
 
@@ -253,7 +252,6 @@ def train(env, eval_envs, emi, args):
     start_time = time.time()
     for ep in np.arange(args.total_episodes)+1:
 
-
         # TODO wrap train step in signal catcher so we can save the model
         # when there is a SIGINT, but not in the middle of training.
         train_info = emi.training_episode(env)
@@ -267,7 +265,7 @@ def train(env, eval_envs, emi, args):
 
             ep_string = ("{:0" + str(ep_precision) + "}").format(ep)
 
-            if isinstance(args.emi, OneDimensionalStencil):
+            if isinstance(emi, OneDimensionalStencil):
                 # The action snapshot only makes sense when the underlying policy can be applied to
                 # 1D environments of arbitrary length, e.g. if it is applied to each 1D stencil in
                 # an environment.
@@ -292,8 +290,8 @@ def train(env, eval_envs, emi, args):
                     eval_suffix = "_eval{}".format(eval_index) + eval_suffix
                 plot_file_name = eval_env.plot_state_evolution(
                         suffix=eval_suffix,
-                        title="{:03d} training episodes, t = {:05.4f}"
-                        .format(ep, eval_env.t),
+                        title="{:03d} training episodes"#, t = {:05.4f}"
+                        .format(ep), #, eval_env.t),
                         **eval_plot_kwargs)
                 eval_plots.append(plot_file_name)
 
@@ -325,7 +323,7 @@ def train(env, eval_envs, emi, args):
             logger.dumpkvs()
 
             write_summary_plots(log_dir=log_dir, summary_plot_dir=summary_plot_dir,
-                    total_episodes=args.total_episodes, num_eval_envs=len(eval_envs))
+                    total_episodes=args.total_episodes, eval_env_names=eval_env_names)
 
             # Save model.
             model_file_name = os.path.join(log_dir, "model" + ep_string)
@@ -359,9 +357,9 @@ def train(env, eval_envs, emi, args):
         #endif logging
     #endfor episodes
     write_summary_plots(log_dir=log_dir, summary_plot_dir=summary_plot_dir,
-            total_episodes=args.total_episodes, num_eval_envs=len(eval_envs))
+            total_episodes=args.total_episodes, eval_env_names=eval_env_names)
     write_final_plots(log_dir=log_dir, summary_plot_dir=summary_plot_dir,
-            total_episodes=args.total_episodes, num_eval_envs=len(eval_envs))
+            total_episodes=args.total_episodes, eval_env_names=eval_env_names)
 
     print("Training complete!")
     print("Training took {}, and {} timesteps.".format(
@@ -376,8 +374,9 @@ def train(env, eval_envs, emi, args):
         print("{}: {} eps, {}, {}".format(index+1, model["episodes"], model["reward"],
             new_file_name))
         for plot_index, plot_file_name in enumerate(model["plots"]):
+            _, plot_ext = os.path.splitext(plot_file_name)
             new_plot_name = os.path.join(log_dir,
-                                base_best_name + "_{}.png".format(plot_index + 1))
+                    "{}_{}{}".format(base_best_name, plot_index+1, plot_ext))
             shutil.copy(plot_file_name, new_plot_name)
 
 

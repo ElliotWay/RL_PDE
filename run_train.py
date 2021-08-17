@@ -127,6 +127,7 @@ def main():
     eval_env_args = Namespace(**vars(args))
     eval_env_args.follow_solution = False # Doesn't make sense for eval envs to do that.
     if args.eval_env == "std" or args.eval_env == "custom":
+        eval_env_args.memoize = True
         # Use standard default evaluation environments.
         if args.env == "weno_burgers":
             eval_envs = []
@@ -135,14 +136,17 @@ def main():
             smooth_sine_args.init_type = "smooth_sine"
             smooth_sine_args.ep_length = args.ep_length * 2
             eval_envs.append(env_builder.build_env(args.env, smooth_sine_args, test=True))
+
             smooth_rare_args = Namespace(**vars(eval_env_args))
             smooth_rare_args.init_type = "smooth_rare"
             smooth_rare_args.ep_length = args.ep_length * 2
             eval_envs.append(env_builder.build_env(args.env, smooth_rare_args, test=True))
+
             accelshock_args = Namespace(**vars(eval_env_args))
             accelshock_args.init_type = "accelshock"
             accelshock_args.ep_length = args.ep_length * 2
             eval_envs.append(env_builder.build_env(args.env, accelshock_args, test=True))
+
         elif args.env == "weno_burgers_2d":
             eval_envs = []
             eval_env_args.boundary = None
@@ -150,11 +154,17 @@ def main():
             gaussian_args = Namespace(**vars(eval_env_args))
             gaussian_args.init_type = "gaussian"
             eval_envs.append(env_builder.build_env(args.env, gaussian_args, test=True))
+
             smooth_sine_args = Namespace(**vars(eval_env_args))
             smooth_sine_args.init_type = "1d-smooth_sine-x"
             eval_envs.append(env_builder.build_env(args.env, smooth_sine_args, test=True))
+
             jsz_args = Namespace(**vars(eval_env_args))
             jsz_args.init_type = "jsz7"
+            # Restore jsz7 defaults.
+            vars(jsz_args).update({"min_value":None, "max_value":None, "num_cells":None,
+                "time_max":None})
+            env_builder.set_contingent_env_defaults(jsz_args, jsz_args)
             eval_envs.append(env_builder.build_env(args.env, jsz_args, test=True))
 
     elif args.eval_env == "long":
