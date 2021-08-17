@@ -20,10 +20,11 @@ def declare_standard_envs(args):
     # Make a copy - we need to change the args, but the caller should not
     # have to worry about args changing.
     args = Namespace(**vars(args))
-    # No point memoizing any these environments.
-    args.memoize = False
-    # These environments are not analytical, though they could be.
+    args.env = "weno_burgers" # Should we allow for other sorts of 1D environments here?
+    args.memoize = False # No point memoizing any of these environments.
     args.analytical = False
+    args.min_value = 0.0
+    args.max_value = 1.0
 
     global standard_envs
 
@@ -121,7 +122,7 @@ def save_action_snapshot(agent, weno_agent=None, suffix=""):
                 action_axis.yaxis.set_ticklabels([])
 
     log_dir = logger.get_dir()
-    filename = "burgers_action_snap" + suffix + ".png"
+    filename = "action_snap" + suffix + ".png"
     filename = os.path.join(log_dir, filename)
     fig.tight_layout()
     plt.savefig(filename)
@@ -150,6 +151,9 @@ def main():
                         help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
     parser.add_argument('-n', default=False, action='store_true',
                         help="Choose no for any questions, namely overwriting existing files. Useful for scripts. Overrides the -y option.")
+    raise Exception("The main method in this file hasn't been used in a while;"
+            + " it almost certainly won't work. Update it if you're trying to get"
+            + " an action snapshot of an existing agent.")
 
     main_args, rest = parser.parse_known_args()
 

@@ -154,6 +154,8 @@ class Burgers2DGrid(GridBase):
                 y_grid = self.y_grid1d.get_real()
                 self.space[0, self.real_slice] = np.tile(y_grid, (self.num_cells[0], 1))
                 self.boundary = ("outflow", y_bound)
+        else:
+            raise Exception("Initial condition type \"" + str(self.init_type) + "\" not recognized.")
 
         new_params['boundary'] = self.boundary
         self.init_params = new_params

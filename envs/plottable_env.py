@@ -6,13 +6,12 @@ matplotlib.use("Agg")
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 from matplotlib.ticker import LinearLocator
+import matplotlib.animation as animation
 import numpy as np
 from stable_baselines import logger
 
 from envs.abstract_pde_env import AbstractPDEEnv
 from envs.solutions import OneStepSolution
-
-
 
 class Plottable1DEnv(AbstractPDEEnv):
     """
@@ -606,6 +605,20 @@ class Plottable2DEnv(AbstractPDEEnv):
 
         self._state_axes = None
 
+        # Pillow is very likely to be available, but check for others just in case it's not.
+        if "pillow" in animation.writers:
+            self.animation_writer = animation.writers["pillow"]
+            self.animation_extension = ".gif"
+        elif "ffmpeg" in animation.writers:
+            self.animation_writer = animation.writers["ffmpeg"]
+            self.animation_extension = ".mp4"
+        elif "imagemagick" in animation.writers:
+            self.animation_writer = animation.writers["imagemagick"]
+            self.animation_extension = ".gif"
+        else:
+            self.animation_writer = None
+            self.animation_extension = None
+
     def render(self, mode='file', **kwargs):
         if mode is None:
             return
@@ -613,6 +626,109 @@ class Plottable2DEnv(AbstractPDEEnv):
             return self.plot_state(**kwargs)
         else:
             raise Exception("Plottable1DEnv: \"{}\" render mode not recognized".format(mode))
+
+    def _plot_state(self,
+            axes,
+            plot_error,
+            title,
+            fixed_axes, no_borders,
+            state,
+            state_includes_ghost):
+
+        ax = axes
+
+        if state_includes_ghost:
+            x_values = self.grid.x
+            y_values = self.grid.y
+        else:
+            x_values = self.grid.real_x
+            y_values = self.grid.real_y
+
+        #fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+        x, y = np.meshgrid(x_values, y_values, indexing='ij')
+        z = state
+        surface = ax.plot_surface(x, y, z, cmap=cm.viridis,
+                linewidth=0, antialiased=False)
+
+        ax.set_title(title)
+
+        if no_borders:
+            ax.set_xmargin(0.0)
+            ax.set_ymargin(0.0)
+
+        # plot_error == True means state is actually abs(error), not the state.
+        # Restrict z-axis if plotting error.
+        # Can't have negative, cut off extreme errors.
+        if plot_error:
+            extreme_cutoff = 3.0
+            max_not_extreme = np.max(state[state < extreme_cutoff])
+            zmax = max_not_extreme*1.05 if max_not_extreme > 0.0 else 0.01
+            ax.set_zlim((0.0, ymax))
+
+        if fixed_axes:
+            #TODO Keep the colorbar fixed as well.
+            if self._state_axes is None:
+                self._state_axes = (ax.get_xlim(), ax.get_ylim(), ax.get_zlim())
+            else:
+                xlim, ylim, zlim = self._state_axes
+                ax.set_xlim(xlim)
+                ax.set_ylim(ylim)
+                ax.set_zlim(zlim)
+
+        ax.zaxis.set_major_locator(LinearLocator(10))
+        #fig.colorbar(surface, shrink=0.5, aspect=5)
+
+        # Indicate ghost cells with a rectangle around the real portion.
+        #
+        # Turns out, matplotlib isn't terribly well suited to drawing lines on existing 3D
+        # surfaces. It also doesn't help that the boundary is almost indistinguishably close
+        # to the edge. For now, show_ghost defaults to False, and setting it to true will
+        # include the ghost cells but not indicate them in any way.
+        """
+        if history_includes_ghost:
+            boundary_kwargs = {'color': 'k', 'linestyle': '-', 'linewidth': 1.5}
+            lift = 0.01 # Keep the line above the surface so it's visible.
+            x_num, y_num = self.grid.num_cells
+            x_ghost, y_ghost = self.grid.num_ghosts
+            x_min, y_min = self.grid.min_value
+            x_max, y_max = self.grid.max_value
+
+            left_y = self.grid.inter_y[y_ghost:-y_ghost]
+            left_x = np.full_like(left_y, x_min)
+            left_cells = state_history[x_ghost-1:x_ghost+1, y_ghost-1:-(y_ghost-1)]
+            # This is a bit tricky because we don't HAVE the points on the boundaries - we have
+            # cell-centered values. Average them to get the actual points we're looking for.
+            left_z = (left_cells[:-1, :-1] + left_cells[:-1, 1:] 
+                    + left_cells[1:, :-1] + left_cells[1:, 1:]) / 4 + lift
+            left_z = left_z.squeeze(0)
+            left_line = ax.plot(left_x, left_y, left_z, **boundary_kwargs)
+
+            bottom_x = self.grid.inter_x[x_ghost:-x_ghost]
+            bottom_y = np.full_like(bottom_x, y_min)
+            bottom_cells = state_history[x_ghost-1:-(x_ghost-1), y_ghost-1:y_ghost+1]
+            bottom_z = (bottom_cells[:-1, :-1] + bottom_cells[:-1, 1:] 
+                    + bottom_cells[1:, :-1] + bottom_cells[1:, 1:]) / 4 + lift
+            bottom_z = bottom_z.squeeze(1)
+            bottom_line = ax.plot(bottom_x, bottom_y, bottom_z, **boundary_kwargs)
+
+            right_y = left_y
+            right_x = np.full_like(right_y, x_max)
+            right_cells = state_history[-(x_ghost+1):-(x_ghost-1), y_ghost-1:-(y_ghost-1)]
+            right_z = (right_cells[:-1, :-1] + right_cells[:-1, 1:] 
+                    + right_cells[1:, :-1] + right_cells[1:, 1:]) / 4 + lift
+            right_z = right_z.squeeze(0)
+            right_line = ax.plot(right_x, right_y, right_z, **boundary_kwargs)
+
+            top_x = bottom_x
+            top_y = np.full_like(top_x, y_max)
+            top_cells = state_history[x_ghost-1:-(x_ghost-1), -(y_ghost+1):-(y_ghost-1)]
+            top_z = (top_cells[:-1, :-1] + top_cells[:-1, 1:] 
+                    + top_cells[1:, :-1] + top_cells[1:, 1:]) / 4 + lift
+            top_z = top_z.squeeze(1)
+            top_line = ax.plot(top_x, top_y, top_z, **boundary_kwargs)
+        """
+
+        #return fig
 
     def plot_state(self,
             timestep=None,
@@ -672,107 +788,117 @@ class Plottable2DEnv(AbstractPDEEnv):
 
         if not show_ghost:
             state_history = state_history[self.grid.real_slice]
-            x_values = self.grid.real_x
-            y_values = self.grid.real_y
-        else:
-            x_values = self.grid.x
-            y_values = self.grid.y
+
 
         fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-        x, y = np.meshgrid(x_values, y_values, indexing='ij')
-        z = state_history
-        surface = ax.plot_surface(x, y, z, cmap=cm.viridis,
-                linewidth=0, antialiased=False)
 
-        ax.set_title(title)
+        self._plot_state(axes=ax, plot_error=plot_error, title=title,
+                fixed_axes=fixed_axes, no_borders=no_borders,
+                state=state_history,
+                state_includes_ghost=(override_history and history_includes_ghost))
 
-        if no_borders:
-            ax.set_xmargin(0.0)
-            ax.set_ymargin(0.0)
-
-        # Restrict z-axis if plotting abs error.
-        # Can't have negative, cut off extreme errors.
-        if plot_error:
-            extreme_cutoff = 3.0
-            max_not_extreme = np.max(state_history[state_history < extreme_cutoff])
-            zmax = max_not_extreme*1.05 if max_not_extreme > 0.0 else 0.01
-            ax.set_zlim((0.0, ymax))
-
-        if fixed_axes:
-            #TODO Keep the colorbar fixed as well.
-            if self._state_axes is None:
-                self._state_axes = (ax.get_xlim(), ax.get_ylim(), ax.get_zlim())
-            else:
-                xlim, ylim, zlim = self._state_axes
-                ax.set_xlim(xlim)
-                ax.set_ylim(ylim)
-                ax.set_zlim(zlim)
-
-        ax.zaxis.set_major_locator(LinearLocator(10))
-        #fig.colorbar(surface, shrink=0.5, aspect=5)
-
-        # Indicate ghost cells with a rectangle around the real portion.
-        #
-        # Turns out, matplotlib isn't terribly well suited to drawing lines on existing 3D
-        # surfaces. It also doesn't help that the boundary is almost indistinguishably close
-        # to the edge. For now, show_ghost will default to False, and setting it to true will
-        # include the ghost cells but not indicate them in any way.
-        """
-        if show_ghost:
-            boundary_kwargs = {'color': 'k', 'linestyle': '-', 'linewidth': 1.5}
-            lift = 0.01 # Keep the line above the surface so it's visible.
-            x_num, y_num = self.grid.num_cells
-            x_ghost, y_ghost = self.grid.num_ghosts
-            x_min, y_min = self.grid.min_value
-            x_max, y_max = self.grid.max_value
-
-            left_y = self.grid.inter_y[y_ghost:-y_ghost]
-            left_x = np.full_like(left_y, x_min)
-            left_cells = state_history[x_ghost-1:x_ghost+1, y_ghost-1:-(y_ghost-1)]
-            # This is a bit tricky because we don't HAVE the points on the boundaries - we have
-            # cell-centered values. Average them to get the actual points we're looking for.
-            left_z = (left_cells[:-1, :-1] + left_cells[:-1, 1:] 
-                    + left_cells[1:, :-1] + left_cells[1:, 1:]) / 4 + lift
-            left_z = left_z.squeeze(0)
-            left_line = ax.plot(left_x, left_y, left_z, **boundary_kwargs)
-
-            bottom_x = self.grid.inter_x[x_ghost:-x_ghost]
-            bottom_y = np.full_like(bottom_x, y_min)
-            bottom_cells = state_history[x_ghost-1:-(x_ghost-1), y_ghost-1:y_ghost+1]
-            bottom_z = (bottom_cells[:-1, :-1] + bottom_cells[:-1, 1:] 
-                    + bottom_cells[1:, :-1] + bottom_cells[1:, 1:]) / 4 + lift
-            bottom_z = bottom_z.squeeze(1)
-            bottom_line = ax.plot(bottom_x, bottom_y, bottom_z, **boundary_kwargs)
-
-            right_y = left_y
-            right_x = np.full_like(right_y, x_max)
-            right_cells = state_history[-(x_ghost+1):-(x_ghost-1), y_ghost-1:-(y_ghost-1)]
-            right_z = (right_cells[:-1, :-1] + right_cells[:-1, 1:] 
-                    + right_cells[1:, :-1] + right_cells[1:, 1:]) / 4 + lift
-            right_z = right_z.squeeze(0)
-            right_line = ax.plot(right_x, right_y, right_z, **boundary_kwargs)
-
-            top_x = bottom_x
-            top_y = np.full_like(top_x, y_max)
-            top_cells = state_history[x_ghost-1:-(x_ghost-1), -(y_ghost+1):-(y_ghost-1)]
-            top_z = (top_cells[:-1, :-1] + top_cells[:-1, 1:] 
-                    + top_cells[1:, :-1] + top_cells[1:, 1:]) / 4 + lift
-            top_z = top_z.squeeze(1)
-            top_line = ax.plot(top_x, top_y, top_z, **boundary_kwargs)
-        """
+        fig.tight_layout()
 
         log_dir = logger.get_dir()
         filename = "burgers2d_{}{}.png".format(error_or_state, suffix)
         filename = os.path.join(log_dir, filename)
-        plt.savefig(filename)
+        fig.savefig(filename)
         print('Saved plot to ' + filename + '.')
 
         plt.close(fig)
         return filename
 
-    def plot_state_evolution(self, *args, **kwargs):
-        raise NotImplementedError("2D evolution plot not implemented."
-                + " Not sure how we should do that. Create animation?")
+    def plot_state_evolution(self, plot_error=False,
+            show_ghost=False, no_true=False,
+            suffix="", title=None, num_frames=50,
+            state_history=None, history_includes_ghost=False):
+
+        if self.animation_writer is None:
+            raise Exception("No familiar image libraries avilable to render evolution." + 
+                    " These are the available libraries: " + str(animation.writers.list()))
+
+        override_history = (state_history is not None)
+
+        if not override_history:
+            state_history = np.array(self.state_history)
+
+        if title is None:
+            base_title = ""
+        else:
+            base_title = title
+
+        # Indexes into the state history. There are num_frames+1 indices, where the first
+        # is always 0 the last is always len(state_history)-1, and the rest are evenly
+        # spaced between them.
+        timesteps = (np.arange(num_frames+1)*(len(self.state_history)-1)/num_frames).astype(int)
+
+        fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+
+        def update_plot(timestep):
+
+            if timestep == -1:
+                return []
+
+            state = state_history[timestep]
+
+            if self.C is None:
+                actual_time = timestep * self.fixed_step
+                time_str = (" t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(
+                                actual_time, timestep)
+            else:
+                # TODO get time with variable timesteps?
+                time_str = " step {:0" + str(self._step_precision) + "d}".format(timestep)
+            title = base_title + time_str
+
+            if not show_ghost and (not override_history or history_includes_ghost):
+                state = state[self.grid.real_slice]
+
+            state_includes_ghost = (show_ghost and (not override_history or
+                history_includes_ghost))
+
+            ax.cla()
+            self._plot_state(axes=ax, plot_error=False, title=title,
+                    fixed_axes=True, no_borders=True,
+                    state=state,
+                    state_includes_ghost=state_includes_ghost)
+
+            # TODO also plot error (unless no_true == True)
+
+            if timestep == 0:
+                fig.tight_layout()
+
+            return [ax]
+
+        # In milliseconds.
+        frame_interval = 100
+        start_delay = 500
+        end_delay = 500
+
+        start_delay_frames = [-1] * int(start_delay / frame_interval)
+        end_delay_frames = [-1] * int(end_delay / frame_interval)
+
+        frames = [0,] + start_delay_frames + list(timesteps[1:]) + end_delay_frames
+
+        ani = animation.FuncAnimation(fig, update_plot, frames, interval=frame_interval)
+        # FuncAnimation has an argument "repeat_delay" which serves the same purpose as end_delay,
+        # except repeat_delay doesn't work for saved animations.
+
+        fps = 1000.0 / frame_interval
+        writer = self.animation_writer(fps=fps)
+
+        log_dir = logger.get_dir()
+        filename = os.path.join(log_dir,
+                "evolution{}{}".format(suffix, self.animation_extension))
+
+        print("Saving animation to {}".format(filename), end='')
+        ani.save(filename, writer,
+                progress_callback = lambda i, n: print('.', end='', flush=True))
+        print('Saved.')
+
+        plt.close(fig)
+        ani = None
+
+        return filename
 
     def plot_action(self, *args, **kwargs):
         raise NotImplementedError("2D action plot not implemented."

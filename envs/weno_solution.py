@@ -1,4 +1,5 @@
 import numpy as np
+import tensorflow as tf
 
 from envs.solutions import SolutionBase
 import envs.weno_coefficients as weno_coefficients
@@ -20,7 +21,7 @@ def lf_flux_split_nd(flux_array, values_array):
     output = []
     abs_values = np.abs(values_array)
     for dim in range(1, flux_array.ndim):  # now the 0-th dimension is state vector length
-        alpha = np.expand_dims(np.max(abs_values, axis=dim), axis=dim)
+        alpha = np.max(abs_values, axis=dim, keepdims=True)
         fm = (flux_array - alpha * values_array) / 2
         fp = (flux_array + alpha * values_array) / 2
         output.append((fm, fp))
@@ -29,6 +30,25 @@ def lf_flux_split_nd(flux_array, values_array):
         return output[0]
     else:
         return output
+
+# Actually important that this is NOT a tf.function.
+# Something about the way it handles tuples causes problems when TF tries to optimize it.
+# Not sure what the ramifications of this are.
+#@tf.function
+def tf_lf_flux_split(flux_tensor, values_tensor):
+    output = []
+    abs_values = tf.abs(values_tensor)
+    for axis in range(flux_tensor.shape.ndims):
+        alpha = tf.reduce_max(abs_values, axis=axis, keepdims=True)
+        fm = (flux_tensor - alpha * values_tensor) / 2
+        fp = (flux_tensor + alpha * values_tensor) / 2
+        output.append((fm, fp))
+
+    if len(output) == 1:
+        return output[0]
+    else:
+        return output
+
 
 #TODO: Finish this function. It is not currently in use. I couldn't find a clean way of handling
 # this in a general case. - direction stencils need to be flipped and shifted. Unsplit flux has a
@@ -62,6 +82,7 @@ def create_stencils_nd(values_array, order, axis, source_grid):
     left_stencils = (flux_left.transpose()[:, left_stencil_indexes]).transpose([1,0,2])
     right_stencils = (flux_right.transpose()[:, right_stencil_indexes]).transpose([1,0,2])
 
+
 def weno_sub_stencils_nd(stencils_array, order):
     """
     Interpolate sub-stencils in an ndarray of stencils. (The stencils are 1D.)
@@ -82,13 +103,25 @@ def weno_sub_stencils_nd(stencils_array, order):
     a_mat = np.flip(a_mat, axis=-1)
 
     sub_stencil_indexes = create_stencil_indexes(stencil_size=order, num_stencils=order)
-    sub_stencils = AxisSlice(stencils_array, -1)[sub_stencil_indexes]
+    sub_stencils = stencils_array[..., sub_stencil_indexes]
 
     interpolated = np.sum(a_mat * sub_stencils, axis=-1)
     return interpolated
 
+@tf.function
+def tf_weno_sub_stencils(stencils_tensor, order):
+    a_mat = weno_coefficients.a_all[order]
+    a_mat = np.flip(a_mat, axis=-1)
+
+    sub_stencil_indexes = create_stencil_indexes(stencil_size=order, num_stencils=order)
+    sub_stencils = tf.gather(stencils_tensor, sub_stencil_indexes, axis=-1)
+
+    interpolated = tf.reduce_sum(a_mat * sub_stencils, axis=-1)
+    return interpolated
+
+
 # Future note: we're wasting some computations.
-# The q^2 matrix for the kth sub-stencil has a lot of overlap with the q^2 matrix with the k+1st sub-stencil.
+# The squared matrix for the kth sub-stencil has a lot of overlap with the q^2 matrix with the k+1st sub-stencil.
 # Also the upper triangle of the q^2 matrix is not needed.
 # Not a huge deal, but could be relevant with higher orders or factors of increasing complexity.
 def weno_weights_nd(stencils_array, order):
@@ -131,11 +164,30 @@ def weno_weights_nd(stencils_array, order):
 
     alpha = C / (epsilon + beta ** 2)
 
-    # Add back in the sub-stencil dimension after the sum so numpy broadcasts there
+    # Keep the sub-stencil dimension after the sum so numpy broadcasts there
     # instead of on the stencil dimension.
-    weights = alpha / (np.sum(alpha, axis=-1)[..., None])
+    weights = alpha / np.sum(alpha, axis=-1, keepdims=True)
 
     return weights
+
+@tf.function
+def tf_weno_weights(stencils_tensor, order):
+    C = weno_coefficients.C_all[order]
+    sigma = weno_coefficients.sigma_all[order]
+    epsilon = 1e-16
+
+    sub_stencil_indexes = create_stencil_indexes(stencil_size=order, num_stencils=order)
+    sub_stencils = tf.gather(stencils_tensor, sub_stencil_indexes, axis=-1)
+    # For some reason, axis for tf.reverse MUST be iterable, can't be scalar -1.
+    sub_stencils_flipped = tf.reverse(sub_stencils, axis=(-1,))
+
+    squared = (tf.expand_dims(sub_stencils_flipped, axis=-2)
+                * tf.expand_dims(sub_stencils_flipped, axis=-1))
+    beta = tf.reduce_sum(sigma * squared, axis=(-2, -1))
+    alpha = C / (epsilon + beta ** 2)
+    weights = alpha / tf.reduce_sum(alpha, axis=-1, keepdims=True)
+    return weights
+
 
 def weno_reconstruct_nd(order, stencils_array):
     sub_stencils = weno_sub_stencils_nd(stencils_array, order)
@@ -144,17 +196,26 @@ def weno_reconstruct_nd(order, stencils_array):
     reconstructed = np.sum(weights * sub_stencils, axis=-1)
     return reconstructed, weights
 
+@tf.function
+def tf_weno_reconstruct(stencils_tensor, order):
+    sub_stencils = tf_weno_sub_stencils(stencils_tensor, order)
+    weights = tf_weno_weights(stencils_tensor, order)
+
+    reconstructed = tf.reduce_sum(weights * sub_stencils, axis=-1)
+    return reconstructed, weights
+
+
 class WENOSolution(SolutionBase):
     """
     Interface class to define some functions that WENO solutions should have.
     """
     def use_rk4(self, use_rk4):
         raise NotImplementedError()
-
     def set_record_actions(self, mode):
         raise NotImplementedError()
     def get_action_history(self):
         raise NotImplementedError()
+
 
 # Should be possible to convert this to ND instead of 2D.
 # rk_substep needs to be generalized.
@@ -166,7 +227,7 @@ class PreciseWENOSolution2D(WENOSolution):
             record_state=False, record_actions=None):
         super().__init__(base_grid.num_cells, base_grid.num_ghosts,
                 base_grid.min_value, base_grid.max_value, vec_len, record_state=record_state)
- 
+
         assert (precise_scale % 2 == 1), "Precise scale must be odd for easier downsampling."
 
         self.precise_scale = precise_scale
@@ -206,7 +267,7 @@ class PreciseWENOSolution2D(WENOSolution):
         self.action_history = []
 
         self.use_rk4 = False
- 
+
     def set_rk4(self, use_rk4):
         self.use_rk4 = use_rk4
 
@@ -242,7 +303,7 @@ class PreciseWENOSolution2D(WENOSolution):
         # back. (It might be possible, though.)
         left_stencils = (flux_left.transpose()[:, left_stencil_indexes]).transpose([1,0,2])
         right_stencils = (flux_right.transpose()[:, right_stencil_indexes]).transpose([1,0,2])
- 
+
         #l_ss = []
         #l_w = []
         #r_ss = []
@@ -302,8 +363,11 @@ class PreciseWENOSolution2D(WENOSolution):
 
         if self.record_actions is not None:
             if self.record_actions == "weno":
-                self.action_history.append((np.stack([left_weights, right_weights], axis=-2),
-                                                np.stack([down_weights, up_weights], axis=-1)))
+                # Changed this without testing, was the original version right?
+                #self.action_history.append((np.stack([left_weights, right_weights], axis=-2),
+                                                #np.stack([down_weights, up_weights], axis=-1)))
+                self.action_history.append((np.stack([left_weights, right_weights], axis=2),
+                                                np.stack([down_weights, up_weights], axis=2)))
             elif self.record_actions == "coef":
                 raise NotImplementedError()
                 # This corresponds to e.g. SplitFluxBurgersEnv.
@@ -361,16 +425,18 @@ class PreciseWENOSolution2D(WENOSolution):
     def get_full(self):
         """ Downsample the precise solution to get coarse solution values. """
 
+        # Note that axis 0 is the vector dimension.
+
         grid = self.precise_grid.get_full()
 
         if any([xg > 0 for xg in self.extra_ghosts]):
-            extra_ghost_slice = tuple([slice(xg, -xg) for xg in self.extra_ghosts])
+            extra_ghost_slice = tuple([slice(None)] + [slice(xg, -xg) for xg in self.extra_ghosts])
             grid = grid[extra_ghost_slice]
 
         # For each coarse cell, there are precise_scale precise cells, where the middle
         # cell corresponds to the same location as the coarse cell.
         middle = int(self.precise_scale / 2)
-        middle_cells_slice = tuple([slice(middle, None, self.precise_scale) for _ in
+        middle_cells_slice = tuple([slice(None)] + [slice(middle, None, self.precise_scale) for _ in
             self.num_cells])
         return grid[middle_cells_slice]
 
@@ -385,7 +451,6 @@ class PreciseWENOSolution2D(WENOSolution):
         """ Force set the current grid. Will make the state/action history confusing. """
         self.precise_grid.set(real_values)
 
-     
 
 class PreciseWENOSolution(WENOSolution):
 
@@ -613,7 +678,7 @@ class PreciseWENOSolution(WENOSolution):
     def _update(self, dt, time):
         if self.use_rk4:
             u_start = np.array(self.precise_grid.get_full())
-            
+
             k1 = dt * self.rk_substep()
             self.precise_grid.u = u_start + (k1 / 2)
 
@@ -636,17 +701,19 @@ class PreciseWENOSolution(WENOSolution):
     def get_full(self):
         """ Downsample the precise solution to get coarse solution values. """
 
+        # Note that axis 0 is the vector dimension.
+
         grid = self.precise_grid.get_full()
         if self.extra_ghosts > 0:
-            grid = grid[self.extra_ghosts:-self.extra_ghosts]
+            grid = grid[:, self.extra_ghosts:-self.extra_ghosts]
 
         # For each coarse cell, there are precise_scale precise cells, where the middle
         # cell corresponds to the same location as the coarse cell.
         middle = int(self.precise_scale / 2)
-        return grid[middle::self.precise_scale]
+        return grid[:, middle::self.precise_scale]
 
     def get_real(self):
-        return self.get_full()[:, self.ng:-self.ng]  # 0-th dimension is now vector state length
+        return self.get_full()[:, self.ng:-self.ng]
 
     def _reset(self, init_params):
         self.precise_grid.reset(init_params)

@@ -6,6 +6,7 @@ import gym
 from rl_pde.run import rollout
 from rl_pde.policy import Policy
 from rl_pde.emi.emi import EMI, PolicyWrapper
+from rl_pde.emi.emi import OneDimensionalStencil
 
 class UnbatchedEnvPL(gym.Env):
     """
@@ -87,7 +88,7 @@ class UnbatchedPolicy(Policy):
         return actions, None
 
 
-class BatchEMI(EMI):
+class BatchEMI(EMI, OneDimensionalStencil):
     """
     EMI that takes samples from the environment and breaks them along the first dimension
     (the spatial dimension), then gives them to the model as separate samples.

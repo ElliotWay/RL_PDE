@@ -9,14 +9,12 @@ from envs.source import RandomSource
 from util.misc import create_stencil_indexes
 from util.misc import AxisSlice
 
-#TODO adapt to vector quantities. What would need to change?
-# Will state be a tuple like the action? Or is it better to have the vector as the last dimension?
 class AbstractPDEEnv(gym.Env):
     """
     Environment modelling a scalar conservation equation of arbitrary dimensions.
 
     This abstract class handles the underlying spatial grid, (in self.grid),
-    functions related to indexing the state and action history, calculating the reward signal, 
+    functions related to indexing the state and action history, calculating the reward signal,
     the general structure of stepping through time, and resetting the environment.
 
     The remaining behavior should be handled by one or more levels of subclass.
@@ -91,7 +89,7 @@ class AbstractPDEEnv(gym.Env):
         """
 
         self.test = test
-        
+
         self.reward_mode = self.fill_default_reward_mode(reward_mode)
         if reward_mode != self.reward_mode:
             print("Reward mode updated to '{}'.".format(self.reward_mode))
@@ -139,7 +137,7 @@ class AbstractPDEEnv(gym.Env):
         self.previous_error = np.zeros_like(self.grid.get_full())
 
         self.fixed_step = fixed_step
-        self.C = C  # CFL number # Why this comment? Why not just call it cfl or CFL?
+        self.C = C  # CFL number # Why this comment? Why not just call the variable cfl_number?
         self.episode_length = episode_length
         self.reward_adjustment = reward_adjustment
 
@@ -233,7 +231,7 @@ class AbstractPDEEnv(gym.Env):
         You should call this function 4 times in succession.
         The 1st, 2nd, and 3rd calls will return the state in each substep.
         The 4th call will return the state after the full RK4 step.
-        
+
         Regardless of the internal state, the action should always be based on the previously returned state.
 
         action and state are only recorded on the 4th call.
@@ -348,7 +346,6 @@ class AbstractPDEEnv(gym.Env):
 
         return state, reward, done
 
-    # Works in ND.
     def reset(self):
         """
         Reset the environment.
@@ -379,7 +376,6 @@ class AbstractPDEEnv(gym.Env):
 
         return self._prep_state()
 
-    # Works in ND.
     @staticmethod
     def fill_default_time_vs_space(num_cells, min_value, max_value, dt, C, ep_length, time_max):
         approximate_max = 2.0 # Is this a good number?
@@ -402,7 +398,6 @@ class AbstractPDEEnv(gym.Env):
 
         return num_cells, dt, ep_length
 
-    # Works in ND.
     def timestep(self):
         if self.C is None:  # return a constant time step
             return self.fixed_step
@@ -411,7 +406,6 @@ class AbstractPDEEnv(gym.Env):
             return self.C * min_cell_size / max(abs(self.grid.get_real()))
 
 
-    # Works in ND.
     def force_state(self, state_grid):
         """
         Override the current state with something else.
@@ -429,7 +423,6 @@ class AbstractPDEEnv(gym.Env):
         # Rewrite recent history.
         self.state_history[-1] = self.grid.get_full().copy()
 
-    # Works in ND.
     def get_state(self, timestep=None, location=None, full=True):
         assert timestep is None or location is None
 
@@ -446,7 +439,6 @@ class AbstractPDEEnv(gym.Env):
             state = np.array(self.state_history)[(slice(None),) + location]
         return state
 
-    # Works in ND.
     def get_solution_state(self, timestep=None, location=None, full=True):
         assert timestep is None or location is None
 
@@ -465,12 +457,10 @@ class AbstractPDEEnv(gym.Env):
             state = np.array(self.solution.get_state_history())[slice(None,) + location]
         return state
 
-    # Works in ND.
     def get_error(self, timestep=None, location=None, full=True):
         return (self.get_state(timestep, location, full) 
                 - self.get_solution_state(timestep, location, full))
 
-    # Works in ND.
     def compute_l2_error(self, timestep=None):
         """
         Compute the L2 error between the solution and the state at a given timestep.
@@ -500,7 +490,6 @@ class AbstractPDEEnv(gym.Env):
             l2_error = np.sqrt(combined_cell_size * np.sum(np.square(error)))
             return l2_error
 
-    # Works in ND.
     def get_action(self, timestep=None, location=None, axis=None,
             action_history=None):
         """
@@ -555,7 +544,6 @@ class AbstractPDEEnv(gym.Env):
                 action = action_history[:, location]
         return action
 
-    # Works in ND.
     def get_solution_action(self, timestep=None, location=None, axis=None):
         """
         Returns the action of the solution. Arguments act the same as get_action().
@@ -565,7 +553,6 @@ class AbstractPDEEnv(gym.Env):
         solution_action_history = self.solution.get_action_history()
         return self.get_action(timestep, location, axis, action_history=solution_action_history)
 
-    # Works in ND.
     @staticmethod
     def fill_default_reward_mode(reward_mode_arg):
         reward_mode = "" if reward_mode_arg is None else reward_mode_arg
@@ -601,13 +588,13 @@ class AbstractPDEEnv(gym.Env):
 
         return reward_mode
     
-    # Works in ND.
     def calculate_reward(self):
         """ Reward calculation based on the error between grid and solution. """
 
         done = False
 
         # Use difference with WENO actions instead. (Might be useful for testing.)
+        # This makes some assumptions about the subclass that may not be true.
         if "wenodiff" in self.reward_mode:
             last_action = self.action_history[-1].copy()
 
@@ -618,12 +605,28 @@ class AbstractPDEEnv(gym.Env):
                 weno_action = self.weno_solution.get_action_history()[-1].copy()
             else:
                 raise Exception("AbstractBurgersEnv: reward_mode problem")
-            action_diff = weno_action - last_action
-            action_diff = action_diff.reshape((len(action_diff), -1))
+
+            if self.grid.ndim == 1:
+                action_diff = weno_action - last_action
+                action_diff = action_diff.reshape((len(action_diff), -1))
+            else:
+                reshape_sizes = tuple(weno_sub_action.shape[:self.grid.ndim] + (-1,) for
+                        weno_sub_action in weno_action)
+                action_diff = tuple((weno_sub_action - rl_sub_action).reshape(new_size) for
+                        weno_sub_action, rl_sub_action, new_size in
+                        zip(weno_action, last_action, reshape_sizes))
             if "L1" in self.reward_mode:
-                error = np.sum(np.abs(action_diff), axis=-1)
+                if self.grid.ndim == 1:
+                    error = np.sum(np.abs(action_diff), axis=-1)
+                else:
+                    error = tuple(np.sum(np.abs(action_diff_part), axis=-1) for
+                                action_diff_part in action_diff)
             elif "L2" in self.reward_mode:
-                error = np.sqrt(np.sum(action_diff**2, axis=-1))
+                if self.grid.ndim == 1:
+                    error = np.sqrt(np.sum(action_diff**2, axis=-1))
+                else:
+                    error = tuple(np.sqrt(np.sum(action_diff_part**2, axis=-1)) for
+                                action_diff_part in action_diff)
             else:
                 raise Exception("AbstractBurgersEnv: reward_mode problem")
 
@@ -653,27 +656,42 @@ class AbstractPDEEnv(gym.Env):
 
         # Average of error in two adjacent cells.
         if "adjacent" in self.reward_mode and "avg" in self.reward_mode:
-            #TODO This should probably trim ghosts from other axes.
-            combined_error = tuple((AxisSlice(error, axis + 1)[ng-1:ng]
-                                + AxisSlice(error, axis + 1)[ng:-(ng-1)]) / 2
-                                    for axis, ng in enumerate(self.grid.num_ghosts))  # 0th axis now vec length
+            combined_error = []
+            for axis, ng in enumerate(self.grid.num_ghosts):
+                axis = axis + 1 # axis 0 is vector dimension
+                left_slice = list(self.grid.real_slice)
+                left_slice[axis] = slice(ng-1, -ng)
+                left_slice = tuple(left_slice)
+                right_slice = list(self.grid.real_slice)
+                right_slice[axis] = slice(ng, -(ng-1))
+                right_slice = tuple(right_slice)
+
+                combined_error.append((error[left_slice] + error[right_slice]) / 2)
+
         # Combine error across the WENO stencil.
         # (NOT the state stencil i.e. self.state_order * 2 - 1, even if we are using a wide state.)
         elif "stencil" in self.reward_mode:
             combined_error = []
             for axis, (nx, ng) in enumerate(zip(self.grid.num_cells, self.grid.num_ghosts)):
+                axis = axis + 1 # axis 0 is vector dimension
+
                 stencil_indexes = create_stencil_indexes(
                         stencil_size=(self.weno_order * 2 - 1),
                         num_stencils=(nx + 1),
                         offset=(ng - self.weno_order))
-                error_stencils = AxisSlice(error, axis + 1)[stencil_indexes]
-                error_stencils = error[stencil_indexes]
+                stencil_slice = list(self.grid.real_slice)
+                stencil_slice[axis] = stencil_indexes
+                stencil_slice = tuple(stencil_slice)
+                error_stencils = error[stencil_slice]
+
+                # Indexing for the stencils inserts a new stencil dimension at axis+1, so we
+                # reduce over this axis.
                 if "max" in self.reward_mode:
-                    combined_error.append(np.amax(error_stencils, axis=-1))
+                    combined_error.append(np.amax(error_stencils, axis=(axis+1)))
                 elif "avg" in self.reward_mode:
-                    combined_error.append(np.mean(error_stencils, axis=-1))
+                    combined_error.append(np.mean(error_stencils, axis=(axis+1)))
                 elif "L2" in self.reward_mode:
-                    combined_error.append(np.sqrt(np.sum(error_stencils**2, axis=-1)))
+                    combined_error.append(np.sqrt(np.sum(error_stencils**2, axis=(axis+1))))
                 else:
                     raise Exception("AbstractBurgersEnv: reward_mode problem")
         else:
@@ -797,7 +815,6 @@ class AbstractPDEEnv(gym.Env):
         """
         raise NotImplementedError()
  
-    # Works with ND.
     def close(self):
         # Delete references for easier garbage collection.
         self.grid = None
@@ -806,7 +823,6 @@ class AbstractPDEEnv(gym.Env):
         self.state_history = []
         self.action_history = []
 
-    # Works with ND.
     def evolve(self):
         """
         Evolve the environment using the solution, instead of passing actions.
@@ -819,7 +835,7 @@ class AbstractPDEEnv(gym.Env):
             "Can't evolve with one-step solution."
 
         while self.steps < self.episode_length:
-            
+
             dt = self.timestep()
             self.t += dt
 
@@ -831,10 +847,9 @@ class AbstractPDEEnv(gym.Env):
             self.grid.set(self.solution.get_real().copy())
             self.state_history.append(self.grid.get_full().copy())
 
-            if self.solution.is_recording_actions():
-                self.action_history.append(self.solution.get_action_history()[-1].copy())
-
             self.steps += 1
+        if self.solution.is_recording_actions():
+            self.action_history = self.solution.get_action_history().copy()
 
     def seed(self):
         # The official Env class has this as part of its interface, but I don't think we need it.

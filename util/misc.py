@@ -8,7 +8,7 @@ import tensorflow as tf
 
 
 # I've started using indexes instead of indices because it bothers me when people use "indice" as the singular.
-# Between "index and indexes" and "indices and indices" I much prefer the former, so I decided to start using
+# Between "index and indexes" and "indice and indices" I much prefer the former, so I decided to start using
 # indexes, Latin plurals be damned.
 def create_stencil_indexes(stencil_size, num_stencils, offset=0):
     """
@@ -162,7 +162,7 @@ class AxisSlice:
 
     AxisSlice(a, 1)[index] is (supposed to be) equivalent to a[:, index].
     The advantage of AxisSlice comes when the axis is not known at compile time.
-    
+
     Examples
     --------
     >>> a = np.arange(12).reshape(3, 4)
@@ -200,4 +200,20 @@ class AxisSlice:
 
         self.arr[(slice(None),) * self.axis + (indexes,)] = values
 
+def TensorAxisSlice(tensor, axis):
+    """
+    Like AxisSlice, but for a Tensorflow Tensor instead.
 
+    The Tensor must have a known number of dimensions.
+    Note that Tensors cannot use advanced indexing like ndarrays can.
+
+    We could use AxisSlice directly except Tensors don't have a direct 'ndim' property.
+    I guess this makes sense since Tensors can have unknown shape. We could use
+    len(arr.shape) as an alternative to work for both, but this would be slower, and I prefer if
+    AxisSlice is as fast as possible.
+
+    This pretends to be a class, but is actually just a function that adds an 'ndim' property to
+    the Tensor and then returns a standard AxisSlice.
+    """
+    tensor.ndim = tensor.shape.ndims
+    return AxisSlice(tensor, axis)

@@ -3,8 +3,9 @@
 # by M. Zingale (2013-03-26).
 
 import numpy as np
+import tensorflow as tf
 
-from util.misc import AxisSlice
+from util.misc import AxisSlice, TensorAxisSlice
 
 
 class AbstractGrid:
@@ -291,7 +292,46 @@ class GridBase(AbstractGrid):
             else:
                 raise Exception("GridBase: Boundary type \"" + str(bound) + "\" not recognized.")
 
-    # TODO Create a TF version of this.
+    @tf.function
+    def tf_update_boundary(self, real_state, boundary=None):
+        """
+        Equivalent to grid.update_boundary(), except as a Tensorflow function that can be applied
+        to an arbitrary grid with arbitrary boundaries.
+
+        Returns the state extended with ghost cells.
+        """
+        if boundary is None:
+            if self.boundary is None:
+                raise Exception("GridBase: default boundary is None.")
+            else:
+                boundary = self.boundary
+
+        if type(boundary) is str:
+            boundary = (boundary,) * len(self.num_cells)
+        elif len(boundary) != len(self.num_cells):
+            raise ValueError("GridBase: Size of boundary must match size of num_cells"
+                    + " ({} vs {}).".format(len(boundary), len(self.num_cells)))
+
+        filled_state = real_state
+
+        for axis, (ng, bound) in enumerate(zip(self.num_ghosts, boundary)):
+            axis = axis + 1 # axis 0 is the vector axis
+            axis_slice = TensorAxisSlice(filled_state, axis)
+            if bound == "periodic":
+                left_ghost = axis_slice[-ng:]
+                right_ghost = axis_slice[:ng]
+                filled_state = tf.concat([left_ghost, filled_state, right_ghost], axis=axis)
+            elif bound == "outflow":
+                tile_multiples = [1] * self.ndim
+                tile_multiples[axis] = ng
+                left_ghost = tf.tile(axis_slice[0:1], tile_multiples)
+                right_ghost = tf.tile(axis_slice[-1:], tile_multiples)
+                filled_state = tf.concat([left_ghost, filled_state, right_ghost], axis=axis)
+            else:
+                raise Exception("GridBase: Boundary type \"" + str(bound) + "\" not recognized.")
+
+        return filled_state
+
     def laplacian(self):
         """
         Compute the Laplacian of the current grid.
@@ -314,6 +354,28 @@ class GridBase(AbstractGrid):
 
         return np.sum(partial_2nd_derivatives, axis=0)
 
+    @tf.function
+    def tf_laplacian(self, real_state):
+        """
+        Unlike grid.laplacian(), this takes a state portioned as the REAL state and computes ghost
+        cells on the fly. (The Laplacian only needs the first cell past the boundary.)
+        """
+        partial_2nd_derivatives = []
+        for axis, dx in enumerate(self.cell_size):
+            axis_slice = TensorAxisSlice(real_state, axis)
+            central_lap = (axis_slice[:-2] - 2.0*axis_slice[1:-1] + axis_slice[2:]) / (dx**2)
+            if self.grid.boundary == "outflow":
+                left_lap = (-axis_slice[0] + axis_slice[1]) / (dx**2) # X-2X+Y = -X+Y
+                right_lap = (axis_slice[-2] - axis_slice[-1]) / (dx**2) # X-2Y+Y = X-Y
+            elif self.grid.boundary == "periodic":
+                left_lap = (axis_slice[-1] - 2.0*axis_slice[0] + axis_slice[1]) / (dx**2)
+                right_lap = (axis_slice[-2] - 2.0*axis_slice[-1] + axis_slice[0]) / (dx**2)
+            else:
+                raise NotImplementedError()
+            d2fdx2 = tf.concat([[left_lap], central_lap, [right_lap]], axis=0)
+            partial_2nd_derivatives.append(d2fdx2)
+
+        return tf.reduce_sum(partial_2nd_derivatives, axis=0)
 
 def _is_list(thing):
     try:
