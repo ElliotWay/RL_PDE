@@ -200,10 +200,14 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
 
         """
         # compute flux at each point
-        u_values = self.grid.get_full()[0] # Use the first (and only) dimension of the vector.
+        u_values = self.grid.get_full()
         flux = self.burgers_flux(u_values)
 
         fm, fp = lf_flux_split_nd(flux, u_values)
+
+        # Use the first (and only) vector dimension.
+        fm = fm[0]
+        fp = fp[0]
 
         fp_stencil_indexes = create_stencil_indexes(stencil_size=self.state_order * 2 - 1,
                                                     num_stencils=self.grid.real_length() + 1,

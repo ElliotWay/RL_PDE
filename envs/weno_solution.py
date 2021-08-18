@@ -20,8 +20,8 @@ def lf_flux_split_nd(flux_array, values_array):
     """
     output = []
     abs_values = np.abs(values_array)
-    for dim in range(1, flux_array.ndim):  # now the 0-th dimension is state vector length
-        alpha = np.max(abs_values, axis=dim, keepdims=True)
+    for axis in range(1, flux_array.ndim): # ndim includes the vector dimension on axis 0.
+        alpha = np.max(abs_values, axis=axis, keepdims=True)
         fm = (flux_array - alpha * values_array) / 2
         fp = (flux_array + alpha * values_array) / 2
         output.append((fm, fp))
@@ -39,6 +39,7 @@ def tf_lf_flux_split(flux_tensor, values_tensor):
     output = []
     abs_values = tf.abs(values_tensor)
     for axis in range(flux_tensor.shape.ndims):
+        axis = axis+1 # Axis 0 is the vector dimension.
         alpha = tf.reduce_max(abs_values, axis=axis, keepdims=True)
         fm = (flux_tensor - alpha * values_tensor) / 2
         fp = (flux_tensor + alpha * values_tensor) / 2
