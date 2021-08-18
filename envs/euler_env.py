@@ -4,11 +4,12 @@ from gym import spaces
 
 import envs.weno_coefficients as weno_coefficients
 from envs.abstract_pde_env import AbstractPDEEnv
-from envs.burgers_env import weno_i_stencils_batch
 from envs.plottable_env import Plottable1DEnv
 from envs.solutions import AnalyticalSolution
 from envs.solutions import MemoizedSolution, OneStepSolution
 from envs.weno_solution import WENOSolution, PreciseWENOSolution, PreciseWENOSolution2D
+from envs.weno_solution import lf_flux_split_nd, weno_sub_stencils_nd
+from envs.weno_solution import tf_lf_flux_split, tf_weno_sub_stencils, tf_weno_weights
 from util.misc import create_stencil_indexes
 from util.softmax_box import SoftmaxBox
 
@@ -269,8 +270,8 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
             # TODO state_order != weno_order has never worked well.
             # Is this why? Should this be state order? Or possibly it should be weno order but we still
             # need to compensate for a larger state order somehow?
-            fp_stencils = weno_i_stencils_batch(self.weno_order, fp_state)
-            fm_stencils = weno_i_stencils_batch(self.weno_order, fm_state)
+            fp_stencils = weno_sub_stencils_nd(fp_state, self.weno_order)
+            fm_stencils = weno_sub_stencils_nd(fm_state, self.weno_order)
 
             fp_weights = weights[i, :, 0, :]
             fm_weights = weights[i, :, 1, :]
