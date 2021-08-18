@@ -203,7 +203,7 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
         down_weights = vertical_weights[:, :, 0]
         up_weights = vertical_weights[:, :, 1]
 
-        left_reconstructed = tf.reduce_sum(left_weights 
+        left_reconstructed = tf.reduce_sum(left_weights
                                 * tf_weno_sub_stencils(left_stencils, self.weno_order), axis=-1)
         right_reconstructed = tf.reduce_sum(right_weights
                                 * tf_weno_sub_stencils(right_stencils, self.weno_order), axis=-1)
@@ -240,6 +240,7 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
         # Note that real_state and next_real_state do not include ghost cells, but rl_state does.
 
         horizontal_stencils, vertical_stencils = rl_state
+        # rl state is [x, y, direction, stencil]
         left_stencils = horizontal_stencils[:, :, 0]
         right_stencils = horizontal_stencils[:, :, 1]
         down_stencils = vertical_stencils[:, :, 0]
@@ -280,6 +281,10 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
 
         error = weno_next_real_state - next_real_state
 
+        # real states contain an extra vector dimension, which we don't need.
+        # We'll need to deal with that dimension later for true 2D Burgers, though.
+        error = error[0]
+
         if "one-step" in self.reward_mode:
             pass
             # This version is ALWAYS one-step - the others are tricky to implement in TF.
@@ -304,7 +309,7 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
         # Average of error in two adjacent cells.
         if "adjacent" in self.reward_mode and "avg" in self.reward_mode:
             error = tf.abs(error)
-            
+
             combined_error = []
             for axis, bound in enumerate(boundary):
                 error_slice = TensorAxisSlice(error, axis)

@@ -322,9 +322,9 @@ class GridBase(AbstractGrid):
                 right_ghost = axis_slice[:ng]
                 filled_state = tf.concat([left_ghost, filled_state, right_ghost], axis=axis)
             elif bound == "outflow":
-                tile_multiples = [1] * self.ndim
+                tile_multiples = [1] * (self.ndim + 1)
                 tile_multiples[axis] = ng
-                left_ghost = tf.tile(axis_slice[0:1], tile_multiples)
+                left_ghost = tf.tile(axis_slice[:1], tile_multiples)
                 right_ghost = tf.tile(axis_slice[-1:], tile_multiples)
                 filled_state = tf.concat([left_ghost, filled_state, right_ghost], axis=axis)
             else:
