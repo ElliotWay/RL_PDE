@@ -38,8 +38,7 @@ def lf_flux_split_nd(flux_array, values_array):
 def tf_lf_flux_split(flux_tensor, values_tensor):
     output = []
     abs_values = tf.abs(values_tensor)
-    for axis in range(flux_tensor.shape.ndims):
-        axis = axis+1 # Axis 0 is the vector dimension.
+    for axis in range(1, flux_tensor.shape.ndims): # ndims includes the vector dimension on axis 0.
         alpha = tf.reduce_max(abs_values, axis=axis, keepdims=True)
         fm = (flux_tensor - alpha * values_tensor) / 2
         fp = (flux_tensor + alpha * values_tensor) / 2

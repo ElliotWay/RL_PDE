@@ -282,7 +282,9 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
 
         flux_minus, flux_plus = tf_lf_flux_split(flux, full_state)
 
-        #TODO does this handle vector quantities correctly?
+        # Use the first (and only) vector component.
+        flux_minus = flux_minus[0]
+        flux_plus = flux_plus[0]
 
         #TODO Could change things to use traditional convolutions instead of going through these
         # stencil indexes to do the same thing.

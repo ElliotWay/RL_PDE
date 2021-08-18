@@ -153,6 +153,12 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
 
         (flux_left, flux_right), (flux_down, flux_up) = tf_lf_flux_split(flux, full_state)
 
+        # Select the first (and only) vector component.
+        flux_left = flux_left[0]
+        flux_right = flux_right[0]
+        flux_down = flux_down[0]
+        flux_up = flux_up[0]
+
         flux_left = flux_left[:, ghost_y:-ghost_y]
         flux_right = flux_right[:, ghost_y:-ghost_y]
         right_stencil_indexes = create_stencil_indexes(stencil_size=self.state_order * 2 - 1,

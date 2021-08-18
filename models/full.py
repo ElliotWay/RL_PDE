@@ -108,9 +108,9 @@ class GlobalBackpropModel(GlobalModel):
             self.actions = actions
             self.rewards = rewards
 
-            # Check reward shape - should have a reward for each timestep, batch, vector part,
-            # and physical location.
-            assert len(self.rewards[0].shape) == 3 + self.env.dimensions
+            # Check reward shape - should have a reward for each timestep, batch,
+            # (optional vector part,) and physical location.
+            assert len(self.rewards[0].shape) == (3 if self.env.grid.vec_len > 1 else 2) + self.env.dimensions
             # Sum over the timesteps in the trajectory (axis 0),
             # then average over the batch and each location and the batch (axes 1 and the rest).
             # Also average over each reward part (e.g. each dimension).
@@ -388,7 +388,7 @@ class IntegrateRNN(Layer):
     def __init__(self, cell, dtype=tf.float64, swap_to_cpu=True):
         """
         Declare the RNN for PDE integration.
-        
+
         Parameters
         ----------
         cell : tf.keras.layers.Layer
@@ -411,15 +411,16 @@ class IntegrateRNN(Layer):
         super().build(input_size)
 
     def call(self, initial_state, num_steps):
-        dimensions = initial_state.get_shape().ndims - 1
+        # - 2 for the batch and vector dims.
+        spatial_dims = initial_state.get_shape().ndims - 2
 
         real_states_ta = tf.TensorArray(dtype=self.dtype, size=num_steps)
         #states_ta = tuple(tf.TensorArray(dtype=self.dtype, size=num_steps) for _ in
-                #range(dimensions))
+                #range(spatial_dims))
         actions_ta = tuple(tf.TensorArray(dtype=self.dtype, size=num_steps) for _ in
-                range(dimensions))
+                range(spatial_dims))
         rewards_ta = tuple(tf.TensorArray(dtype=self.dtype, size=num_steps) for _ in
-                range(dimensions))
+                range(spatial_dims))
 
         def condition_fn(time, *_):
             return time < num_steps
@@ -471,14 +472,22 @@ class IntegrateCell(Layer):
         super().build(input_size)
 
     def call(self, state):
-        # state has shape [batch, location, ...]
+        # state has shape [batch, vector, location, ...]
         # (Batch shape may be unknown, other axes should be known.)
 
         real_state = state
-        dimensions = real_state.get_shape().ndims - 1 # This includes the possible vector dimension.
+
+        all_dims = real_state.get_shape().ndims
+        # - 2 for the batch and vector dims.
+        spatial_dims = all_dims - 2
+        # outer_dims squeezes the vector dimension.
+        if real_state.get_shape()[1] == 1:
+            outer_dims = all_dims - 1
+        else:
+            outer_dims = all_dims
 
         # Use tf.map_fn to apply function across every element in the batch.
-        tuple_type = (real_state.dtype,) * dimensions
+        tuple_type = (real_state.dtype,) * spatial_dims
         rl_state = tf.map_fn(self.prep_state_fn, real_state, dtype=tuple_type,
                                 name='map_prep_state')
 
@@ -486,22 +495,24 @@ class IntegrateCell(Layer):
         for rl_state_part in rl_state:
             # The policy expects a batch so we don't need to use tf.map_fn;
             # however, it expects batches of INDIVIDUAL states, not every location at once, so we need
-            # to combine the batch and location axes first (and then reshape the actions back).
+            # to combine the batch, vector, and location axes first (and then reshape the actions back).
             rl_state_shape = rl_state_part.shape.as_list()
-            new_state_shape = [-1,] + rl_state_shape[dimensions + 1:]
+            new_state_shape = [-1,] + rl_state_shape[outer_dims:]
             reshaped_state = tf.reshape(rl_state_part, new_state_shape)
 
             # Future note: this works to apply a 1D agent along each dimension.
-            # However, if we want an agent that makes use of a 2D stencil, we'll need a different
+            # However, if we want an agent that makes use of a 2D stencil, or an agent that makes
+            # use of multiple components of the vector at once, we'll need a different
             # implementation of IntegrateCell that somehow combines multiple stencils at each
             # location. (Or rather, something that can handle a prep_state function that does
             # that.)
-            # This loop is effectively equivalent to ExtendAgent2D.
+            # This loop is equivalent to ExtendAgent2D.
 
             shaped_action = self.policy_net(reshaped_state)
 
             shaped_action_shape = shaped_action.shape.as_list()
-            rl_action_shape = [-1,] + rl_state_shape[1:dimensions + 1] + shaped_action_shape[1:]
+            # Can't use rl_state_shape[:outer_dims] because rl_state_shape[0] is None; we need -1.
+            rl_action_shape = [-1,] + rl_state_shape[1:outer_dims] + shaped_action_shape[1:]
             rl_action_part = tf.reshape(shaped_action, rl_action_shape)
             rl_action.append(rl_action_part)
         rl_action = tuple(rl_action)
