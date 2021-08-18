@@ -11,7 +11,7 @@ from util.misc import AxisSlice
 
 class AbstractPDEEnv(gym.Env):
     """
-    Environment modelling a scalar conservation equation of arbitrary dimensions.
+    Environment modelling a conservation equation of arbitrary dimensions (and arbitrary vector length).
 
     This abstract class handles the underlying spatial grid, (in self.grid),
     functions related to indexing the state and action history, calculating the reward signal,
@@ -116,7 +116,10 @@ class AbstractPDEEnv(gym.Env):
                                 num_ghosts=self.ng,
                                 boundary=boundary, init_type=init_type,
                                 deterministic_init=self.test)
-        self.init_params = init_params
+        if init_params is not None:
+            self.init_params = init_params
+        else:
+            self.init_params = {}
 
         if srca > 0.0:
             if self.grid.ndim > 1:

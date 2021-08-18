@@ -31,6 +31,7 @@ from util import metadata
 from util.function_dict import numpy_fn
 from util.lookup import get_model_class, get_emi_class, get_model_dims
 from util.misc import set_global_seed
+from util.misc import human_readable_time_delta
 
 ON_POSIX = 'posix' in sys.builtin_module_names
 
@@ -122,7 +123,7 @@ def do_test(env, agent, args):
         env.plot_state(plot_error=True, **render_args)
     if args.plot_actions:
         env.plot_action(**render_args)
-    print("Test finished in " + str(end_time - start_time) + " seconds.")
+    print("Test finished in {}.".format(human_readable_time_delta(time.time() - start_time)))
  
     if env.dimensions == 1:
         total_reward = np.sum(rewards, axis=0)

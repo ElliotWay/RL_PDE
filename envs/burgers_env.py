@@ -205,7 +205,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
 
         fm, fp = lf_flux_split_nd(flux, u_values)
 
-        # Use the first (and only) vector dimension.
+        # Use the first (and only) vector component.
         fm = fm[0]
         fp = fp[0]
 

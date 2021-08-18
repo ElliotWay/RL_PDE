@@ -792,6 +792,9 @@ class Plottable2DEnv(AbstractPDEEnv):
 
         fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
 
+        #TODO Handle vectors in a better way than simply using the first dimension.
+        state_history = state_history[0]
+
         self._plot_state(axes=ax, plot_error=plot_error, title=title,
                 fixed_axes=fixed_axes, no_borders=no_borders,
                 state=state_history,
@@ -855,6 +858,9 @@ class Plottable2DEnv(AbstractPDEEnv):
 
             state_includes_ghost = (show_ghost and (not override_history or
                 history_includes_ghost))
+
+            #TODO Handle vectors in a better way than simply using the first dimension.
+            state = state[0]
 
             ax.cla()
             self._plot_state(axes=ax, plot_error=False, title=title,

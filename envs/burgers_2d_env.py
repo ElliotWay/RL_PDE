@@ -28,7 +28,7 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
                 shape=(num_x, num_y + 1, 2, self.weno_order),
                 dtype=np.float64)
         self.action_space = spaces.Tuple((x_actions, y_actions))
-        
+
         x_rl_state = spaces.Box(low=-1e7, high=1e7,
                 # num x interfaces X num y cells X (+,-) X stencil size
                 shape=(num_x + 1, num_y, 2, 2*self.state_order-1),
@@ -53,13 +53,19 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
                                     #for num in range(1, self.weno_order+1)]
 
     def _prep_state(self):
-        u_values = self.grid.get_full()[0]
+        u_values = self.grid.get_full()
         flux = self.burgers_flux(u_values)
         num_x, num_y = self.grid.num_cells
         ghost_x, ghost_y = self.grid.num_ghosts
 
         # Lax Friedrichs flux splitting.
         (flux_left, flux_right), (flux_down, flux_up) = lf_flux_split_nd(flux, self.grid.space)
+
+        # Select the first (and only) vector component.
+        flux_left = flux_left[0]
+        flux_right = flux_right[0]
+        flux_down = flux_down[0]
+        flux_up = flux_up[0]
 
         # Trim vertical ghost cells from horizontally split flux. (Should this be part of flux
         # splitting?)
