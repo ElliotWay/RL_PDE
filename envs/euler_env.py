@@ -350,7 +350,8 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
         # Stack on dim 2 to keep location dim 1, vec_len dim 0.
         rl_state = tf.stack([plus_stencils, minus_stencils], axis=2)
 
-        return rl_state
+        #return rl_state
+        return (rl_state,) # Singleton because this is 1D.
 
     @tf.function
     def tf_integrate(self, args):
@@ -570,4 +571,5 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
 
         # end adaptation of calculate_reward().
 
-        return reward
+        #return reward
+        return (reward,) # Singleton because this is 1D.

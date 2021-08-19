@@ -500,6 +500,9 @@ class IntegrateCell(Layer):
             new_state_shape = [-1,] + rl_state_shape[outer_dims:]
             reshaped_state = tf.reshape(rl_state_part, new_state_shape)
 
+            print("original shape:", rl_state_shape)
+            print("new shape:", new_state_shape)
+
             # Future note: this works to apply a 1D agent along each dimension.
             # However, if we want an agent that makes use of a 2D stencil, or an agent that makes
             # use of multiple components of the vector at once, we'll need a different
