@@ -738,7 +738,6 @@ class AbstractPDEEnv(gym.Env):
 
         return reward, done
 
-    #TODO The documentation on these may need to change for ND.
     @tf.function
     def tf_prep_state(self, state):
         """
@@ -748,13 +747,15 @@ class AbstractPDEEnv(gym.Env):
 
         Parameters
         ----------
-        state : Tensor
+        real_state : Tensor
             Representation of the real physical state. This should have no ghost cells.
 
         Returns
         -------
-        rl_state : Tensor
+        rl_state : tuple of Tensor
             Version of the state perceived by the agent. This SHOULD have ghost cells.
+            Each element of the tuple should be a part of the state. For environments with only one
+            part, e.g. 1-dimensional environments, use a singleton tuple e.g. (rl_state,).
         """
         raise NotImplementedError()
 
@@ -772,11 +773,14 @@ class AbstractPDEEnv(gym.Env):
             (Needs to be a tuple so this function works with tf.map_fn.)
             real_state : Tensor
                 Representation of the real physical state. This should have no ghost cells.
-            rl_state : Tensor
+            rl_state : tuple of Tensor
                 Version of the state perceived by the agent (as returned by tf_prep_state()). This
-                SHOULD have ghost cells.
-            rl_action : Tensor
-                Action from the agent that corresponds to rl_state.
+                SHOULD have ghost cells. Each element of the tuple is a different part of the
+                state. For environments with only one part, this is still a singleton tuple.
+            rl_action : tuple of Tensor
+                Action from the agent that corresponds to rl_state. Each element of the tuple is a
+                different part of the rl_action, corresponding to a part of the rl_state. For
+                environments with only one part, this is still a singleton tuple.
 
         Returns
         -------
@@ -802,19 +806,24 @@ class AbstractPDEEnv(gym.Env):
             (Needs to be a tuple so this function works with tf.map_fn.)
             real_state : Tensor
                 Representation of the real physical state. This should have no ghost cells.
-            rl_state : Tensor
+            rl_state : tuple of Tensor
                 Version of the state perceived by the agent (as returned by tf_prep_state()). This
-                SHOULD have ghost cells.
-            rl_action : Tensor
-                Action from the agent that corresponds to rl_state.
+                SHOULD have ghost cells. Each element of the tuple is a different part of the
+                state. For environments with only one part, this is still a singleton tuple.
+            rl_action : tuple of Tensor
+                Action from the agent that corresponds to rl_state. Each element of the tuple is a
+                different part of the rl_action, corresponding to a part of the rl_state. For
+                environments with only one part, this is still a singleton tuple.
             next_real_state : Tensor
                 The real physical state on the following timestep (as returned by tf_integrate()).
                 This should also have no ghost cells.
 
         Returns
         -------
-        reward : Tensor
-            Reward for the agent at each location.
+        reward : tuple of Tensor
+            Reward for the agent at each location. Each element of the tuple is a different part of
+            the reward, corresponding to a part of the rl_state and a part of the rl_action. For
+            environments with only one part, this is still a singleton tuple.
         """
         raise NotImplementedError()
  

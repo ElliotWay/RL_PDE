@@ -145,7 +145,6 @@ class GlobalBackpropModel(GlobalModel):
             # Notably, the 2D vs 1D responibility IS being handled by the EMI.
             # Surely there is a way to handle the spatial dimension there as well? At least for
             # this part?
-            #TODO Does this work with 2D and vector spaces?
             action_shape = self.env.action_space.shape[1:]
 
             #TODO Use ReLU? A field in args with ReLU as the default might make sense.

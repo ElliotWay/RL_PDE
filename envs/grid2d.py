@@ -142,7 +142,8 @@ class Burgers2DGrid(GridBase):
                 x_bound = self.x_grid1d.boundary if type(self.x_grid1d.boundary) is str \
                             else self.x_grid1d.boundary[0]
                 x_grid = self.x_grid1d.get_real()
-                self.space[0, self.real_slice] = np.tile(x_grid[:, None], (1, self.num_cells[1]))
+                # The first 1 of the shape passed to np.tile is for the vector dimension.
+                self.space[self.real_slice] = np.tile(x_grid[..., None], (1, 1, self.num_cells[1]))
                 self.boundary = (x_bound, "outflow")
             elif one_d_axis == 'y':
                 if not hasattr(self, "y_grid1d"):
@@ -152,7 +153,7 @@ class Burgers2DGrid(GridBase):
                 y_bound = self.y_grid1d.boundary if type(self.y_grid1d.boundary) is str \
                             else self.y_grid1d.boundary[0]
                 y_grid = self.y_grid1d.get_real()
-                self.space[0, self.real_slice] = np.tile(y_grid, (self.num_cells[0], 1))
+                self.space[self.real_slice] = np.tile(y_grid, (1, self.num_cells[0], 1))
                 self.boundary = ("outflow", y_bound)
         else:
             raise Exception("Initial condition type \"" + str(self.init_type) + "\" not recognized.")
