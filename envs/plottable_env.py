@@ -63,6 +63,16 @@ class Plottable1DEnv(AbstractPDEEnv):
         else:
             raise Exception("Plottable1DEnv: \"{}\" render mode not recognized".format(mode))
 
+    def euler_state_conversion(self, state):
+        original_shape = list(state.shape)
+        original_shape[0] += 1  # add a dimension for e
+        original_state = np.zeros(shape=original_shape)
+        original_state[0] = state[0]  # rho
+        original_state[1] = state[1] / state[0]  # v
+        original_state[3] = (state[2] - original_state[0] * original_state[1] ** 2 / 2) / original_state[0]  # e
+        original_state[2] = (self.eos_gamma - 1) * (state[2] - original_state[0] * original_state[1] ** 2 / 2)
+        return original_state
+
     def plot_state(self,
             timestep=None, location=None,
             plot_error=False,
@@ -111,11 +121,16 @@ class Plottable1DEnv(AbstractPDEEnv):
 
         assert (timestep is None or location is None), "Can't plot state at both a timestep and a location."
 
+        if 'Euler' in str(self):
+            eqn_type = 'euler'
+            ylabels = ['rho', 'u', 'p', 'e']
+        else:
+            eqn_type = 'burgers'
+            ylabels = ['u']
+
         self.set_colors()
 
         override_history = (state_history is not None)
-
-        fig = plt.figure()
 
         error_or_state = "error" if plot_error else "state"
 
@@ -131,7 +146,7 @@ class Plottable1DEnv(AbstractPDEEnv):
                 num_steps = self.steps
                 actual_time = self.t
             else:
-                num_steps = len(state_history)
+                num_steps = len(state_history[0])
                 actual_time = num_steps * self.fixed_step
 
             if title is None:
@@ -150,11 +165,11 @@ class Plottable1DEnv(AbstractPDEEnv):
             if location is not None:
                 if not override_history or history_includes_ghost:
                     location = self.ng + location
-                state_history = state_history[:,location]
+                state_history = state_history[:, :, location]
                 if solution_state_history is not None:
-                    solution_state_history = solution_state_history[:, location]
+                    solution_state_history = solution_state_history[:, :, location]
                 if weno_state_history is not None:
-                    weno_state_history = weno_state_history[:, location]
+                    weno_state_history = weno_state_history[:, :, location]
 
                 actual_location = self.grid.x[location]
                 if title is None:
@@ -162,11 +177,11 @@ class Plottable1DEnv(AbstractPDEEnv):
                 if suffix is None:
                     suffix = ("_step{:0" + str(self._cell_index_precision) + "}").format(location)
             else:
-                state_history = state_history[timestep, :]
+                state_history = state_history[:, timestep, :]
                 if solution_state_history is not None:
-                    solution_state_history = solution_state_history[timestep, :]
+                    solution_state_history = solution_state_history[:, timestep, :]
                 if weno_state_history is not None:
-                    weno_state_history = weno_state_history[timestep, :]
+                    weno_state_history = weno_state_history[:, timestep, :]
 
                 if title is None:
                     if self.C is None:
@@ -187,6 +202,20 @@ class Plottable1DEnv(AbstractPDEEnv):
             solution_state_history = None
             weno_state_history = None
 
+        if eqn_type == 'euler':
+            state_history = self.euler_state_conversion(state_history)
+            if solution_state_history is not None:
+                solution_state_history = self.euler_state_conversion(solution_state_history)
+            if weno_state_history is not None:
+                weno_state_history = self.euler_state_conversion(weno_state_history)
+
+        vec_len = len(state_history)
+        fig, ax = plt.subplots(nrows=vec_len, ncols=1, figsize=[6.4, 4.8 * vec_len], dpi=100)
+        try:
+            len(ax)
+        except TypeError:
+            ax = [ax]  # a hacky way to make subplots work with only one subplot
+
         # I haven't done enough testing with timestep != None or location != None. Is this a bug?
         # Ghosts should be fine with past steps; it's with a location over time where it doesn't
         # make sense. Should this be if location is None?
@@ -198,26 +227,29 @@ class Plottable1DEnv(AbstractPDEEnv):
                 ghost_x_left = self.grid.x[:num_ghost_points]
                 ghost_x_right = self.grid.x[-num_ghost_points:]
 
-                plt.plot(ghost_x_left, state_history[:num_ghost_points], ls='-', color=self.agent_ghost_color)
-                plt.plot(ghost_x_right, state_history[-num_ghost_points:], ls='-', color=self.agent_ghost_color)
+                for i in range(vec_len):
+                    ax[i].plot(ghost_x_left, state_history[i, :num_ghost_points],
+                               ls='-', color=self.agent_ghost_color)
+                    ax[i].plot(ghost_x_right, state_history[i, -num_ghost_points:],
+                               ls='-', color=self.agent_ghost_color)
 
-                if solution_state_history is not None:
-                    plt.plot(ghost_x_left, solution_state_history[:num_ghost_points],
-                            ls='-', color=self.true_ghost_color)
-                    plt.plot(ghost_x_right, solution_state_history[-num_ghost_points:],
-                            ls='-', color=self.true_ghost_color)
+                    if solution_state_history is not None:
+                        ax[i].plot(ghost_x_left, solution_state_history[i, :num_ghost_points],
+                                   ls='-', color=self.true_ghost_color)
+                        ax[i].plot(ghost_x_right, solution_state_history[i, -num_ghost_points:],
+                                   ls='-', color=self.true_ghost_color)
 
-                if weno_state_history is not None:
-                    plt.plot(ghost_x_left, weno_state_history[:num_ghost_points],
-                            ls='-', color=self.weno_ghost_color)
-                    plt.plot(ghost_x_right, weno_state_history[-num_ghost_points:],
-                            ls='-', color=self.weno_ghost_color)
+                    if weno_state_history is not None:
+                        ax[i].plot(ghost_x_left, weno_state_history[i, :num_ghost_points],
+                                   ls='-', color=self.weno_ghost_color)
+                        ax[i].plot(ghost_x_right, weno_state_history[i, -num_ghost_points:],
+                                   ls='-', color=self.weno_ghost_color)
 
-            state_history = state_history[0, self.ng:-self.ng]  # TODO: change for vec states (3 items here) -yiwei
+            state_history = state_history[:, self.ng:-self.ng]
             if solution_state_history is not None:
-                solution_state_history = solution_state_history[0, self.ng:-self.ng]
+                solution_state_history = solution_state_history[:, self.ng:-self.ng]
             if weno_state_history is not None:
-                weno_state_history = weno_state_history[0, self.ng:-self.ng]
+                weno_state_history = weno_state_history[:, self.ng:-self.ng]
 
         # Similarly here. With a specific timestep we still want physical x values. Should this
         # also be if location is None?
@@ -231,25 +263,27 @@ class Plottable1DEnv(AbstractPDEEnv):
                 x_values = np.arange(len(state_history))
 
         if solution_state_history is not None:
-            plt.plot(x_values, solution_state_history, ls='-', color=self.true_color,
-                    label=self.solution_label)
+            for i in range(vec_len):
+                ax[i].plot(x_values, solution_state_history[i], ls='-', color=self.true_color,
+                           label=self.solution_label)
         if weno_state_history is not None:
-            plt.plot(x_values, weno_state_history, ls='-', color=self.weno_color,
-                    label=self.weno_solution_label)
+            for i in range(vec_len):
+                ax[i].plot(x_values, weno_state_history[i], ls='-', color=self.weno_color,
+                           label=self.weno_solution_label)
 
         # Plot this one last so it is on the top.
         agent_label = "RL"
         if plot_error:
             agent_label = "|error|"
-        plt.plot(x_values, state_history, ls='-', color=self.agent_color, label=agent_label)
+        for i in range(vec_len):
+            ax[i].plot(x_values, state_history[i], ls='-', color=self.agent_color, label=agent_label)
+            ax[i].legend(loc="upper right")
+            if no_borders:
+                ax[i].set_xmargin(0.0)
+            ax[i].set_xlabel('x')
+            ax[i].set_ylabel(f'{ylabels[i]}')
 
-        plt.legend(loc="upper right")
-        ax = plt.gca()
-
-        ax.set_title(title)
-
-        if no_borders:
-            ax.set_xmargin(0.0)
+        ax[0].set_title(title)
 
         # Restrict y-axis if plotting abs error.
         # Can't have negative, cut off extreme errors.
@@ -257,18 +291,20 @@ class Plottable1DEnv(AbstractPDEEnv):
             extreme_cutoff = 3.0
             max_not_extreme = np.max(state_history[state_history < extreme_cutoff])
             ymax = max_not_extreme*1.05 if max_not_extreme > 0.0 else 0.01
-            ax.set_ylim((0.0, ymax))
+            for i in range(vec_len):
+                ax[i].set_ylim((0.0, ymax))
 
         if fixed_axes:
             if self._state_axes is None:
-                self._state_axes = (ax.get_xlim(), ax.get_ylim())
+                self._state_axes = (ax[0].get_xlim(), ax[0].get_ylim())
             else:
                 xlim, ylim = self._state_axes
-                ax.set_xlim(xlim)
-                ax.set_ylim(ylim)
+                for i in range(vec_len):
+                    ax[i].set_xlim(xlim)
+                    ax[i].set_ylim(ylim)
 
         log_dir = logger.get_dir()
-        filename = "burgers_{}{}.png".format(error_or_state, suffix)
+        filename = "{}_{}{}.png".format(eqn_type, error_or_state, suffix)
         filename = os.path.join(log_dir, filename)
         plt.savefig(filename)
         print('Saved plot to ' + filename + '.')
@@ -511,7 +547,7 @@ class Plottable1DEnv(AbstractPDEEnv):
         elif self.weno_solution is not None and self.weno_solution.is_recording_actions():
             weno_action_history = np.array(self.weno_solution.get_action_history())
             weno_color = self.weno_color
-            assert(action_history.shape == weno_action_history.shape)
+            assert(action_history.shape == weno_action_history.shape)  # TODO: modify for Euler -yiwei
         else:
             weno_action_history = None
 
