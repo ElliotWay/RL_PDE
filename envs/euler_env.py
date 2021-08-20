@@ -357,6 +357,9 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
     def tf_integrate(self, args):
         real_state, rl_state, rl_action = args
 
+        rl_state = rl_state[0] # Extract 1st (and only) dimension.
+        rl_action = rl_action[0]
+
         # Note that real_state does not contain ghost cells here, but rl_state DOES (and rl_action has
         # weights corresponding to the ghost cells).
         new_state = []
@@ -423,6 +426,9 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
         real_state, rl_state, rl_action, next_real_state = args
         # Note that real_state and next_real_state do not include ghost cells, but rl_state does.
 
+        rl_state = rl_state[0] # Extract 1st (and only) dimension.
+        rl_action = rl_action[0]
+
         # This section corresponds to envs/weno_solution.py#weno_weights_nd().
         C_values = weno_coefficients.C_all[self.weno_order]
         C_values = tf.constant(C_values, dtype=real_state.dtype)
@@ -461,7 +467,7 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
             # end adaptation of weno_weights_nd()
         weno_action = tf.stack(weno_action)
 
-        weno_next_real_state = self.tf_integrate((real_state, rl_state, weno_action))
+        weno_next_real_state = self.tf_integrate((real_state, (rl_state,), (weno_action,)))
 
         # This section is adapted from AbstactScalarEnv.calculate_reward()
         if "wenodiff" in self.reward_mode:

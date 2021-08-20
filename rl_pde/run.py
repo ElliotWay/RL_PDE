@@ -265,7 +265,9 @@ def train(env, eval_envs, emi, args):
 
             ep_string = ("{:0" + str(ep_precision) + "}").format(ep)
 
-            if isinstance(emi, OneDimensionalStencil):
+            #TODO Temporary hack - replace when vector EMI is implemented. -Elliot
+            #if isinstance(emi, OneDimensionalStencil):
+            if isinstance(emi, OneDimensionalStencil) and not "euler" in args.env:
                 # The action snapshot only makes sense when the underlying policy can be applied to
                 # 1D environments of arbitrary length, e.g. if it is applied to each 1D stencil in
                 # an environment.

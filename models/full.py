@@ -110,7 +110,9 @@ class GlobalBackpropModel(GlobalModel):
 
             # Check reward shape - should have a reward for each timestep, batch,
             # (optional vector part,) and physical location.
-            assert len(self.rewards[0].shape) == (3 if self.env.grid.vec_len > 1 else 2) + self.env.dimensions
+            #TODO Temporary hack - replace when vector EMI is implemented. -Elliot
+            #assert len(self.rewards[0].shape) == (3 if self.env.grid.vec_len > 1 else 2) + self.env.dimensions
+            assert len(self.rewards[0].shape) == (2 if self.env.grid.vec_len > 1 else 2) + self.env.dimensions
             # Sum over the timesteps in the trajectory (axis 0),
             # then average over the batch and each location and the batch (axes 1 and the rest).
             # Also average over each reward part (e.g. each dimension).
@@ -484,7 +486,9 @@ class IntegrateCell(Layer):
         if real_state.get_shape()[1] == 1:
             outer_dims = all_dims - 1
         else:
-            outer_dims = all_dims
+            #TODO Temporary hack - replace when vector EMI is implemented. -Elliot
+            #outer_dims = all_dims
+            outer_dims = all_dims - 1
 
         # Use tf.map_fn to apply function across every element in the batch.
         tuple_type = (real_state.dtype,) * spatial_dims
@@ -500,8 +504,8 @@ class IntegrateCell(Layer):
             new_state_shape = [-1,] + rl_state_shape[outer_dims:]
             reshaped_state = tf.reshape(rl_state_part, new_state_shape)
 
-            print("original shape:", rl_state_shape)
-            print("new shape:", new_state_shape)
+            #print("original shape:", rl_state_shape)
+            #print("new shape:", new_state_shape)
 
             # Future note: this works to apply a 1D agent along each dimension.
             # However, if we want an agent that makes use of a 2D stencil, or an agent that makes
