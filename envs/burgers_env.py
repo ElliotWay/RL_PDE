@@ -249,7 +249,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
 
         return rhs
 
-    @tf.function
+    #@tf.function
     def tf_prep_state(self, state):
         # Note the similarity to _prep_state() above.
 
@@ -304,7 +304,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         #return rl_state
         return (rl_state,) # Singleton because this is 1D.
 
-    @tf.function
+    #@tf.function
     def tf_integrate(self, args):
         real_state, rl_state, rl_action = args
 
@@ -348,7 +348,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
     # A future change could be to put the ghost cells in the real state after all.
     # That said, there are still key differences to how different dimensions behave.
     # Perhaps we need separate nD classes?
-    @tf.function
+    #@tf.function
     def tf_calculate_reward(self, args):
         real_state, rl_state, rl_action, next_real_state = args
         # Note that real_state and next_real_state do not include ghost cells, but rl_state does.

@@ -137,7 +137,7 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
 
         return step
 
-    @tf.function
+    #@tf.function
     def tf_prep_state(self, state):
         # Equivalent to _prep_state() above.
 
@@ -183,7 +183,7 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
 
         return rl_state
 
-    @tf.function
+    #@tf.function
     def tf_integrate(self, args):
         # (Mostly) equivalent to _rk_substep() above.
         real_state, rl_state, rl_action = args
@@ -234,7 +234,7 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
         new_state = real_state + step
         return new_state
 
-    @tf.function
+    #@tf.function
     def tf_calculate_reward(self, args):
         real_state, rl_state, rl_action, next_real_state = args
         # Note that real_state and next_real_state do not include ghost cells, but rl_state does.
