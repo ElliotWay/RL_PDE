@@ -20,7 +20,7 @@ tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 from stable_baselines import logger
 
 from rl_pde.run import rollout
-from rl_pde.emi import BatchEMI, StandardEMI, TestEMI, DimensionalAdapterEMI
+from rl_pde.emi import BatchEMI, StandardEMI, TestEMI, DimensionalAdapterEMI, VectorAdapterEMI
 from rl_pde.agents import get_agent, ExtendAgent2D
 from envs import builder as env_builder
 from envs import AbstractBurgersEnv
@@ -330,6 +330,8 @@ def main():
             else:
                 raise Exception("Cannot adapt {}-dimensional model to {}-dimensional environment."
                         .format(model_dims, dims))
+        elif args.env == 'weno_euler':
+            emi = VectorAdapterEMI(emi_cls, env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
         else:
             emi = emi_cls(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
 

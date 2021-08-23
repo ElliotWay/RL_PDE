@@ -191,6 +191,9 @@ class AbstractPDEEnv(gym.Env):
     @property
     def dimensions(self): return self.grid.ndim
 
+    @property
+    def vec_length(self): return self.grid.vec_len
+
     def step(self, action):
         """
         Perform a single time step.
