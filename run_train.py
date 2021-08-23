@@ -21,7 +21,7 @@ from stable_baselines import logger
 #from stable_baselines.ddpg.noise import AdaptiveParamNoiseSpec, OrnsteinUhlenbeckActionNoise, NormalActionNoise
 
 from rl_pde.run import train
-from rl_pde.emi import DimensionalAdapterEMI
+from rl_pde.emi import DimensionalAdapterEMI, VectorAdapterEMI
 from envs import builder as env_builder
 from models import get_model_arg_parser
 from util import metadata, action_snapshot
@@ -241,6 +241,8 @@ def main():
         else:
             raise Exception("Cannot adapt {}-dimensional model to {}-dimensional environment."
                     .format(model_dims, dims))
+    elif args.env == 'weno_euler':
+        emi = VectorAdapterEMI(emi_cls, env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
     else:
         emi = emi_cls(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
 

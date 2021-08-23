@@ -485,9 +485,7 @@ class IntegrateCell(Layer):
         if real_state.get_shape()[1] == 1:
             outer_dims = all_dims - 1
         else:
-            #TODO Temporary hack - replace when vector EMI is implemented. -Elliot
-            #outer_dims = all_dims
-            outer_dims = all_dims - 1
+            outer_dims = all_dims
 
         # Use tf.map_fn to apply function across every element in the batch.
         tuple_type = (real_state.dtype,) * spatial_dims

@@ -642,13 +642,13 @@ class Plottable2DEnv(AbstractPDEEnv):
         self._state_axes = None
 
         # Pillow is very likely to be available, but check for others just in case it's not.
-        if "pillow" in animation.writers:
+        if "pillow" in animation.writers.list():
             self.animation_writer = animation.writers["pillow"]
             self.animation_extension = ".gif"
-        elif "ffmpeg" in animation.writers:
+        elif "ffmpeg" in animation.writers.list():
             self.animation_writer = animation.writers["ffmpeg"]
             self.animation_extension = ".mp4"
-        elif "imagemagick" in animation.writers:
+        elif "imagemagick" in animation.writers.list():
             self.animation_writer = animation.writers["imagemagick"]
             self.animation_extension = ".gif"
         else:
