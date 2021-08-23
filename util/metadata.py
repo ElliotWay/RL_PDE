@@ -5,7 +5,7 @@ import sys
 import time
 import argparse
 
-from util.misc import get_git_commit_id, is_clean_git_repo
+from util.misc import get_git_commit_id, is_clean_git_repo, float_dict
 
 META_FILE_NAME = "meta.txt"
 
@@ -209,6 +209,10 @@ def load_to_namespace(meta_filename, args_ns, ignore_list=[], override_args=None
                 + " which is usually the right behavior.")
 
     meta_dict = load_meta_file(meta_filename)
+    if meta_dict['init_params'] != 'None':  # recover dictionary type from strings like 'a=0, b=1'
+        meta_dict['init_params'] = float_dict(meta_dict['init_params'])
+        # meta_dict['init_params'] = dict(item.split("=") for item in meta_dict['init_params'].split(", "))
+
     for arg in arg_dict:
         if arg not in meta_dict:
             print("M {} not found in meta file - using default/explicit value ({}).".format(arg, arg_dict[arg]))

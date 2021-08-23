@@ -287,7 +287,7 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
 
         return rhs
 
-    @tf.function
+    # @tf.function
     def tf_prep_state(self, state):
         # Note the similarity to prep_state() above.
 
@@ -353,7 +353,7 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
         #return rl_state
         return (rl_state,) # Singleton because this is 1D.
 
-    @tf.function
+    # @tf.function
     def tf_integrate(self, args):
         real_state, rl_state, rl_action = args
 
@@ -421,7 +421,7 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
     # but this needs to be here because of how we calculate the WENO step. Not a high priority.
     # (And anyway, if we're refactoring, this should probably be the one canonical function instead
     # of having TF and non-TF versions.)
-    @tf.function
+    # @tf.function
     def tf_calculate_reward(self, args):
         real_state, rl_state, rl_action, next_real_state = args
         # Note that real_state and next_real_state do not include ghost cells, but rl_state does.
