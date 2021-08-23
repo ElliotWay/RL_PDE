@@ -262,28 +262,23 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
 
         state = self.current_state
 
-        rhs = []
-        for i in range(self.grid.space.shape[0]):  # TODO: check if we can get rid of for -yiwei
-            fp_state = state[i, :, 0, :]
-            fm_state = state[i, :, 1, :]
+        fp_state = state[:, :, 0, :]
+        fm_state = state[:, :, 1, :]
 
-            # TODO state_order != weno_order has never worked well.
-            # Is this why? Should this be state order? Or possibly it should be weno order but we still
-            # need to compensate for a larger state order somehow?
-            fp_stencils = weno_sub_stencils_nd(fp_state, self.weno_order)
-            fm_stencils = weno_sub_stencils_nd(fm_state, self.weno_order)
+        # TODO state_order != weno_order has never worked well.
+        # Is this why? Should this be state order? Or possibly it should be weno order but we still
+        # need to compensate for a larger state order somehow?
+        fp_stencils = weno_sub_stencils_nd(fp_state, self.weno_order)
+        fm_stencils = weno_sub_stencils_nd(fm_state, self.weno_order)
 
-            fp_weights = weights[i, :, 0, :]
-            fm_weights = weights[i, :, 1, :]
+        fp_weights = weights[:, :, 0, :]
+        fm_weights = weights[:, :, 1, :]
 
-            fpr = np.sum(fp_weights * fp_stencils, axis=-1)
-            fml = np.sum(fm_weights * fm_stencils, axis=-1)
+        fpr = np.sum(fp_weights * fp_stencils, axis=-1)
+        fml = np.sum(fm_weights * fm_stencils, axis=-1)
 
-            flux = fml + fpr
-
-            rhs.append((flux[:-1] - flux[1:]) / self.grid.dx)
-
-        rhs = np.array(rhs)
+        flux = fml + fpr
+        rhs = (flux[:, :-1] - flux[:, 1:]) / self.grid.dx
 
         return rhs
 
