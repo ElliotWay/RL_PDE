@@ -111,11 +111,12 @@ class AbstractPDEEnv(gym.Env):
         else:
             dims = len(num_cells)
 
+        deterministic_init = self.test or ("rand" in init_type)
         self.grid = create_grid(dims, eqn_type=eqn_type,
                                 num_cells=num_cells, min_value=min_value, max_value=max_value,
                                 num_ghosts=self.ng,
                                 boundary=boundary, init_type=init_type,
-                                deterministic_init=self.test)
+                                deterministic_init=deterministic_init)
         if init_params is not None:
             self.init_params = init_params
         else:

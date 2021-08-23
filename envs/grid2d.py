@@ -93,6 +93,7 @@ class Burgers2DGrid(GridBase):
 
             self.space[0] = a + b * np.sin(c[0] * self.x[:, None] + c[1] * self.x[None, :])
 
+        # Extension of 1D environment.
         elif self.init_type.startswith("1d"):
             one_d_type = None
             one_d_axis = None
@@ -109,7 +110,8 @@ class Burgers2DGrid(GridBase):
                         raise ValueError("Burgers2DGrid: Malformed 1d init type string"
                                 + " \"{}\".".format(self.init_type)
                                 + " Expecting strings like \"1d-sine-x\".")
-            if 'type' in params: # params override the init_type name.
+            # The params dict overrides the sub-type passed in the full init_type.
+            if 'type' in params:
                 one_d_type = params['type']
             elif one_d_type is None:
                 one_d_type = "smooth_sine"
@@ -155,6 +157,73 @@ class Burgers2DGrid(GridBase):
                 y_grid = self.y_grid1d.get_real()
                 self.space[self.real_slice] = np.tile(y_grid, (1, self.num_cells[0], 1))
                 self.boundary = ("outflow", y_bound)
+
+        # Combine 2 1D initial conditions on each axis additively.
+        elif self.init_type.startswith("combo"):
+            x_type = None
+            y_type = None
+            match = re.fullmatch("combo-([^-]*)-([^-]*)", self.init_type)
+            if match is not None:
+                x_type = match[1]
+                y_type = match[2]
+            else:
+                match = re.fullmatch("combo-([^-]*)", self.init_type)
+                if match is not None:
+                    x_type = match[1]
+                    y_type = match[1]
+                else:
+                    if not self.init_type == "combo":
+                        raise ValueError("Burgers2DGrid: Malformed combo init type string"
+                                + " \"{}\".".format(self.init_type)
+                                + " Expecting strings like \"combo-smooth_sine-gaussian\".")
+                    else:
+                        x_type = "smooth_sine"
+                        y_type = "smooth_sine"
+            # The params dict overrides the sub-types passed in the full init_type.
+            if 'x-type' in params:
+                x_type = params['x-type']
+            new_params['x-type'] = x_type
+            if 'y-type' in params:
+                y_type = params['y-type']
+            new_params['y-type'] = y_type
+
+            # Always use the default boundary from Burgers1DGrid.
+            if 'boundary' in params:
+                del params['boundary']
+ 
+            # Keep track of the miscellaneous parameters.
+            for param, value in params.items():
+                if param not in new_params:
+                    new_params[param] = value
+
+            x_params = {'init_type': x_type}
+            y_params = {'init_type': y_type}
+            for param, value in params.items():
+                if param.startswith("x-") and param != "x-type":
+                    x_params[param[2:]] = value
+                elif param.startswith("y-") and param != "y-type":
+                    y_params[param[2:]] = value
+
+            if not hasattr(self, "x_grid1d"):
+                self.x_grid1d = Burgers1DGrid(self.num_cells[0], self.num_ghosts[0],
+                                              self.min_value[0], self.max_value[0])
+            if not hasattr(self, "y_grid1d"):
+                self.y_grid1d = Burgers1DGrid(self.num_cells[1], self.num_ghosts[1],
+                                              self.min_value[1], self.max_value[1])
+
+            self.x_grid1d.reset(params=x_params)
+            x_bound = self.x_grid1d.boundary if type(self.x_grid1d.boundary) is str \
+                        else self.x_grid1d.boundary[0]
+            x_grid = self.x_grid1d.get_real()
+
+            self.y_grid1d.reset(params=y_params)
+            y_bound = self.y_grid1d.boundary if type(self.y_grid1d.boundary) is str \
+                        else self.y_grid1d.boundary[0]
+            y_grid = self.y_grid1d.get_real()
+
+            self.space[self.real_slice] = x_grid[:, :, None] + y_grid[:, None, :]
+            self.boundary = (x_bound, y_bound)
+
         else:
             raise Exception("Initial condition type \"" + str(self.init_type) + "\" not recognized.")
 
