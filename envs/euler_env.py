@@ -218,36 +218,29 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
         # get the solution data
         g = self.grid
 
-        self.current_state = []
-
         # compute flux at each point
         f = self.euler_flux(g.u)
         # get maximum velocity
         alpha = self._max_lambda()
 
-        for i in range(g.space.shape[0]):
-            # Lax Friedrichs Flux Splitting
-            fp = (f[i] + alpha * g.u[i]) / 2
-            fm = (f[i] - alpha * g.u[i]) / 2
+        # Lax Friedrichs Flux Splitting
+        fp = (f + alpha * g.u) / 2
+        fm = (f - alpha * g.u) / 2
 
-            fp_stencil_indexes = create_stencil_indexes(stencil_size=self.state_order * 2 - 1,
-                                                        num_stencils=g.real_length() + 1,
-                                                        offset=g.ng - self.state_order)
-            fm_stencil_indexes = fp_stencil_indexes + 1
+        fp_stencil_indexes = create_stencil_indexes(stencil_size=self.state_order * 2 - 1,
+                                                    num_stencils=g.real_length() + 1,
+                                                    offset=g.ng - self.state_order)
+        fm_stencil_indexes = fp_stencil_indexes + 1
 
-            fp_stencils = fp[fp_stencil_indexes]
-            fm_stencils = fm[fm_stencil_indexes]
+        fp_stencils = [fp[i][fp_stencil_indexes] for i in range(g.space.shape[0])]
+        fm_stencils = [fm[i][fm_stencil_indexes] for i in range(g.space.shape[0])]
 
-            # Flip fm stencils. Not sure how I missed this originally?
-            fm_stencils = np.flip(fm_stencils, axis=-1)
+        # Flip fm stencils. Not sure how I missed this originally?
+        fm_stencils = np.flip(fm_stencils, axis=-1)
+        fp_stencils = np.stack(fp_stencils, axis=0)
 
-            # Stack fp and fm on axis 1 so grid position is still axis 0.
-            state = np.stack([fp_stencils, fm_stencils], axis=1)
-
-            # save this state for convenience
-            self.current_state.append(state)
-
-        self.current_state = np.array(self.current_state)
+        # Stack fp and fm on axis -2 so grid position is still axis 0.
+        self.current_state = np.stack([fp_stencils, fm_stencils], axis=-2)
 
         return self.current_state
 
