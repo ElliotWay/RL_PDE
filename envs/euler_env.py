@@ -218,36 +218,29 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
         # get the solution data
         g = self.grid
 
-        self.current_state = []
-
         # compute flux at each point
         f = self.euler_flux(g.u)
         # get maximum velocity
         alpha = self._max_lambda()
 
-        for i in range(g.space.shape[0]):
-            # Lax Friedrichs Flux Splitting
-            fp = (f[i] + alpha * g.u[i]) / 2
-            fm = (f[i] - alpha * g.u[i]) / 2
+        # Lax Friedrichs Flux Splitting
+        fp = (f + alpha * g.u) / 2
+        fm = (f - alpha * g.u) / 2
 
-            fp_stencil_indexes = create_stencil_indexes(stencil_size=self.state_order * 2 - 1,
-                                                        num_stencils=g.real_length() + 1,
-                                                        offset=g.ng - self.state_order)
-            fm_stencil_indexes = fp_stencil_indexes + 1
+        fp_stencil_indexes = create_stencil_indexes(stencil_size=self.state_order * 2 - 1,
+                                                    num_stencils=g.real_length() + 1,
+                                                    offset=g.ng - self.state_order)
+        fm_stencil_indexes = fp_stencil_indexes + 1
 
-            fp_stencils = fp[fp_stencil_indexes]
-            fm_stencils = fm[fm_stencil_indexes]
+        fp_stencils = [fp[i][fp_stencil_indexes] for i in range(g.space.shape[0])]
+        fm_stencils = [fm[i][fm_stencil_indexes] for i in range(g.space.shape[0])]
 
-            # Flip fm stencils. Not sure how I missed this originally?
-            fm_stencils = np.flip(fm_stencils, axis=-1)
+        # Flip fm stencils. Not sure how I missed this originally?
+        fm_stencils = np.flip(fm_stencils, axis=-1)
+        fp_stencils = np.stack(fp_stencils, axis=0)
 
-            # Stack fp and fm on axis 1 so grid position is still axis 0.
-            state = np.stack([fp_stencils, fm_stencils], axis=1)
-
-            # save this state for convenience
-            self.current_state.append(state)
-
-        self.current_state = np.array(self.current_state)
+        # Stack fp and fm on axis -2 so grid position is still axis 0.
+        self.current_state = np.stack([fp_stencils, fm_stencils], axis=-2)
 
         return self.current_state
 
@@ -262,28 +255,23 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
 
         state = self.current_state
 
-        rhs = []
-        for i in range(self.grid.space.shape[0]):  # TODO: check if we can get rid of for -yiwei
-            fp_state = state[i, :, 0, :]
-            fm_state = state[i, :, 1, :]
+        fp_state = state[:, :, 0, :]
+        fm_state = state[:, :, 1, :]
 
-            # TODO state_order != weno_order has never worked well.
-            # Is this why? Should this be state order? Or possibly it should be weno order but we still
-            # need to compensate for a larger state order somehow?
-            fp_stencils = weno_sub_stencils_nd(fp_state, self.weno_order)
-            fm_stencils = weno_sub_stencils_nd(fm_state, self.weno_order)
+        # TODO state_order != weno_order has never worked well.
+        # Is this why? Should this be state order? Or possibly it should be weno order but we still
+        # need to compensate for a larger state order somehow?
+        fp_stencils = weno_sub_stencils_nd(fp_state, self.weno_order)
+        fm_stencils = weno_sub_stencils_nd(fm_state, self.weno_order)
 
-            fp_weights = weights[i, :, 0, :]
-            fm_weights = weights[i, :, 1, :]
+        fp_weights = weights[:, :, 0, :]
+        fm_weights = weights[:, :, 1, :]
 
-            fpr = np.sum(fp_weights * fp_stencils, axis=-1)
-            fml = np.sum(fm_weights * fm_stencils, axis=-1)
+        fpr = np.sum(fp_weights * fp_stencils, axis=-1)
+        fml = np.sum(fm_weights * fm_stencils, axis=-1)
 
-            flux = fml + fpr
-
-            rhs.append((flux[:-1] - flux[1:]) / self.grid.dx)
-
-        rhs = np.array(rhs)
+        flux = fml + fpr
+        rhs = (flux[:, :-1] - flux[:, 1:]) / self.grid.dx
 
         return rhs
 

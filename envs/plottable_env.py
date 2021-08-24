@@ -547,7 +547,7 @@ class Plottable1DEnv(AbstractPDEEnv):
         elif self.weno_solution is not None and self.weno_solution.is_recording_actions():
             weno_action_history = np.array(self.weno_solution.get_action_history())
             weno_color = self.weno_color
-            assert(action_history.shape == weno_action_history.shape)  # TODO: modify for Euler -yiwei
+            assert(action_history.shape == weno_action_history.shape)
         else:
             weno_action_history = None
 

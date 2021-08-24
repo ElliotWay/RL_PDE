@@ -249,7 +249,6 @@ class GlobalBackpropModel(GlobalModel):
             if self.iteration % training_plot_freq == 0:
                 for initial_condition_index in [0]:#range(states.shape[1]):
                     state_history = states[:, initial_condition_index]
-                    # TODO: do we want to convert the states to (rho, u, e) for Euler equation before plotting? -yiwei
                     suffix = "_train_iter{}_init{}".format(self.iteration, initial_condition_index)
                     self.env.plot_state_evolution(state_history=state_history,
                             no_true=True, suffix=suffix)
