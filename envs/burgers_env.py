@@ -329,17 +329,18 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
 
         #TODO implement RK4?
 
-        step = self.dt * derivative_u_t
+        dt = self.tf_timestep(real_state)
+
+        step = dt * derivative_u_t
 
         if self.nu != 0.0:
-            step += self.dt * self.nu * self.grid.tf_laplacian(real_state)
+            step += dt * self.nu * self.grid.tf_laplacian(real_state)
         #TODO implement random source?
         if self.source != None:
             raise NotImplementedError("External source has not been implemented"
                     + " in global backprop.")
 
         new_state = real_state + step
-        # shape broadcasting seems fine here, real_state shape=(1, 125), step shape=(125,), new_state shape=(1, 125)
         return new_state
 
     # TODO: modify this so less is in subclass?

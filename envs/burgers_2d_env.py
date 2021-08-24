@@ -223,10 +223,11 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
                     - vertical_flux_reconstructed[:, 1:]) / cell_size_y
                 )
 
-        step = self.dt * step
+        dt = self.tf_timestep(real_state)
+        step = dt * step
 
         if self.nu != 0.0:
-            step += self.dt * self.nu * self.grid.tf_laplacian(real_state)
+            step += dt * self.nu * self.grid.tf_laplacian(real_state)
         if self.source != None:
             raise NotImplementedError("External source has not been implemented"
                     + " in global backprop.")

@@ -127,7 +127,7 @@ def main():
     eval_env_args = Namespace(**vars(args))
     eval_env_args.follow_solution = False # Doesn't make sense for eval envs to do that.
     if args.eval_env == "std" or args.eval_env == "custom":
-        eval_env_args.memoize = True
+        #eval_env_args.memoize = True
         # Use standard default evaluation environments.
         if args.env == "weno_burgers":
             eval_envs = []

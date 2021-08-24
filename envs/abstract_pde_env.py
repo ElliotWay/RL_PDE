@@ -111,7 +111,7 @@ class AbstractPDEEnv(gym.Env):
         else:
             dims = len(num_cells)
 
-        deterministic_init = self.test or ("rand" in init_type)
+        deterministic_init = self.test or (type(init_type) is str and "rand" in init_type)
         self.grid = create_grid(dims, eqn_type=eqn_type,
                                 num_cells=num_cells, min_value=min_value, max_value=max_value,
                                 num_ghosts=self.ng,
@@ -410,7 +410,15 @@ class AbstractPDEEnv(gym.Env):
             return self.fixed_step
         else:
             min_cell_size = min(self.grid.cell_size)
-            return self.C * min_cell_size / max(abs(self.grid.get_real()))
+            return self.C * min_cell_size / max(0.01, np.max(np.abs(self.grid.get_real())))
+
+    # Need a separate tf version for tf.reduce_max.
+    def tf_timestep(self, real_state):
+        if self.C is None:
+            return self.fixed_step
+        else:
+            min_cell_size = min(self.grid.cell_size)
+            return self.C * min_cell_size / tf.reduce_max(tf.abs(real_state))
 
 
     def force_state(self, state_grid):
@@ -732,7 +740,8 @@ class AbstractPDEEnv(gym.Env):
         # Give a penalty and end the episode if we're way off.
         #if np.max(state) > 1e7 or np.isnan(np.max(state)): state possibly made more sense here?
         if np.max(error) > 1e7 or np.isnan(np.max(error)):
-            reward -= max_penalty * (self.episode_length - self.steps)
+            reward = (reward_part - max_penalty * (self.episode_length - self.steps)
+                        for reward_part in reward)
             done = True
 
         #print("reward:", reward)

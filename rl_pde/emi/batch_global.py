@@ -45,7 +45,7 @@ class BatchGlobalEMI(EMI, OneDimensionalStencil):
             args_copy = Namespace(**vars(self.args))
             if args_copy.reward_mode is not None:
                 args_copy.reward_mode = args_copy.reward_mode.replace('one-step', 'full')
-            if not "random" in args_copy.init_type:
+            if not "random" in args_copy.init_type and args_copy.fixed_timesteps:
                 args_copy.memoize = True # Memoizing means we don't waste time and memory recomputing
                                          # the solution each time.
             else:
