@@ -355,9 +355,15 @@ class Euler1DGrid(GridBase):
 
         # _init_type and _boundary do not change, init_type and boundary may
         # change if init_type is scheduled or sampled.
+        self._init_type = init_type
         self.init_type = init_type
         self._boundary = self.boundary
         self.deterministic_init = deterministic_init
+        self._init_schedule_index = 0
+        self._init_schedule = ["sod", "double_rarefaction", "slow_shock"]
+        self._init_sample_types = self._init_schedule
+        self._init_sample_probs = [1/len(self._init_sample_types)]*len(self._init_sample_types)
+
 
         # 0 and len-1 are indexes for values beyond the boundary,
         # so create ilo and ihi as indexes to real values
@@ -391,6 +397,11 @@ class Euler1DGrid(GridBase):
 
         if 'init_type' in params:
             self.init_type = params['init_type']
+        elif self._init_type == "schedule":
+            self.init_type = self._init_schedule[self._init_schedule_index]
+            self._init_schedule_index = (self._init_schedule_index + 1) % len(self._init_schedule)
+        elif self._init_type == "sample":
+            self.init_type = np.random.choice(self._init_sample_types, p=self._init_sample_probs)
 
         if 'boundary' in params:
             boundary = params['boundary']
