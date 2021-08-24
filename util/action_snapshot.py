@@ -105,7 +105,7 @@ def save_action_snapshot(agent, weno_agent=None, suffix=""):
 
         state_axis = axes[0, index]
         cell_x_values = env.grid.x
-        state_axis.plot(cell_x_values, grid_state[0], linestyle='-', color='black')  # TODO: change for vec state -yiwei
+        state_axis.plot(cell_x_values, grid_state[0], linestyle='-', color='black')
         state_axis.set_xmargin(0.0)
         state_axis.set_ylim((-2.0, 2.0))
 
