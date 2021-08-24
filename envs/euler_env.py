@@ -140,11 +140,13 @@ class AbstractEulerEnv(AbstractPDEEnv):
             self.weno_solution = None
 
     def euler_flux(self, q):
+        # epsilon = 1e-16
         flux = np.zeros_like(q)
         rho = q[0, :]
         S = q[1, :]
         E = q[2, :]
         v = S / rho
+        # v = S / (rho + epsilon)
         p = (self.eos_gamma - 1) * (E - rho * v ** 2 / 2)
         flux[0, :] = S
         flux[1, :] = S * v + p
@@ -245,9 +247,12 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
         return self.current_state
 
     def _max_lambda(self):
+        # epsilon = 1e-16
         rho = self.grid.u[0]
         v = self.grid.u[1] / rho
+        # v = self.grid.u[1] / (rho + epsilon)
         p = (self.eos_gamma - 1) * (self.grid.u[2, :] - rho * v ** 2 / 2)
+        # cs = np.sqrt(self.eos_gamma * p / (rho + epsilon))
         cs = np.sqrt(self.eos_gamma * p / rho)
         return max(np.abs(v) + cs)
 

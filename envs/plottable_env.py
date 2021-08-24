@@ -64,12 +64,13 @@ class Plottable1DEnv(AbstractPDEEnv):
             raise Exception("Plottable1DEnv: \"{}\" render mode not recognized".format(mode))
 
     def euler_state_conversion(self, state):
+        epsilon = 1e-16  # add a small number to avoid division by zero
         original_shape = list(state.shape)
         original_shape[0] += 1  # add a dimension for e
         original_state = np.zeros(shape=original_shape)
         original_state[0] = state[0]  # rho
-        original_state[1] = state[1] / state[0]  # v
-        original_state[3] = (state[2] - original_state[0] * original_state[1] ** 2 / 2) / original_state[0]  # e
+        original_state[1] = state[1] / (state[0] + epsilon)  # v
+        original_state[3] = (state[2] - original_state[0] * original_state[1] ** 2 / 2) / (original_state[0] + epsilon)
         original_state[2] = (self.eos_gamma - 1) * (state[2] - original_state[0] * original_state[1] ** 2 / 2)
         return original_state
 
@@ -355,6 +356,11 @@ class Plottable1DEnv(AbstractPDEEnv):
         """
         self.set_colors()
 
+        if 'Euler' in str(self):
+            eqn_type = 'euler'
+        else:
+            eqn_type = 'burgers'
+
         override_history = (state_history is not None)
 
         vec_len = self.grid.space.shape[0]
@@ -494,7 +500,7 @@ class Plottable1DEnv(AbstractPDEEnv):
         log_dir = logger.get_dir()
         error_or_state = "error" if plot_error else "state"
         filename = os.path.join(log_dir,
-                "burgers_evolution_{}{}.png".format(error_or_state, suffix))
+                "{}_evolution_{}{}.png".format(eqn_type, error_or_state, suffix))
         plt.savefig(filename)
         print('Saved plot to ' + filename + '.')
 

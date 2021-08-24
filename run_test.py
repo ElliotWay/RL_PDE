@@ -23,7 +23,7 @@ from rl_pde.run import rollout
 from rl_pde.emi import BatchEMI, StandardEMI, TestEMI, DimensionalAdapterEMI, VectorAdapterEMI
 from rl_pde.agents import get_agent, ExtendAgent2D
 from envs import builder as env_builder
-from envs import AbstractBurgersEnv
+from envs import AbstractPDEEnv
 from envs import Plottable1DEnv, Plottable2DEnv
 from models import get_model_arg_parser
 from models import SACModel, PolicyGradientModel, TestModel
@@ -52,21 +52,25 @@ def save_convergence_plot(grid_sizes, error, args):
     plt.close()
 
 def save_error_plot(x_vals, y_vals, labels, args):
+    vec_len = y_vals[0].shape[0]
+    fig, ax = plt.subplots(nrows=vec_len, ncols=1, figsize=[6.4, 4.8 * vec_len], dpi=100)
     for x, y, label in zip(x_vals, y_vals, labels):
-        plt.plot(x, y, ls='-', label=str(label))
+        for i in range(vec_len):
+            ax[i].plot(x, y[i], ls='-', label=str(label))
 
-    ax = plt.gca()
-    ax.set_xlabel("x")
-    ax.set_ylabel("|error|")
+    for i in range(vec_len):
+        ax[i].set_xlabel("x")
+        ax[i].set_ylabel(f"u{i} |error|")
 
-    ax.set_yscale('log')
-    ax.set_ymargin(0.0)
+        ax[i].set_yscale('log')
+        ax[i].set_ymargin(0.0)
+
+        ax[i].legend()
+
     #extreme_cutoff = 3.0
     #max_not_extreme = max([np.max(y[y < extreme_cutoff]) for y in y_vals])
     #ymax = max_not_extreme*1.05 if max_not_extreme > 0.0 else 0.01
     #ax.set_ylim((None, ymax))
-
-    plt.legend()
 
     filename = os.path.join(args.log_dir, "convergence_over_x.png")
     plt.savefig(filename)
@@ -304,8 +308,8 @@ def main():
                 args.C = 0.1
             eval_env_args = Namespace(**vars(args))
             time_max = args.timestep * args.ep_length
-            _, dt, ep_length = AbstractBurgersEnv.fill_default_time_vs_space(
-                xmin=args.xmin, xmax=args.xmax, nx=nx,
+            _, dt, ep_length = AbstractPDEEnv.fill_default_time_vs_space(
+                min_value=[args.min_value], max_value=[args.max_value], num_cells=[nx],
                 dt=None, C=args.C, ep_length=None, time_max=time_max)
             eval_env_args.nx = nx
             eval_env_args.timestep = dt
