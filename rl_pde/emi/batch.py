@@ -8,42 +8,51 @@ from rl_pde.policy import Policy
 from rl_pde.emi.emi import EMI, PolicyWrapper
 from rl_pde.emi.emi import OneDimensionalStencil
 
+def _unbatch_space(space, flatten):
+    assert len(space.shape) > 0
+
+    new_shape = space.shape[1:]
+    if len(new_shape) == 0:
+        new_shape = (1,)
+
+    if flatten:
+        new_shape = (np.prod(new_shape),)
+
+    space_cls = type(space)
+    if isinstance(space, gym.spaces.Box):
+        low_value = space.low.flat[0]
+        assert space.low.flat[-1] == low_value
+        high_value = space.high.flat[0]
+        assert space.high.flat[-1] == high_value
+
+        new_space = space_cls(low=low_value, high=high_value, shape=new_shape, dtype=space.dtype)
+
+    elif isinstance(space, gym.spaces.MultiDiscrete):
+        discrete_range = space.nvec.flat[0]
+        assert space.nvec.flat[-1] == discrete_range
+
+        new_discrete_nvec = np.full(new_shape, discrete_range, dtype=space.dtype)
+        new_space = space_cls(new_discrete_nvec)
+    
+    else:
+        new_space = space_cls(new_shape)
+
+    return new_space
+
 class UnbatchedEnvPL(gym.Env):
     """
     Fake environment that presents a state/action space from another environment with the first
     dimension (the spatial dimension) removed, and optionally the remaining dimensions flattened.
+
+    Assumes that values are the same across each component of the spaces; the space may have more
+    dimensions than the first spatial dimension, but they should all have e.g. the same high and
+    low bounds.
     """
     def __init__(self, real_env, flatten=True):
         self.real_env = real_env
 
-        real_action_low = real_env.action_space.low
-        real_action_high = real_env.action_space.high
-        real_obs_low = real_env.observation_space.low
-        real_obs_high = real_env.observation_space.high
-
-        assert (np.all(real_action_low[0] == real_action_low[-1])
-                and np.all(real_action_high[0] == real_action_high[-1])
-                and np.all(real_obs_low[0] == real_obs_low[-1])
-                and np.all(real_obs_high[0] == real_obs_high[-1])), \
-                "Original env dim 1 was not spatial."
-
-        new_action_low = real_action_low[0]
-        new_action_high = real_action_high[0]
-        new_obs_low = real_obs_low[0]
-        new_obs_high = real_obs_high[0]
-
-        if flatten:
-            new_action_low = new_action_low.flatten()
-            new_action_high = new_action_high.flatten()
-            new_obs_low = new_obs_low.flatten()
-            new_obs_high = new_obs_high.flatten()
-
-        action_space_cls = type(real_env.action_space)
-        self.action_space = action_space_cls(low=new_action_low, high=new_action_high,
-                                             dtype=real_env.action_space.dtype)
-        obs_space_cls = type(real_env.observation_space)
-        self.observation_space = obs_space_cls(low=new_obs_low, high=new_obs_high,
-                                               dtype=real_env.observation_space.dtype)
+        self.action_space = _unbatch_space(self.real_env.action_space, flatten)
+        self.observation_space = _unbatch_space(self.real_env.observation_space, flatten)
 
     def step(self, action):
         raise Exception("This is a placeholder env - you can only access the spaces.")
