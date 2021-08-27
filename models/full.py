@@ -96,7 +96,7 @@ class GlobalBackpropModel(GlobalModel):
             # (It should not contain ghost cells - those should be handled by the prep_state function
             # that converts real state to rl state.)
             self.initial_state_ph = tf.placeholder(dtype=self.dtype,
-                    shape=(None, self.env.grid.vec_len) + self.env.grid.num_cells, name="init_real_state")
+                    shape=(None, self.env.vec_length) + self.env.shape, name="init_real_state")
 
             #TODO possibly restrict num_steps to something smaller?
             # We'd then need to sample timesteps from a WENO trajectory.
@@ -111,8 +111,8 @@ class GlobalBackpropModel(GlobalModel):
             # Check reward shape - should have a reward for each timestep, batch,
             # (optional vector part,) and physical location.
             #TODO Temporary hack - replace when vector EMI is implemented. -Elliot
-            #assert len(self.rewards[0].shape) == (3 if self.env.grid.vec_len > 1 else 2) + self.env.dimensions
-            assert len(self.rewards[0].shape) == (2 if self.env.grid.vec_len > 1 else 2) + self.env.dimensions
+            #assert len(self.rewards[0].shape) == (3 if self.env.vec_length > 1 else 2) + self.env.dimensions
+            assert len(self.rewards[0].shape) == (2 if self.env.vec_length > 1 else 2) + self.env.dimensions
             # Sum over the timesteps in the trajectory (axis 0),
             # then average over the batch and each location and the batch (axes 1 and the rest).
             # Also average over each reward part (e.g. each dimension).
@@ -249,7 +249,6 @@ class GlobalBackpropModel(GlobalModel):
             if self.iteration % training_plot_freq == 0:
                 for initial_condition_index in [0]:#range(states.shape[1]):
                     state_history = states[:, initial_condition_index]
-                    # TODO: do we want to convert the states to (rho, u, e) for Euler equation before plotting? -yiwei
                     suffix = "_train_iter{}_init{}".format(self.iteration, initial_condition_index)
                     self.env.plot_state_evolution(state_history=state_history,
                             no_true=True, suffix=suffix)

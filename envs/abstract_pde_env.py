@@ -192,6 +192,9 @@ class AbstractPDEEnv(gym.Env):
     def dimensions(self): return self.grid.ndim
 
     @property
+    def shape(self): return self.grid.num_cells
+
+    @property
     def vec_length(self): return self.grid.vec_len
 
     def step(self, action):

@@ -7,6 +7,8 @@ from rl_pde.emi.emi import EMI, PolicyWrapper
 from rl_pde.emi.emi import OneDimensionalStencil
 from rl_pde.emi.batch import UnbatchedEnvPL, UnbatchedPolicy
 
+# Also see ToyBatchGlobalEMI.
+
 class BatchGlobalEMI(EMI, OneDimensionalStencil):
     """
     EMI that breaks samples along the first dimension (the physical dimension). However, unlike
