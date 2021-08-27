@@ -38,7 +38,7 @@ class ToyBatchGlobalEMI(EMI):
         for _ in range(num_inits):
             rl_state = env.reset()
             real_state = env.get_real_state()
-        initial_conditions = np.array(initial_conditions)
+        initial_conditions = np.array(initial_conditions, dtype=env.observation_space.dtype)
 
         extra_info = self._model.train(initial_conditions)
 

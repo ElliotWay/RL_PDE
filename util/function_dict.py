@@ -141,10 +141,10 @@ def z_score_all_dims_tf(obs_tensor):
 #_tensorflow_fn_dict[fn_key] = z_score_all_dims_tf
 
 def binary(arr):
-    return (arr > 0).astype(np.int64)
+    return (arr > 0).astype(np.float64)
 @tf.function
 def binary_tf(tensor):
-    return tf.cast(tensor > 0, tf.int64)
+    return tf.cast(tensor > 0, tf.float64)
 fn_key = 'binary'
 _numpy_fn_dict[fn_key] = binary
 _tensorflow_fn_dict[fn_key] = binary_tf

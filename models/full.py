@@ -120,6 +120,8 @@ class GlobalBackpropModel(GlobalModel):
                                             reward_part in self.rewards])
 
             gradients = tf.gradients(self.loss, self.policy_params)
+            print("gradients:")
+            print(gradients)
             self.grads = list(zip(gradients, self.policy_params))
 
             # Declare this once - otherwise we add to the graph every time,
@@ -146,6 +148,8 @@ class GlobalBackpropModel(GlobalModel):
             # Surely there is a way to handle the spatial dimension there as well? At least for
             # this part?
             action_shape = self.env.action_space.shape[1:]
+            #if len(action_shape) == 0:
+                #action_shape = (1,)
 
             #TODO Use ReLU? A field in args with ReLU as the default might make sense.
             # Note: passing a name to the constructor of a Keras Layer has the effect
@@ -500,8 +504,8 @@ class IntegrateCell(Layer):
             new_state_shape = [-1,] + rl_state_shape[outer_dims:]
             reshaped_state = tf.reshape(rl_state_part, new_state_shape)
 
-            #print("original shape:", rl_state_shape)
-            #print("new shape:", new_state_shape)
+            print("original shape:", rl_state_shape)
+            print("new shape:", new_state_shape)
 
             # Future note: this works to apply a 1D agent along each dimension.
             # However, if we want an agent that makes use of a 2D stencil, or an agent that makes

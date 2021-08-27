@@ -1,5 +1,6 @@
 import gym
 import numpy as np
+import tensorflow as tf
 
 from util.misc import create_stencil_indexes
 
@@ -101,7 +102,8 @@ class SweeperEnv(gym.Env):
         # real_state does not contain the ghost cells on either side.
         state = tf.concat([[0], real_state, [0]], axis=-1)
 
-        rl_state = self._get_observation(state)
+        indexes = create_stencil_indexes(stencil_size=3, num_stencils=self.length)
+        rl_state = tf.gather(state, indexes)
 
         #return rl_state
         return (rl_state,) # Singleton because this is 1D.
@@ -117,17 +119,21 @@ class SweeperEnv(gym.Env):
         real_state = real_state[0]
 
         # Adjacent sweeps cancel.
-        action = tf.concat([[0], action, [0]])
-        boolean_action = tf.cast(action, tf.bool)
-        not_action = tf.logical_not(boolean_action)
-        boolean_final_action = tf.logical_and(
-                tf.logical_and(boolean_action[1:-1], not_action[:-2]),
-                not_action[2:])
+        action = tf.concat([[0], rl_action, [0]], axis=-1)
+        # Logical Operations are apparently not differentiable in TF 1.15 (they are in TF 2).
+        # We need to use the correpsonding arithmetic operations instead.
+        #boolean_action = tf.cast(action, tf.bool)
+        #not_action = tf.logical_not(boolean_action)
+        #boolean_final_action = tf.logical_and(
+                #tf.logical_and(boolean_action[1:-1], not_action[:-2]),
+                #not_action[2:])
+        not_action = 1 - action
+        final_action = action[1:-1] * not_action[:-2] * not_action[2:]
+        #final_action = tf.cast(boolean_final_action, real_state.dtype)
 
         # Sweep to the left.
-        numerical_final_action = tf.cast(boolean_final_action, tf.int32)
-        removed_dirt = real_state * numerical_final_action
-        added_dirt = tf.concat([removed_dirt[1:], [0]])
+        removed_dirt = real_state * final_action
+        added_dirt = tf.concat([removed_dirt[1:], [0]], axis=-1)
 
         next_real_state = real_state - removed_dirt + added_dirt
 
@@ -140,6 +146,8 @@ class SweeperEnv(gym.Env):
     def tf_calculate_reward(self, args):
         real_state, rl_state, rl_action, next_real_state = args
 
+        # Use the first (and only) vector component.
+        next_real_state = next_real_state[0]
         reward = next_real_state
 
         #return reward
