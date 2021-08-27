@@ -13,6 +13,8 @@ from util.serialize import save_to_zip, load_from_zip
 from util.function_dict import tensorflow_fn
 from util.serialize import save_to_zip, load_from_zip
 
+SUPPORTED_BOUNDARIES = ["outflow", "periodic"]
+
 class GlobalBackpropModel(GlobalModel):
     """
     Model that uses the "global backprop" idea, that is, we construct a recurrent network that
@@ -84,43 +86,75 @@ class GlobalBackpropModel(GlobalModel):
             # This does not make a lot of sense and should be changed. Ideally, this behavior
             # is entirely controlled by the EMI - but how do we move it there?
 
-            cell = IntegrateCell(
-                    prep_state_fn=self.env.tf_prep_state,
-                    policy_net=self.wrapped_policy,
-                    integrate_fn=self.env.tf_integrate,
-                    reward_fn=self.env.tf_calculate_reward,
-                    )
-            rnn = IntegrateRNN(cell)
+            # This creates separate networks for each boundary condition.
+            # This is necessary because building a condition into the network, while theoretically
+            # possible, incurs an intractable cost.
+            # Instead we separate each batch into a 'sub-batch' for each boundary condition.
+            self.init_state_ph_dict = {}
+            self.state_dict = {}
+            self.action_dict = {}
+            self.reward_dict = {}
+            self.loss_dict = {}
+            self.gradients_dict = {}
 
-            # initial_state_ph is the REAL physical initial state
-            # (It should not contain ghost cells - those should be handled by the prep_state function
-            # that converts real state to rl state.)
-            self.initial_state_ph = tf.placeholder(dtype=self.dtype,
-                    shape=(None, self.env.grid.vec_len) + self.env.grid.num_cells, name="init_real_state")
+            # Create all possible combinations of boundary conditions in different dimensions.
+            # So with [outflow, periodic] there are 4 combinations in 2 dimensions and 8 in 3.
+            self.boundary_combinations = [tuple(combination) for combination in
+                        np.stack([dimension.ravel() for dimension in
+                            np.meshgrid(*([SUPPORTED_BOUNDARIES] * self.env.dimensions),
+                                            indexing='xy')],
+                            axis=-1)]
+            for boundary in self.boundary_combinations:
+                params = {'boundary': boundary}
+                self.env.reset(params)
+                boundary_name = '_'.join(boundary)
 
-            #TODO possibly restrict num_steps to something smaller?
-            # We'd then need to sample timesteps from a WENO trajectory.
-            #NOTE 4/14 - apparently it works okay with the full episode! We may still want to restrict
-            # this if resource constraints become an issue with more complex environments.
+                cell = IntegrateCell(
+                        prep_state_fn=self.env.tf_prep_state,
+                        policy_net=self.wrapped_policy,
+                        integrate_fn=self.env.tf_integrate,
+                        reward_fn=self.env.tf_calculate_reward,
+                        )
+                rnn = IntegrateRNN(cell, name="rnn_".format(boundary_name))
 
-            states, actions, rewards = rnn(self.initial_state_ph, num_steps=self.args.ep_length)
-            self.states = states
-            self.actions = actions
-            self.rewards = rewards
+                # initial_state_ph is the REAL physical initial state
+                # (It should not contain ghost cells - those should be handled by the prep_state function
+                # that converts real state to rl state.)
+                initial_state_ph = tf.placeholder(dtype=self.dtype,
+                        shape=(None, self.env.grid.vec_len) + self.env.grid.num_cells,
+                        name="init_real_state_{}".format(boundary_name))
+                self.init_state_ph_dict[boundary] = initial_state_ph
 
-            # Check reward shape - should have a reward for each timestep, batch,
-            # (optional vector part,) and physical location.
-            #TODO Temporary hack - replace when vector EMI is implemented. -Elliot
-            #assert len(self.rewards[0].shape) == (3 if self.env.grid.vec_len > 1 else 2) + self.env.dimensions
-            assert len(self.rewards[0].shape) == (2 if self.env.grid.vec_len > 1 else 2) + self.env.dimensions
-            # Sum over the timesteps in the trajectory (axis 0),
-            # then average over the batch and each location and the batch (axes 1 and the rest).
-            # Also average over each reward part (e.g. each dimension).
-            self.loss = -tf.reduce_mean([tf.reduce_mean(tf.reduce_sum(reward_part, axis=0)) for
-                                            reward_part in self.rewards])
+                # Could restrict steps to something smaller.
+                # This loses some of the benefits of RL long-term planning, but may be necessary in
+                # high dimensional environments.
+                s, a, r = rnn(initial_state_ph, num_steps=self.args.ep_length)
+                self.state_dict[boundary] = s
+                self.action_dict[boundary] = a
+                self.reward_dict[boundary] = r
 
-            gradients = tf.gradients(self.loss, self.policy_params)
-            self.grads = list(zip(gradients, self.policy_params))
+                # Check reward shape - should have a reward for each timestep, batch,
+                # (optional vector part,) and physical location.
+                #TODO Temporary hack - replace when vector EMI is implemented. -Elliot
+                #assert len(self.rewards[0].shape) == (3 if self.env.grid.vec_len > 1 else 2) + self.env.dimensions
+                assert len(self.rewards[0].shape) == (2 if self.env.grid.vec_len > 1 else 2) + self.env.dimensions
+                # Sum over the timesteps in the trajectory (axis 0),
+                # then average over the batch and each location and the batch (axes 1 and the rest).
+                # Also average over each reward part (e.g. each dimension).
+                loss = -tf.reduce_mean([tf.reduce_mean(tf.reduce_sum(reward_part, axis=0)) for
+                                                reward_part in self.rewards])
+                self.loss_dict[boundary] = loss
+
+                gradients = tf.gradients(loss, self.policy_params)
+                self.gradients_dict[boundary] = gradients
+
+            # The gradients for each boundary are passed out of tensorflow, where they are
+            # combined and weighted, then passed back into tensorflow.
+            # (This is necessary because we may not have samples in each boundary condition, and
+            # Tensorflow doesn't work well with empty Tensors.)
+            self.gradients_ph = tf.placeholder(dtype=self.dtype,
+                    shape=(len(self.policy_params),), name="weights_gradients")
+            self.grads = list(zip(self.gradients_ph, self.policy_params))
 
             # Declare this once - otherwise we add to the graph every time,
             # and it won't be garbage collected.
@@ -181,15 +215,61 @@ class GlobalBackpropModel(GlobalModel):
 
             self._loading_ready = True
 
-    def train(self, initial_state):
+
+    def train(self, initial_state, init_params):
         if not self._training_ready:
             self.setup_training()
 
-        feed_dict = {self.initial_state_ph:initial_state}
+        for params in init_params:
+            if type(params['boundary']) is str:
+                params['boundary'] = tuple(params['boundary'] * self.env.dimensions)
+            if not params['boundary'] in self.boundary_combinations:
+                raise NotImplementedError("GlobalBackpropModel:"
+                        + " Cannot train on '{}' boundary".format(params['boundary'])
+                        + " Only the following boundary conditions are supported:"
+                        + "\n{}".format(SUPPORTED_BOUNDARIES))
 
-        _, grads, loss, rewards, actions, states = self.session.run(
-                [self.train_policy, self.grads, self.loss, self.rewards, self.actions, self.states],
+        # Separate initial_state into sub-batches for each boundary condition.
+        index_dict = {}
+        feed_dict = {}
+        included_boundaries = []
+        for boundary in SUPPORTED_BOUNDARIES:
+            indexes = [i for i, params in enumerate(init_params) if params['boundary'] == boundary]
+            if len(indexes) > 0:
+                included_boundaries.append(boundary)
+                index_dict[boundary] = indexes
+                feed_dict[self.init_state_ph_dict[boundary]] = initial_state[indexes]
+                print("'{}' has initial state with shape {}".format(boundary,
+                    feed_dict[self.init_state_ph_dict[boundary]].shape))
+                print("indexes are {}".format(indexes))
+
+        def subdict(d, keys):
+            return {k: v for k, v in d.items() if k in keys}
+
+        # Get the gradients.
+        gradient_dict, loss_dict, reward_dict, action_dict, state_dict = self.session.run(
+                [subdict(self.gradient_dict, included_boundaries),
+                    subdict(self.loss_dict, included_boundaries),
+                    subdict(self.reward_dict, included_boundaries),
+                    subdict(self.action_dict, included_boundaries),
+                    subdict(self.state_dict, included_boundaries)
+                    ],
                 feed_dict=feed_dict)
+
+        # Compute weighted gradients and weighted loss.
+        boundary_weights = np.array([len(index_dict[boundary])/len(init_params)
+                    for boundary in included_boundaries])
+        all_gradients = np.stack([gradient_dict[boundary] for boundary in included_boundaries],
+                                    axis=1)
+        weighted_gradients = np.sum(all_gradients * boundary_weights, axis=1)
+        all_loss = np.array([loss_dict[boundary] for boundary in included_boundaries])
+        weighted_loss = np.sum(all_loss * boundary_weights)
+
+        # Use the weighted gradients to train the policy network.
+        self.session.run(self.train_policy, feed_dict={self.gradients_ph: weighted_gradients})
+
+
+        # Need to rearrange s,a,r again, as in original refactor.
 
         extra_info = {}
 
@@ -385,7 +465,7 @@ class GlobalBackpropModel(GlobalModel):
         self.preloaded = True
 
 class IntegrateRNN(Layer):
-    def __init__(self, cell, dtype=tf.float64, swap_to_cpu=True):
+    def __init__(self, cell, name=None, dtype=tf.float64, swap_to_cpu=True):
         """
         Declare the RNN for PDE integration.
 
@@ -403,7 +483,7 @@ class IntegrateRNN(Layer):
           performance by keeping the Tensors on the GPU instead. True by default. Does nothing if
           only using the CPU anyway.
         """
-        super().__init__(dtype=dtype)
+        super().__init__(name=name, dtype=dtype)
         self.cell = cell
         self.swap_to_cpu = swap_to_cpu
 

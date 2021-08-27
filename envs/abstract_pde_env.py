@@ -353,7 +353,7 @@ class AbstractPDEEnv(gym.Env):
 
         return state, reward, done
 
-    def reset(self):
+    def reset(self, reset_params=None):
         """
         Reset the environment.
 
@@ -365,7 +365,12 @@ class AbstractPDEEnv(gym.Env):
         Nothing! However, the subclass versions should return the initial state.
 
         """
-        self.grid.reset(params=self.init_params)
+        if reset_params is None:
+            reset_params = self.init_params
+        self.grid.reset(params=reset_params)
+        # Note that after reset, self.grid.init_params are the parameters
+        # guaranteed to describe exactly the same initial condition as the grid
+        # has been initialized to.
         if self.source is not None:
             self.source.reset()
         self.solution.reset(self.grid.init_params)
