@@ -70,7 +70,7 @@ class BatchGlobalEMI(EMI, OneDimensionalStencil):
             init_params.append(env.grid.init_params) # This is starting to smell.
         initial_conditions = np.array(initial_conditions)
 
-        extra_info = self._model.train(initial_conditions)
+        extra_info = self._model.train(initial_conditions, init_params)
 
         states = extra_info['states']
         del extra_info['states']

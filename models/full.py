@@ -104,6 +104,9 @@ class GlobalBackpropModel(GlobalModel):
                             np.meshgrid(*([SUPPORTED_BOUNDARIES] * self.env.dimensions),
                                             indexing='xy')],
                             axis=-1)]
+            # Future note: if there are simply too many to enumerate when we're only using
+            # a few combinations, we could declare these lazily instead. This will cost the
+            # debugging advantages of finalizing the graph.
             for boundary in self.boundary_combinations:
                 params = {'boundary': boundary}
                 self.env.reset(params)
@@ -128,21 +131,21 @@ class GlobalBackpropModel(GlobalModel):
                 # Could restrict steps to something smaller.
                 # This loses some of the benefits of RL long-term planning, but may be necessary in
                 # high dimensional environments.
-                s, a, r = rnn(initial_state_ph, num_steps=self.args.ep_length)
-                self.state_dict[boundary] = s
-                self.action_dict[boundary] = a
-                self.reward_dict[boundary] = r
+                state, action, reward = rnn(initial_state_ph, num_steps=self.args.ep_length)
+                self.state_dict[boundary] = state
+                self.action_dict[boundary] = action
+                self.reward_dict[boundary] = reward
 
                 # Check reward shape - should have a reward for each timestep, batch,
                 # (optional vector part,) and physical location.
                 #TODO Temporary hack - replace when vector EMI is implemented. -Elliot
-                #assert len(self.rewards[0].shape) == (3 if self.env.grid.vec_len > 1 else 2) + self.env.dimensions
-                assert len(self.rewards[0].shape) == (2 if self.env.grid.vec_len > 1 else 2) + self.env.dimensions
+                #assert len(reward[0].shape) == (3 if self.env.grid.vec_len > 1 else 2) + self.env.dimensions
+                assert len(reward[0].shape) == (2 if self.env.grid.vec_len > 1 else 2) + self.env.dimensions
                 # Sum over the timesteps in the trajectory (axis 0),
                 # then average over the batch and each location and the batch (axes 1 and the rest).
                 # Also average over each reward part (e.g. each dimension).
                 loss = -tf.reduce_mean([tf.reduce_mean(tf.reduce_sum(reward_part, axis=0)) for
-                                                reward_part in self.rewards])
+                                                reward_part in reward])
                 self.loss_dict[boundary] = loss
 
                 gradients = tf.gradients(loss, self.policy_params)
@@ -152,9 +155,11 @@ class GlobalBackpropModel(GlobalModel):
             # combined and weighted, then passed back into tensorflow.
             # (This is necessary because we may not have samples in each boundary condition, and
             # Tensorflow doesn't work well with empty Tensors.)
-            self.gradients_ph = tf.placeholder(dtype=self.dtype,
-                    shape=(len(self.policy_params),), name="weights_gradients")
-            self.grads = list(zip(self.gradients_ph, self.policy_params))
+            gradients_0 = self.gradients_dict[self.boundary_combinations[0]]
+            self.gradients_ph_list = [tf.placeholder(dtype=grad.dtype, shape=grad.shape,
+                        name="weighted_gradients_{}".format(i)) for i, grad in
+                        enumerate(gradients_0)]
+            self.grads = list(zip(self.gradients_ph_list, self.policy_params))
 
             # Declare this once - otherwise we add to the graph every time,
             # and it won't be garbage collected.
@@ -243,12 +248,12 @@ class GlobalBackpropModel(GlobalModel):
                     feed_dict[self.init_state_ph_dict[boundary]].shape))
                 print("indexes are {}".format(indexes))
 
+
+        # Get the gradients (but only for the boundaries actually being used).
         def subdict(d, keys):
             return {k: v for k, v in d.items() if k in keys}
-
-        # Get the gradients.
-        gradient_dict, loss_dict, reward_dict, action_dict, state_dict = self.session.run(
-                [subdict(self.gradient_dict, included_boundaries),
+        gradients_dict, loss_dict, reward_dict, action_dict, state_dict = self.session.run(
+                [subdict(self.gradients_dict, included_boundaries),
                     subdict(self.loss_dict, included_boundaries),
                     subdict(self.reward_dict, included_boundaries),
                     subdict(self.action_dict, included_boundaries),
@@ -256,25 +261,48 @@ class GlobalBackpropModel(GlobalModel):
                     ],
                 feed_dict=feed_dict)
 
-        # Compute weighted gradients and weighted loss.
+        # Compute gradients weighted by the proportion of each boundary.
         boundary_weights = np.array([len(index_dict[boundary])/len(init_params)
                     for boundary in included_boundaries])
-        all_gradients = np.stack([gradient_dict[boundary] for boundary in included_boundaries],
-                                    axis=1)
-        weighted_gradients = np.sum(all_gradients * boundary_weights, axis=1)
+        print("weights shape:", boundary_weights.shape)
+        all_gradients = np.stack([gradients_dict[boundary] for boundary in included_boundaries],
+                                    axis=-1)
+        print("gradients shape", [gradients_dict[boundary].shape for boundary in
+            included_boundaries])
+        print("stacked gradients shape:", all_gradients.shape)
+        weighted_gradients = np.sum(all_gradients * boundary_weights, axis=-1)
         all_loss = np.array([loss_dict[boundary] for boundary in included_boundaries])
         weighted_loss = np.sum(all_loss * boundary_weights)
 
         # Use the weighted gradients to train the policy network.
-        self.session.run(self.train_policy, feed_dict={self.gradients_ph: weighted_gradients})
+        
+        self.session.run(self.train_policy, feed_dict={ph:grad for ph, grad in
+                zip(self.gradient_ph_list, weighted_gradients)})
 
-
-        # Need to rearrange s,a,r again, as in original refactor.
+        # Reorganize states, actions, and rewards so they correspond to the same order in
+        # which they came in.
+        # Python note: This is one of those unusual situations where we need to declare the
+        # array first because we're populating it out of order.
+        b0 = included_boundaries[0]
+        state_shape = list(state_dict[b0].shape)
+        state_shape[1] = len(init_params) # Adjust the shape to hold states for every initial
+                                          # condition, not just the ones with this boundary.
+        states = np.empty(state_shape, dtype=state_dict[b0].dtype)
+        action_shape = list(action_dict[b0].shape)
+        action_shape[1] = len(init_params)
+        actions = np.empty(action_shape, dtype=action_dict[b0].dtype)
+        reward_shape = list(reward_dict[b0].shape)
+        reward_shape[1] = len(init_params)
+        rewards = np.empty(reward_shape, dtype=reward_dict[b0].dtype)
+        for boundary in included_boundaries:
+            indexes = index_dict[boundary]
+            states[:, indexes] = state_dict[boundary]
+            actions[:, indexes] = action_dict[boundary]
+            rewards[:, indexes] = reward_dict[boundary]
 
         extra_info = {}
 
         # rewards, actions, states are [timestep, initial_condition, ...]
-
         debug_mode = True
         training_plot_freq = self.log_freq * 5
         if debug_mode:
