@@ -97,8 +97,7 @@ def get_env_arg_parser():
                         + " uses the stencil to calculate the reward combined with the other"
                         + " default parts.")
     parser.add_argument('--memo', dest='memoize', action='store_true', default=None,
-                        help="Use a memoized solution to save time. Enabled by default except with random, "
-                        + " schedule, and sample initial conditions, and in run_test.py. See --no-memo.")
+                        help="Use a memoized solution to save time. Enabled by default. See --no-memo.")
     parser.add_argument('--no-memo', dest='memoize', action='store_false', default=None,
                         help="Do not use a memoized solution.")
     parser.add_argument('--follow-solution', default=False, action='store_true',
@@ -110,10 +109,11 @@ def get_env_arg_parser():
 
 def set_contingent_env_defaults(main_args, env_args):
     if env_args.memoize is None:
-        if env_args.init_type in ['random', 'random-many-shocks', 'schedule', 'sample']:
-            env_args.memoize = False
-        else:
-            env_args.memoize = True
+        env_args.memoize = True
+        #if env_args.init_type in ['random', 'random-many-shocks', 'schedule', 'sample']:
+            #env_args.memoize = False
+        #else:
+            #env_args.memoize = True
 
     if main_args.model == "full" and env_args.reward_mode is None:
         print("Reward mode forced to use 'one-step' to work with 'full' model.")

@@ -86,7 +86,7 @@ class MemoizedSolution(SolutionBase):
         self.time_index = -1
 
         self.dt = None
-        self.MAX_MEMOS = 100
+        self.MAX_MEMOS = 500
 
     # Forward method calls that aren't available here to inner solution.
     # If you're not familiar, __getattr__ is only called when the

@@ -158,7 +158,10 @@ class Burgers1DGrid(GridBase):
             elif self.deterministic_init:
                 b = 0.5
             else:
-                b = float(np.random.uniform(-1.0, 1.0))
+                #b = float(np.random.uniform(-1.0, 1.0))
+                b_size = np.random.choice(np.linspace(0.2, 1.0, 9))
+                b_sign = np.random.randint(2) * 2 - 1
+                b = b_sign * b_size
             self.init_params['b'] = b
             if 'a' in params:
                 a = params['a']
