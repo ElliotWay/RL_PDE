@@ -39,7 +39,7 @@ class AbstractPDEEnv(gym.Env):
             boundary=None, init_type="gaussian",
             init_params=None,
             fixed_step=0.0004, C=None, #C=0.5,
-            weno_order=3, state_order=None, srca=0.0, episode_length=250,
+            weno_order=3, state_order=None, srca=0.0, episode_length=250, time_max=0.1,
             reward_adjustment=1000, reward_mode=None,
             test=False):
         """
@@ -142,7 +142,9 @@ class AbstractPDEEnv(gym.Env):
 
         self.fixed_step = fixed_step
         self.C = C  # CFL number # Why this comment? Why not just call the variable cfl_number?
+        self.fixed_timesteps = (self.C is None)
         self.episode_length = episode_length
+        self.time_max = time_max
         self.reward_adjustment = reward_adjustment
 
         # Useful values for subclasses to create consistent names.
@@ -336,10 +338,16 @@ class AbstractPDEEnv(gym.Env):
         self.t += dt
 
         self.steps += 1
-        if self.steps >= self.episode_length:
-            done = True
+        if self.fixed_timesteps:
+            if self.steps >= self.episode_length:
+                done = True
+            else:
+                done = False
         else:
-            done = False
+            if self.t >= self.time_max:
+                done = True
+            else:
+                done = False
 
         reward, force_done = self.calculate_reward()
         done = done or force_done

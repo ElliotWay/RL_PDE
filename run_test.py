@@ -304,7 +304,6 @@ def main():
         envs = []
         env_args = []
         for nx in CONVERGENCE_PLOT_GRID_RANGE:
-            #TODO Handle variable timesteps?
             if args.C is None:
                 args.C = 0.1
             eval_env_args = Namespace(**vars(args))
@@ -405,8 +404,13 @@ def main():
                 os.makedirs(sub_dir)
                 logger.configure(folder=sub_dir, format_strs=['stdout'])  # ,tensorboard'
 
-                print("Convergence run with {} grid cells and {}s timesteps ({}s total).".format(
-                    env_args.num_cells, env_args.timestep, env_args.ep_length*env_args.timestep))
+                if args.fixed_timesteps:
+                    print(("Convergence run with {} grid cells and {}s timesteps ({}s total).")
+                            .format(env_args.num_cells, env_args.timestep,
+                                env_args.ep_length*env_args.timestep))
+                else:
+                    print(("Convergence run with {} grid cells and dynamic timesteps ({}s total).")
+                            .format(env_args.num_cells, env_args.time_max))
                 l2_error = do_test(env, agent, env_args)
                 error.append(l2_error)
 

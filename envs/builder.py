@@ -53,7 +53,7 @@ def get_env_arg_parser():
                         + " used.")
     parser.add_argument('--time-max', '--time_max', '--tmax', type=positive_float, default=None,
                         help="Set max time of episode. Overrides --ep-length parameter."
-                        + " Only works with --fixed-timesteps.")
+                        + " Defaults based on --ep-length and --timestep.")
 
     parser.add_argument('--init_type', '--init-type', type=str, default="schedule",
                         help="The type of initial condition.")
@@ -152,37 +152,36 @@ def set_contingent_env_defaults(main_args, env_args):
     # Make timestep length depend on grid size or vice versa.
     #TODO ep_length should probably be an env parameter. Unless we should have a fixed time limit
     # instead?
-    if env_args.fixed_timesteps:
-        # Specifying time_max overrides ep_length.
-        if env_args.time_max is not None:
-            main_args.ep_length = None
+    # Specifying time_max overrides ep_length.
+    if env_args.time_max is not None:
+        main_args.ep_length = None
 
-        num_cells, dt, ep_length = AbstractPDEEnv.fill_default_time_vs_space(
-                env_args.num_cells, env_args.min_value, env_args.max_value,
-                dt=env_args.timestep, C=env_args.C, ep_length=main_args.ep_length,
-                time_max=env_args.time_max)
+    num_cells, dt, ep_length = AbstractPDEEnv.fill_default_time_vs_space(
+            env_args.num_cells, env_args.min_value, env_args.max_value,
+            dt=env_args.timestep, C=env_args.C, ep_length=main_args.ep_length,
+            time_max=env_args.time_max)
 
-        if env_args.num_cells is None:
-            env_args.num_cells = num_cells
-        if env_args.timestep is None:
-            env_args.timestep = dt
-        if main_args.ep_length is None:
-            main_args.ep_length = ep_length
+    if env_args.num_cells is None:
+        env_args.num_cells = num_cells
+    if env_args.timestep is None:
+        env_args.timestep = dt
+    if main_args.ep_length is None:
+        main_args.ep_length = ep_length
 
-        just_defaults = (env_args.num_cells is None and env_args.timestep is None
-                and main_args.ep_length is None)
-        if not just_defaults:
-            print("Using {} cells and {}s timesteps.".format(env_args.num_cells, env_args.timestep)
-                    + " Episode length is {} steps, for a total of {}s.".format(
-                        main_args.ep_length, main_args.ep_length * dt))
-            # Add to argv - if we load an agent later, this prevents the agent's parameters
-            # from overwriting these, as at least one of which was explicit.
-            sys.argv += ['--num-cells', str(num_cells)]
-            sys.argv += ['--timestep', str(dt)]
-            sys.argv += ['--ep_length', str(ep_length)]
-    else:
-        if env_args.num_cells is None:
-            env_args.num_cells = (128,) * dims
+    if env_args.time_max is None:
+        env_args.time_max = env_args.timestep * main_args.ep_length
+
+    just_defaults = (env_args.num_cells is None and env_args.timestep is None
+            and main_args.ep_length is None)
+    if not just_defaults:
+        print("Using {} cells and {}s timesteps.".format(env_args.num_cells, env_args.timestep)
+                + " Episode length is {} steps, for a total of {}s.".format(
+                    main_args.ep_length, main_args.ep_length * dt))
+        # Add to argv - if we load an agent later, this prevents the agent's parameters
+        # from overwriting these, as at least one of which was explicit.
+        sys.argv += ['--num-cells', str(num_cells)]
+        sys.argv += ['--timestep', str(dt)]
+        sys.argv += ['--ep_length', str(ep_length)]
 
     # Grid constructors expect singletons for 1 dimension.
     if len(env_args.num_cells) == 1:
@@ -231,6 +230,7 @@ def build_env(env_name, args, test=False):
                 'memoize': args.memoize,
                 'srca': args.srca,
                 'follow_solution': args.follow_solution,
+                'time_max': args.time_max,
                 'test': test,
                 }
 

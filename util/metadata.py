@@ -183,6 +183,8 @@ def load_to_namespace(meta_filename, args_ns, ignore_list=[], override_args=None
 
     no_default_parser = argparse.ArgumentParser(argument_default=argparse.SUPPRESS)
     for arg, value in arg_dict.items():
+        if arg == "fixed_timesteps":
+            continue
         arg = "--" + arg
         arg_names = [arg]
         # Allow for arguments with - instead of _.
@@ -193,6 +195,15 @@ def load_to_namespace(meta_filename, args_ns, ignore_list=[], override_args=None
             no_default_parser.add_argument(*arg_names, action='store_true')
         else:
             no_default_parser.add_argument(*arg_names)
+    # This is one of the huge problems with this approach.
+    no_default_parser.add_argument('--fixed-timesteps', dest='fixed_timesteps', action='store_true',
+                        help="Use fixed timesteps. (This is enabled by default.)")
+    no_default_parser.add_argument('--variable-timesteps', dest='fixed_timesteps', action='store_false',
+                        help="Use variable length timesteps.")
+    no_default_parser.add_argument('--memo', dest='memoize', action='store_true', default=None,
+                        help="Use a memoized solution to save time. Enabled by default. See --no-memo.")
+    no_default_parser.add_argument('--no-memo', dest='memoize', action='store_false', default=None,
+                        help="Do not use a memoized solution.")
 
     # Defaults to argv if override_args is None.
     explicit_args, other = no_default_parser.parse_known_args(override_args)
@@ -206,7 +217,9 @@ def load_to_namespace(meta_filename, args_ns, ignore_list=[], override_args=None
                 + " from the args dict.\n"
                 + " * Similarly, parameters with updated names are not loaded correctly,\n"
                 + " such as changing --nx to --num-cells. This will assume the defaults,\n"
-                + " which is usually the right behavior.")
+                + " which is usually the right behavior.\n"
+                + " * Boolean parameters that are not default false flags will cause problems.\n"
+                + " They need to be handled explicitly.")
 
     meta_dict = load_meta_file(meta_filename)
     if meta_dict['init_params'] != 'None':  # recover dictionary type from strings like 'a=0, b=1'
