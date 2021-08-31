@@ -53,19 +53,20 @@ def save_convergence_plot(grid_sizes, error, args):
 
 def save_error_plot(x_vals, y_vals, labels, args):
     vec_len = y_vals[0].shape[0]
-    fig, ax = plt.subplots(nrows=vec_len, ncols=1, figsize=[6.4, 4.8 * vec_len], dpi=100)
+    fig, ax = plt.subplots(nrows=vec_len, ncols=1, figsize=[6.4, 4.8 * vec_len], dpi=100,
+            squeeze=False)
     for x, y, label in zip(x_vals, y_vals, labels):
         for i in range(vec_len):
-            ax[i].plot(x, y[i], ls='-', label=str(label))
+            ax[i][0].plot(x, y[i], ls='-', label=str(label))
 
     for i in range(vec_len):
-        ax[i].set_xlabel("x")
-        ax[i].set_ylabel(f"u{i} |error|")
+        ax[i][0].set_xlabel("x")
+        ax[i][0].set_ylabel(f"u{i} |error|")
 
-        ax[i].set_yscale('log')
-        ax[i].set_ymargin(0.0)
+        ax[i][0].set_yscale('log')
+        ax[i][0].set_ymargin(0.0)
 
-        ax[i].legend()
+        ax[i][0].legend()
 
     #extreme_cutoff = 3.0
     #max_not_extreme = max([np.max(y[y < extreme_cutoff]) for y in y_vals])
@@ -311,7 +312,7 @@ def main():
             _, dt, ep_length = AbstractPDEEnv.fill_default_time_vs_space(
                 min_value=[args.min_value], max_value=[args.max_value], num_cells=[nx],
                 dt=None, C=args.C, ep_length=None, time_max=time_max)
-            eval_env_args.nx = nx
+            eval_env_args.num_cells = nx
             eval_env_args.timestep = dt
             eval_env_args.ep_length = ep_length
 
@@ -400,12 +401,12 @@ def main():
             error_vals = []
             for env, env_args in zip(envs, env_args):
 
-                sub_dir = os.path.join(args.log_dir, "nx_{}".format(env_args.nx))
+                sub_dir = os.path.join(args.log_dir, "nx_{}".format(env_args.num_cells))
                 os.makedirs(sub_dir)
                 logger.configure(folder=sub_dir, format_strs=['stdout'])  # ,tensorboard'
 
                 print("Convergence run with {} grid cells and {}s timesteps ({}s total).".format(
-                    env_args.nx, env_args.timestep, env_args.ep_length*env_args.timestep))
+                    env_args.num_cells, env_args.timestep, env_args.ep_length*env_args.timestep))
                 l2_error = do_test(env, agent, env_args)
                 error.append(l2_error)
 
