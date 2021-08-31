@@ -45,6 +45,9 @@ class VectorFakeEnv(gym.Env):
     def __getattr__(self, attr):
         return getattr(self.real_env, attr)
 
+    def reset(self, *args, **kwargs):
+        return self.real_env.reset(*args, **kwargs)
+
 
 class VectorAdapterEMI(EMI, OneDimensionalStencil):
     """

@@ -144,8 +144,6 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
         # state (the real physical state) does not have ghost cells, but agents operate on a stencil
         # that can spill beyond the boundary, so we need to add ghost cells to create the rl_state.
 
-        # TODO Same as 1D version, this should handle boundary as a parameter instead of using the
-        # current grid value.
         full_state = self.grid.tf_update_boundary(state, self.grid.boundary)
         flux = 0.5 * (full_state ** 2)
         num_x, num_y = self.grid.num_cells
@@ -300,8 +298,6 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
 
         if "clip" in self.reward_mode:
             raise Exception("Reward clipping not implemented in Tensorflow functions.")
-
-        # TODO need to handle changes to boundary at runtime
 
         boundary = self.grid.boundary
         if type(boundary) is str:

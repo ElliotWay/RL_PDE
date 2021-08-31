@@ -360,13 +360,24 @@ class AbstractPDEEnv(gym.Env):
         This is the abstract version. In a concrete subclass, the overriding function should call this
         version, then return the initial state based on how the subclass is configured.
 
+        Parameters
+        ---------
+        reset_params : dict
+            Parameters passed to the Grid reset to override the default parameters.
+            If init_params were originally passed to the constructor, the parameters passed to the
+            grid will be the init_params dict updated with the reset_params dict.
+
         Returns
         -------
-        Nothing! However, the subclass versions should return the initial state.
+        The returned state from self._prep_state() (defined in a subclass).
 
         """
         if reset_params is None:
             reset_params = self.init_params
+        elif self.init_params is not None:
+            params = dict(self.init_params)
+            params.update(reset_params)
+            reset_params = params
         self.grid.reset(params=reset_params)
         # Note that after reset, self.grid.init_params are the parameters
         # guaranteed to describe exactly the same initial condition as the grid

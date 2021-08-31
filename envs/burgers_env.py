@@ -256,22 +256,6 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         # state (the real physical state) does not have ghost cells, but agents operate on a stencil
         # that can spill beyond the boundary, so we need to add ghost cells to create the rl_state.
 
-        #  Would need to use tf.cond so graph can handle different boundaries at runtime.
-        #ghost_size = tf.constant(self.ng, shape=(1,))
-        #if self.grid.boundary == "outflow":
-            ## This implementation assumes that state is a 1-D Tensor of scalars.
-            ## In the future, if we expand to multiple dimensions, then it won't be, so this will need
-            ## to be changed (probably use tf.tile instead).
-            ## Not 100% sure tf.fill can be used this way.
-            #left_ghost = tf.fill(ghost_size, state[0, 0])
-            #right_ghost = tf.fill(ghost_size, state[0, -1])
-            #full_state = tf.concat([left_ghost, state[0], right_ghost], axis=0)
-        #elif self.grid.boundary == "periodic":
-            #left_ghost = state[0, -ghost_size[0]:]
-            #right_ghost = state[0, :ghost_size[0]]
-            #full_state = tf.concat([left_ghost, state[0], right_ghost], axis=0)
-        #else:
-            #raise NotImplementedError("{} boundary not implemented.".format(self.grid.boundary))
         boundary = self.grid.boundary
         full_state = self.grid.tf_update_boundary(state, boundary)
 

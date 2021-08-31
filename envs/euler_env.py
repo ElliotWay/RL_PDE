@@ -287,23 +287,8 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
         # state (the real physical state) does not have ghost cells, but agents operate on a stencil
         # that can spill beyond the boundary, so we need to add ghost cells to create the rl_state.
 
-        # TODO: get boundary from initial condition, somehow, as diff inits have diff bounds
-        #  Would need to use tf.cond so graph can handle different boundaries at runtime.
-        ghost_size = tf.constant(self.ng, shape=(1,))
-        if self.grid.boundary == "outflow":
-            # This implementation assumes that state is a 1-D Tensor of scalars.
-            # In the future, if we expand to multiple dimensions, then it won't be, so this will need
-            # to be changed (probably use tf.tile instead).
-            # Not 100% sure tf.fill can be used this way.
-            left_ghost = tf.repeat(tf.expand_dims(state[:, 0], 1), self.ng, axis=1)
-            right_ghost = tf.repeat(tf.expand_dims(state[:, -1], 1), self.ng, axis=1)
-            full_state = tf.concat([left_ghost, state, right_ghost], axis=1)
-        elif self.grid.boundary == "periodic":
-            left_ghost = state[:, -ghost_size[0]:]
-            right_ghost = state[:, :ghost_size[0]]
-            full_state = tf.concat([left_ghost, state, right_ghost], axis=1)
-        else:
-            raise NotImplementedError("{} boundary not implemented.".format(self.grid.boundary))
+        boundary = self.grid.boundary
+        full_state = self.grid.tf_update_boundary(state, boundary)
 
         # Compute flux. Euler specific!!!
         rho = full_state[0, :]
@@ -497,17 +482,19 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
         if "clip" in self.reward_mode:
             raise Exception("Reward clipping not implemented in Tensorflow functions.")
 
-        # TODO same thing as in tf_prep_state - need to handle changes to boundary at runtime
+        boundary = self.grid.boundary
+        if not type(boundary) is str:
+            boundary = boundary[0]
 
         # Average of error in two adjacent cells.
         if "adjacent" in self.reward_mode and "avg" in self.reward_mode:
             error = tf.abs(error)
             combined_error = (error[:-1] + error[1:]) / 2
-            if self.grid.boundary == "outflow":
+            if boundary == "outflow":
                 # Error beyond boundaries will be identical to error at edge, so average error
                 # at edge interfaces is just the error at the edge.
                 combined_error = tf.concat([[error[0]], combined_error, [error[-1]]], axis=0)
-            elif self.grid.boundary == "periodic":
+            elif boundary == "periodic":
                 # With a periodic environment, the first and last interfaces are actually the
                 # same interface.
                 edge_error = (error[0] + error[-1]) / 2
@@ -518,10 +505,10 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
         elif "stencil" in self.reward_mode:
             # This is trickier and we need to expand the error into the ghost cells.
             ghost_size = tf.constant(self.ng, shape=(1,))
-            if self.grid.boundary == "outflow":
+            if boundary == "outflow":
                 left_error = tf.fill(ghost_size, error[0])
                 right_error = tf.fill(ghost_size, error[-1])
-            elif self.grid.boundary == "periodic":
+            elif boundary == "periodic":
                 left_error = error[-ghost_size[0]:]
                 right_error = error[:ghost_size[0]]
             else:

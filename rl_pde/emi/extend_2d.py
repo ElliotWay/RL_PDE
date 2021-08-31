@@ -9,8 +9,6 @@ from rl_pde.emi.emi import EMI
 from rl_pde.emi.emi import OneDimensionalStencil
 from rl_pde.emi.batch import UnbatchedPolicy
 
-# Possibly the same structure will work for extending scalar agents to vector environments as well.
-
 class DimensionalFakeEnv(gym.Env):
     """
     Env that pretends to be 1-dimensional instead of N-dimensional.
@@ -51,11 +49,9 @@ class DimensionalFakeEnv(gym.Env):
     def __getattr__(self, attr):
         return getattr(self.real_env, attr)
 
-    #def step(self, action):
-        #raise Exception("This is a fake env - you can only access the spaces.")
-    #def reset(self):
-        #raise Exception("This is a fake env - you can only access the spaces.")
-
+    def reset(self, *args, **kwargs):
+        return self.real_env.reset(*args, **kwargs)
+ 
 
 class DimensionalAdapterEMI(EMI, OneDimensionalStencil):
     """
