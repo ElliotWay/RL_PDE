@@ -227,10 +227,10 @@ class GlobalBackpropModel(GlobalModel):
 
         for params in init_params:
             if type(params['boundary']) is str:
-                params['boundary'] = tuple(params['boundary'] * self.env.dimensions)
+                params['boundary'] = tuple((params['boundary'],) * self.env.dimensions)
             if not params['boundary'] in self.boundary_combinations:
                 raise NotImplementedError("GlobalBackpropModel:"
-                        + " Cannot train on '{}' boundary".format(params['boundary'])
+                        + " Cannot train on {} boundary".format(params['boundary'])
                         + " Only the following boundary conditions are supported:"
                         + "\n{}".format(SUPPORTED_BOUNDARIES))
 
@@ -238,16 +238,15 @@ class GlobalBackpropModel(GlobalModel):
         index_dict = {}
         feed_dict = {}
         included_boundaries = []
-        for boundary in SUPPORTED_BOUNDARIES:
+        for boundary in self.boundary_combinations:
             indexes = [i for i, params in enumerate(init_params) if params['boundary'] == boundary]
             if len(indexes) > 0:
                 included_boundaries.append(boundary)
                 index_dict[boundary] = indexes
                 feed_dict[self.init_state_ph_dict[boundary]] = initial_state[indexes]
-                print("'{}' has initial state with shape {}".format(boundary,
-                    feed_dict[self.init_state_ph_dict[boundary]].shape))
-                print("indexes are {}".format(indexes))
-
+                #print("{} has initial state with shape {}".format(boundary,
+                    #feed_dict[self.init_state_ph_dict[boundary]].shape))
+                #print("indexes are {}".format(indexes))
 
         # Get the gradients (but only for the boundaries actually being used).
         def subdict(d, keys):
@@ -262,24 +261,19 @@ class GlobalBackpropModel(GlobalModel):
                 feed_dict=feed_dict)
 
         # Compute gradients weighted by the proportion of each boundary.
-        boundary_weights = np.array([len(index_dict[boundary])/len(init_params)
-                    for boundary in included_boundaries])
-        print("weights shape:", boundary_weights.shape)
-        all_gradients = np.stack([gradients_dict[boundary] for boundary in included_boundaries],
-                                    axis=-1)
-        print("gradients shape", [gradients_dict[boundary].shape for boundary in
-            included_boundaries])
-        print("stacked gradients shape:", all_gradients.shape)
-        weighted_gradients = np.sum(all_gradients * boundary_weights, axis=-1)
+        boundary_weights = [len(index_dict[boundary])/len(init_params)
+                    for boundary in included_boundaries]
+        weighted_gradients = [[grad * weight for grad in gradients_dict[boundary]]
+                                for weight, boundary in zip(boundary_weights, included_boundaries)]
+        total_gradients = [sum(grads) for grads in zip(*weighted_gradients)]
         all_loss = np.array([loss_dict[boundary] for boundary in included_boundaries])
-        weighted_loss = np.sum(all_loss * boundary_weights)
+        loss = np.sum(all_loss * np.array(boundary_weights))
 
         # Use the weighted gradients to train the policy network.
-        
         self.session.run(self.train_policy, feed_dict={ph:grad for ph, grad in
-                zip(self.gradient_ph_list, weighted_gradients)})
+                zip(self.gradients_ph_list, total_gradients)})
 
-        # Reorganize states, actions, and rewards so they correspond to the same order in
+        # Reorganize states, actions, and rewards so they correspond to the same order
         # which they came in.
         # Python note: This is one of those unusual situations where we need to declare the
         # array first because we're populating it out of order.
@@ -288,17 +282,23 @@ class GlobalBackpropModel(GlobalModel):
         state_shape[1] = len(init_params) # Adjust the shape to hold states for every initial
                                           # condition, not just the ones with this boundary.
         states = np.empty(state_shape, dtype=state_dict[b0].dtype)
-        action_shape = list(action_dict[b0].shape)
-        action_shape[1] = len(init_params)
-        actions = np.empty(action_shape, dtype=action_dict[b0].dtype)
-        reward_shape = list(reward_dict[b0].shape)
-        reward_shape[1] = len(init_params)
-        rewards = np.empty(reward_shape, dtype=reward_dict[b0].dtype)
+        actions = []
+        for action_part in action_dict[b0]:
+            a_shape = list(action_part.shape)
+            a_shape[1] = len(init_params)
+            actions.append(np.empty(a_shape, dtype=action_part.dtype))
+        rewards = []
+        for reward_part in reward_dict[b0]:
+            r_shape = list(reward_part.shape)
+            r_shape[1] = len(init_params)
+            rewards.append(np.empty(r_shape, dtype=reward_part.dtype))
         for boundary in included_boundaries:
             indexes = index_dict[boundary]
             states[:, indexes] = state_dict[boundary]
-            actions[:, indexes] = action_dict[boundary]
-            rewards[:, indexes] = reward_dict[boundary]
+            for action_part, action_array in zip(action_dict[boundary], actions):
+                action_array[:, indexes] = action_part
+            for reward_part, reward_array in zip(reward_dict[boundary], rewards):
+                reward_array[:, indexes] = reward_part
 
         extra_info = {}
 
@@ -307,11 +307,10 @@ class GlobalBackpropModel(GlobalModel):
         training_plot_freq = self.log_freq * 5
         if debug_mode:
             #print("loss", loss)
-            nans_in_grads = np.sum([np.sum(np.isnan(grad)) for grad in grads])
+            nans_in_grads = np.sum([np.sum(np.isnan(grad)) for grad in total_gradients])
             if nans_in_grads > 0:
                 print("{} NaNs in grads".format(nans_in_grads))
 
-            # The way session.run can handle dicts is convenient.
             param_nans = self.session.run(self.params_nan_check)
             if any(param_nans.values()):
                 print("NaNs detected in " +
