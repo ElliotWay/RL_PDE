@@ -299,6 +299,8 @@ class GlobalBackpropModel(GlobalModel):
                 action_array[:, indexes] = action_part
             for reward_part, reward_array in zip(reward_dict[boundary], rewards):
                 reward_array[:, indexes] = reward_part
+        actions = tuple(actions)
+        rewards = tuple(rewards)
 
         extra_info = {}
 
@@ -324,7 +326,9 @@ class GlobalBackpropModel(GlobalModel):
             num_samples = 1
             ep_length = states.shape[0]
             num_inits = states.shape[1]
-            ndims = len(states.shape[2:]) # Includes vector dimension, if it exists.
+            ndims = len(states.shape[2:]) # Includes vector dimension.
+            if self.env.vec_length == 1:
+                ndims = ndims - 1
 
             #safe_state = states[np.logical_not(np.isnan(states).any(axis=
                                                                 #tuple(range(ndims+2)[1:])))]
@@ -332,7 +336,7 @@ class GlobalBackpropModel(GlobalModel):
                 #raise Exception("All timesteps NaN. Stopping")
 
             random_reward_part = rewards[np.random.randint(len(rewards))]
-            reward_spatial_dims = random_reward_part.shape[2:]
+            reward_spatial_dims = random_reward_part.shape[2:2+ndims]
             random_reward_indexes = tuple([slice(None),
                         np.random.randint(num_inits, size=num_samples)]
                         + [np.random.randint(nx, size=num_samples) for nx in reward_spatial_dims])
@@ -341,13 +345,11 @@ class GlobalBackpropModel(GlobalModel):
                 extra_info["sample_r"+str(i+1)] = reward
 
             random_action_part = actions[np.random.randint(len(actions))]
-            action_spatial_dims = random_action_part.shape[2:]
+            action_spatial_dims = random_action_part.shape[2:2+ndims]
             random_action_indexes = tuple([np.random.randint(ep_length, size=num_samples),
                         np.random.randint(num_inits, size=num_samples)]
                         + [np.random.randint(nx, size=num_samples) for nx in action_spatial_dims])
             sample_actions = random_action_part[random_action_indexes]
-            #TODO something isn't working as intended for the sample actions. It seems like only
-            # one value for each actions is being used, instead of the whole set.
             for i, action in enumerate(sample_actions):
                 csv_string = '"'+(np.array2string(action, separator=',', precision=3)
                                     .replace('\n', '').replace(' ', '')) + '"'
