@@ -55,7 +55,7 @@ def get_env_arg_parser():
                         help="Set max time of episode. Overrides --ep-length parameter."
                         + " Defaults based on --ep-length and --timestep.")
 
-    parser.add_argument('--init_type', '--init-type', type=str, default="schedule",
+    parser.add_argument('--init_type', '--init-type', type=str, default="smooth_sine",
                         help="The type of initial condition.")
     parser.add_argument('--schedule', type=str, nargs='+', default=None,
                         help="List of init-types used with the 'schedule' and 'random'"
