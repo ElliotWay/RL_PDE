@@ -109,7 +109,10 @@ def get_env_arg_parser():
 
 def set_contingent_env_defaults(main_args, env_args):
     if env_args.memoize is None:
-        env_args.memoize = True
+        if env_args.fixed_timesteps:
+            env_args.memoize = True
+        else:
+            env_args.memoize = False
         #if env_args.init_type in ['random', 'random-many-shocks', 'schedule', 'sample']:
             #env_args.memoize = False
         #else:
@@ -182,6 +185,8 @@ def set_contingent_env_defaults(main_args, env_args):
         sys.argv += ['--num-cells', str(num_cells)]
         sys.argv += ['--timestep', str(dt)]
         sys.argv += ['--ep_length', str(ep_length)]
+    if not env_args.fixed_timesteps:
+        sys.argv += ['--C', str(env_args.C)]
 
     # Grid constructors expect singletons for 1 dimension.
     if len(env_args.num_cells) == 1:
