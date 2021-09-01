@@ -57,6 +57,9 @@ def get_env_arg_parser():
 
     parser.add_argument('--init_type', '--init-type', type=str, default="schedule",
                         help="The type of initial condition.")
+    parser.add_argument('--schedule', type=str, nargs='+', default=None,
+                        help="List of init-types used with the 'schedule' and 'random'"
+                        + " init-type. The default depends on the environment.")
     parser.add_argument('--boundary', '--bc', type=str, default=None, nargs='+',
                         help="The boundary condition of the space. May have multiple values,"
                         + " see --num-cells. The default boundary conditions depend on the"
@@ -215,6 +218,7 @@ def build_env(env_name, args, test=False):
                 'min_value': args.min_value,
                 'max_value': args.max_value,
                 'init_type': args.init_type,
+                'schedule': args.schedule,
                 'init_params': args.init_params,
                 'boundary': args.boundary,
                 'C': args.C,

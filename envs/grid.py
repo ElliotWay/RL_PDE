@@ -388,21 +388,24 @@ from envs.grid1d import Burgers1DGrid, Euler1DGrid
 from envs.grid2d import Burgers2DGrid
 
 def create_grid(num_dimensions, num_cells, num_ghosts, min_value, max_value, eqn_type='burgers',
-        boundary=None, init_type=None,
+        boundary=None, init_type=None, schedule=None,
         deterministic_init=False):
     if eqn_type == 'burgers':
         if num_dimensions == 1:
             return Burgers1DGrid(num_cells, num_ghosts, min_value, max_value,
-                                 init_type=init_type, boundary=boundary, deterministic_init=deterministic_init)
+                                 init_type=init_type, boundary=boundary, schedule=schedule,
+                                 deterministic_init=deterministic_init)
         elif num_dimensions == 2:
             return Burgers2DGrid(num_cells, num_ghosts, min_value, max_value,
-                                 init_type=init_type, boundary=boundary, deterministic_init=deterministic_init)
+                                 init_type=init_type, boundary=boundary, schedule=schedule,
+                                 deterministic_init=deterministic_init)
         else:
             raise NotImplementedError()
     elif eqn_type == 'euler':
         if num_dimensions == 1:
             return Euler1DGrid(num_cells, num_ghosts, min_value, max_value,
-                               init_type=init_type, boundary=boundary, deterministic_init=deterministic_init)
+                               init_type=init_type, boundary=boundary, schedule=schedule,
+                               deterministic_init=deterministic_init)
         else:
             raise NotImplementedError()
     else:

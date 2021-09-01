@@ -36,7 +36,7 @@ class AbstractPDEEnv(gym.Env):
 
     def __init__(self,
             num_cells=(128, 128), num_ghosts=None, min_value=0.0, max_value=1.0, eqn_type='burgers',
-            boundary=None, init_type="gaussian",
+            boundary=None, init_type="gaussian", schedule=None,
             init_params=None,
             fixed_step=0.0004, C=None, #C=0.5,
             weno_order=3, state_order=None, srca=0.0, episode_length=250,
@@ -115,7 +115,7 @@ class AbstractPDEEnv(gym.Env):
         self.grid = create_grid(dims, eqn_type=eqn_type,
                                 num_cells=num_cells, min_value=min_value, max_value=max_value,
                                 num_ghosts=self.ng,
-                                boundary=boundary, init_type=init_type,
+                                boundary=boundary, init_type=init_type, schedule=schedule,
                                 deterministic_init=deterministic_init)
         if init_params is not None:
             self.init_params = init_params

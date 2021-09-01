@@ -6,7 +6,7 @@ from envs.grid1d import Burgers1DGrid
 
 class Burgers2DGrid(GridBase):
     def __init__(self, num_cells, num_ghosts, min_value, max_value, boundary=None,
-            init_type="gaussian", deterministic_init=False):
+            init_type="gaussian", schedule=None, deterministic_init=False):
         vec_len = 1
         super().__init__(num_cells, num_ghosts, min_value, max_value, vec_len, boundary)
 
@@ -17,7 +17,10 @@ class Burgers2DGrid(GridBase):
         self._boundary = self.boundary
         self.deterministic_init = deterministic_init
         self._init_schedule_index = 0
-        self._init_schedule = ["gaussian"]
+        if schedule is None:
+            self._init_schedule = ["gaussian"]
+        else:
+            self._init_schedule = schedule
         self._init_sample_types = self._init_schedule
         self._init_sample_probs = [1/len(self._init_sample_types)]*len(self._init_sample_types)
 

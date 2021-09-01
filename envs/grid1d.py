@@ -31,7 +31,8 @@ class Burgers1DGrid(GridBase):
     """
 
     def __init__(self, nx, ng, xmin=0.0, xmax=1.0,
-                 init_type="sine", boundary=None, deterministic_init=False):
+                 init_type="sine", boundary=None,
+                 schedule=None, deterministic_init=False):
         """
         Construct a 1D grid.
         
@@ -73,7 +74,10 @@ class Burgers1DGrid(GridBase):
         self.deterministic_init = deterministic_init
         self._init_schedule_index = 0
         #self._init_schedule = ["smooth_rare", "smooth_sine", "random", "rarefaction", "accelshock"]
-        self._init_schedule = ["smooth_sine", "smooth_rare", "accelshock"]
+        if schedule is None:
+            self._init_schedule = ["smooth_sine", "smooth_rare", "accelshock"]
+        else:
+            self._init_schedule = schedule
         self._init_sample_types = self._init_schedule
         self._init_sample_probs = [1/len(self._init_sample_types)]*len(self._init_sample_types)
 
@@ -130,6 +134,15 @@ class Burgers1DGrid(GridBase):
         elif self.init_type == "smooth_sine":
             if boundary is None:
                 self.boundary = "periodic"
+            if 'A' in params:
+                A = params['A']
+            else:
+                A = float(1.0 / (2.0 * np.pi * 0.1))
+            self.init_params['A'] = A
+            self.space[0] = A*np.sin(2 * np.pi * self.x)
+
+        elif self.init_type == "smooth_sine_outflow":
+            self.boundary = "outflow"
             if 'A' in params:
                 A = params['A']
             else:
@@ -214,9 +227,40 @@ class Burgers1DGrid(GridBase):
             self.init_params['k'] = k
             self.space[0] = A * np.tanh(k * (self.x - 0.5))
 
+        elif self.init_type == "smooth_rare_periodic":
+            self.boundary = "periodic"
+            if 'A' in params:
+                A = params['A']
+            else:
+                A = 1.0
+            self.init_params['A'] = A
+            if 'k' in params:
+                k = params['k']
+            elif self.deterministic_init:
+                k = 60
+            else:
+                #k = np.random.uniform(20, 100)
+                k = int(np.random.choice(np.arange(20, 100, 5)))
+            self.init_params['k'] = k
+            self.space[0] = A * np.tanh(k * (self.x - 0.5))
+
         elif self.init_type == "accelshock":
             if boundary is None:
                 self.boundary = "outflow"
+
+            offset = params['offset'] if 'offset' in params else 0.25
+            self.init_params['offset'] = offset
+            u_L = params['u_L'] if 'u_L' in params else 3.0
+            self.init_params['u_L'] = u_L
+            u_R = params['u_R'] if 'u_R' in params else 3.0
+            self.init_params['u_R'] = u_R
+
+            index = self.x > offset
+            self.space[0] = np.full_like(self.x, u_L)
+            self.space[0, index] = u_R * (self.x[index] - 1)
+
+        elif self.init_type == "accelshock_periodic":
+            self.boundary = "periodic"
 
             offset = params['offset'] if 'offset' in params else 0.25
             self.init_params['offset'] = offset
@@ -318,7 +362,8 @@ class Euler1DGrid(GridBase):
     grid.x - The location values associated with each index in grid.u.
     """
 
-    def __init__(self, nx, ng, xmin=0.0, xmax=1.0, eos_gamma=1.4, init_type="double_rarefaction", boundary=None,
+    def __init__(self, nx, ng, xmin=0.0, xmax=1.0, eos_gamma=1.4, init_type="double_rarefaction",
+                 boundary=None, schedule=None,
                  deterministic_init=False):
         """
         Construct a 1D grid.
@@ -360,7 +405,10 @@ class Euler1DGrid(GridBase):
         self._boundary = self.boundary
         self.deterministic_init = deterministic_init
         self._init_schedule_index = 0
-        self._init_schedule = ["sod", "double_rarefaction", "slow_shock"]
+        if schedule is None:
+            self._init_schedule = ["sod", "double_rarefaction", "slow_shock"]
+        else:
+            self._init_schedule = schedule
         self._init_sample_types = self._init_schedule
         self._init_sample_probs = [1/len(self._init_sample_types)]*len(self._init_sample_types)
 
