@@ -249,7 +249,9 @@ def train(env, eval_envs, emi, args):
 
     #TODO run eval step before any training?
 
+
     start_time = time.time()
+    train_start_time = start_time
     for ep in np.arange(args.total_episodes)+1:
 
         # TODO wrap train step in signal catcher so we can save the model
@@ -262,6 +264,9 @@ def train(env, eval_envs, emi, args):
         total_timesteps += train_info['timesteps']
 
         if ep % args.log_freq == 0:
+            eval_start_time = time.time()
+            training_time = eval_start_time - train_start_time
+
 
             ep_string = ("{:0" + str(ep_precision) + "}").format(ep)
 
@@ -295,6 +300,12 @@ def train(env, eval_envs, emi, args):
                         **eval_plot_kwargs)
                 eval_plots.append(plot_file_name)
 
+            eval_end_time = time.time()
+            evaluating_time = eval_end_time - eval_start_time
+            time_since_last_log = eval_end_time - train_start_time
+            training_ratio = training_time / time_since_last_log
+            eval_ratio = evaluating_time / time_since_last_log
+
             # Log stats.
             average_train_reward = np.mean(training_rewards)
             average_train_l2 = np.mean(training_l2)
@@ -317,6 +328,8 @@ def train(env, eval_envs, emi, args):
                     logger.logkv("eval{}_reward".format(i+1), eval_rewards[i])
                     logger.logkv("eval{}_end_l2".format(i+1), eval_l2[i])
             logger.logkv('time_elapsed', int(time.time() - start_time))
+            logger.logkv('proportion_training', training_ratio)
+            logger.logkv('proportion_evalating', eval_ratio)
             logger.logkv("total_timesteps", total_timesteps)
             for key, value in other_stats.items():
                 logger.logkv(key, value)
