@@ -106,10 +106,12 @@ class AbstractPDEEnv(gym.Env):
         else:
             self.ng = num_ghosts
 
-        if type(num_cells) is int:
+        try:
+            iterator = iter(num_cells)
+        except TypeError:
             dims = 1
         else:
-            dims = len(num_cells)
+            dimes = len(num_cells)
 
         deterministic_init = self.test or (type(init_type) is str and "rand" in init_type)
         self.grid = create_grid(dims, eqn_type=eqn_type,

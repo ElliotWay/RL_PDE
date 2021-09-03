@@ -55,9 +55,21 @@ def save_error_plot(x_vals, y_vals, labels, args):
     vec_len = y_vals[0].shape[0]
     fig, ax = plt.subplots(nrows=vec_len, ncols=1, figsize=[6.4, 4.8 * vec_len], dpi=100,
             squeeze=False)
-    for x, y, label in zip(x_vals, y_vals, labels):
-        for i in range(vec_len):
-            ax[i][0].plot(x, y[i], ls='-', label=str(label))
+
+    MAX_COLORS = 10
+    if len(labels) <= MAX_COLORS:
+        for x, y, label in zip(x_vals, y_vals, labels):
+            for i in range(vec_len):
+                ax[i][0].plot(x, y[i], ls='-', label=str(label))
+    else:
+        color_map = matplotlib.cm.get_cmap('viridis')
+        normalize = matplotlib.colors.LogNorm(vmin=min(labels), vmax=max(labels))
+        for x, y, label in zip(x_vals, y_vals, labels):
+            for i in range(vec_len):
+                ax[i][0].plot(x, y[i], ls='-', color=color_map(normalize(label)))
+        scalar_mappable = matplotlib.cm.ScalarMappable(norm=normalize, cmap=color_map)
+        scalar_mappable.set_array(labels)
+
 
     for i in range(vec_len):
         ax[i][0].set_xlabel("x")
@@ -66,7 +78,10 @@ def save_error_plot(x_vals, y_vals, labels, args):
         ax[i][0].set_yscale('log')
         ax[i][0].set_ymargin(0.0)
 
-        ax[i][0].legend()
+        if len(labels) <= MAX_COLORS:
+            ax[i][0].legend()
+        else:
+            fig.colorbar(scalar_mappable, ax=ax[i][0], label="nx")
 
     #extreme_cutoff = 3.0
     #max_not_extreme = max([np.max(y[y < extreme_cutoff]) for y in y_vals])
@@ -301,6 +316,8 @@ def main():
             print("(Currently forcing the error to change to full instead.)")
             args.reward_mode = 'full'
         CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]#, 1024, 2048, 4096, 8192]
+        #CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512, 1024, 2048, 4096, 8192]
+        #CONVERGENCE_PLOT_GRID_RANGE = (2**np.linspace(6.0, 8.0, 50)).astype(np.int)
         envs = []
         env_args = []
         for nx in CONVERGENCE_PLOT_GRID_RANGE:
@@ -395,6 +412,7 @@ def main():
         if not args.convergence_plot:
             do_test(env, agent, args)
         else:
+            convergence_start_time = time.time()
             error = []
             x_vals = []
             error_vals = []
@@ -427,6 +445,8 @@ def main():
 
             save_convergence_plot(CONVERGENCE_PLOT_GRID_RANGE, error, args)
             save_error_plot(x_vals, error_vals, CONVERGENCE_PLOT_GRID_RANGE, args)
+        print("Convergence plot created in {}.".format(
+                human_readable_time_delta(time.time() - convergence_start_time)))
     except KeyboardInterrupt:
         print("Test stopped by interrupt.")
         metadata.log_finish_time(args.log_dir, status="stopped by interrupt")
