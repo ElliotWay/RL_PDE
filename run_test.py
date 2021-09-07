@@ -10,9 +10,6 @@ import time
 import subprocess
 import gc # manual garbage collection
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
@@ -28,70 +25,13 @@ from envs import Plottable1DEnv, Plottable2DEnv
 from models import get_model_arg_parser
 from models import SACModel, PolicyGradientModel, TestModel
 from util import metadata
+from util import plots
 from util.function_dict import numpy_fn
 from util.lookup import get_model_class, get_emi_class, get_model_dims
 from util.misc import set_global_seed
 from util.misc import human_readable_time_delta
 
 ON_POSIX = 'posix' in sys.builtin_module_names
-
-def save_convergence_plot(grid_sizes, error, args):
-    plt.plot(grid_sizes, error, ls='-', color='k')
-
-    ax = plt.gca()
-    ax.set_xlabel("grid size")
-    #ax.set_xticks(grid_sizes)
-    ax.set_xscale('log')
-    ax.set_ylabel("L2 error")
-    #ax.set_yticks([0] + error)
-    ax.set_yscale('log')
-
-    filename = os.path.join(args.log_dir, "convergence.png")
-    plt.savefig(filename)
-    print('Saved plot to ' + filename + '.')
-    plt.close()
-
-def save_error_plot(x_vals, y_vals, labels, args):
-    vec_len = y_vals[0].shape[0]
-    fig, ax = plt.subplots(nrows=vec_len, ncols=1, figsize=[6.4, 4.8 * vec_len], dpi=100,
-            squeeze=False)
-
-    MAX_COLORS = 10
-    if len(labels) <= MAX_COLORS:
-        for x, y, label in zip(x_vals, y_vals, labels):
-            for i in range(vec_len):
-                ax[i][0].plot(x, y[i], ls='-', label=str(label))
-    else:
-        color_map = matplotlib.cm.get_cmap('viridis')
-        normalize = matplotlib.colors.LogNorm(vmin=min(labels), vmax=max(labels))
-        for x, y, label in zip(x_vals, y_vals, labels):
-            for i in range(vec_len):
-                ax[i][0].plot(x, y[i], ls='-', color=color_map(normalize(label)))
-        scalar_mappable = matplotlib.cm.ScalarMappable(norm=normalize, cmap=color_map)
-        scalar_mappable.set_array(labels)
-
-
-    for i in range(vec_len):
-        ax[i][0].set_xlabel("x")
-        ax[i][0].set_ylabel(f"u{i} |error|")
-
-        ax[i][0].set_yscale('log')
-        ax[i][0].set_ymargin(0.0)
-
-        if len(labels) <= MAX_COLORS:
-            ax[i][0].legend()
-        else:
-            fig.colorbar(scalar_mappable, ax=ax[i][0], label="nx")
-
-    #extreme_cutoff = 3.0
-    #max_not_extreme = max([np.max(y[y < extreme_cutoff]) for y in y_vals])
-    #ymax = max_not_extreme*1.05 if max_not_extreme > 0.0 else 0.01
-    #ax.set_ylim((None, ymax))
-
-    filename = os.path.join(args.log_dir, "convergence_over_x.png")
-    plt.savefig(filename)
-    print("Saved plot to " + filename + ".")
-    plt.close()
 
 def do_test(env, agent, args):
     if args.animate:
@@ -443,10 +383,9 @@ def main():
                 #TODO Make sure it's actually freeing them.
                 env.close()
                 gc.collect()
-
             envs = []
 
-            save_convergence_plot(CONVERGENCE_PLOT_GRID_RANGE, error, args)
+            plots.convergence_plot(CONVERGENCE_PLOT_GRID_RANGE, error, args.log_dir)
             # Also log convergence data.
             for nx, error in zip(CONVERGENCE_PLOT_GRID_RANGE, error):
                 outer_logger.logkv("nx", nx)
@@ -454,7 +393,7 @@ def main():
                 outer_logger.dumpkvs()
 
             if dims == 1:
-                save_error_plot(x_vals, error_vals, CONVERGENCE_PLOT_GRID_RANGE, args)
+                plots.error_plot(x_vals, error_vals, CONVERGENCE_PLOT_GRID_RANGE, args.log_dir)
         print("Convergence plot created in {}.".format(
                 human_readable_time_delta(time.time() - convergence_start_time)))
     except KeyboardInterrupt:
