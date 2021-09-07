@@ -144,6 +144,21 @@ def set_contingent_env_defaults(main_args, env_args):
         if env_args.max_value is None:
             env_args.max_value = (1.0,)
 
+    try:
+        if env_args.num_cells is not None:
+            _ = iter(env_args.num_cells)
+    except TypeError:
+        env_args.num_cells = (env_args.num_cells,)
+        print("num cells changed to ", env_args.num_cells)
+    try:
+        _ = iter(env_args.min_value)
+    except TypeError:
+        env_args.min_value = (env_args.min_value,)
+    try:
+        _ = iter(env_args.max_value)
+    except TypeError:
+        env_args.max_value = (env_args.max_value,)
+
     dims = env_dimensions(main_args.env)
 
     # Most functions expect num_cells to be a tuple of length dims.

@@ -111,7 +111,7 @@ class AbstractPDEEnv(gym.Env):
         except TypeError:
             dims = 1
         else:
-            dimes = len(num_cells)
+            dims = len(num_cells)
 
         deterministic_init = self.test or (type(init_type) is str and "rand" in init_type)
         self.grid = create_grid(dims, eqn_type=eqn_type,

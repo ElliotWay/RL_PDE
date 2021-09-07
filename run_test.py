@@ -239,9 +239,9 @@ def main():
     parser.add_argument('--rk4', default=False, action='store_true',
                         help="Use RK4 steps instead of Euler steps. Only available for testing,"
                         + " since the reward during training doesn't make sense.")
-    parser.add_argument('-y', default=False, action='store_true',
+    parser.add_argument('-y', '--y', default=False, action='store_true',
                         help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
-    parser.add_argument('-n', default=False, action='store_true',
+    parser.add_argument('-n', '--n', default=False, action='store_true',
                         help="Choose no for any questions, namely overwriting existing files. Useful for scripts. Overrides the -y option.")
 
     main_args, rest = parser.parse_known_args()
@@ -307,30 +307,30 @@ def main():
     if not args.convergence_plot:
         env = env_builder.build_env(args.env, args, test=True)
     else:
-        if dims > 1:
-            raise NotImplementedError("Convergence plots not adapted to 2D yet.")
         #args.analytical = True # Compare to analytical solution (preferred)
         args.analytical = False # Compare to WENO (necessary when WENO isn't accurate either)
         if args.reward_mode is not None and 'one-step' in args.reward_mode:
-            print("TODO: compute error with analytical solution when using one-step error.")
-            print("(Currently forcing the error to change to full instead.)")
-            args.reward_mode = 'full'
-        CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]#, 1024, 2048, 4096, 8192]
-        #CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512, 1024, 2048, 4096, 8192]
-        #CONVERGENCE_PLOT_GRID_RANGE = (2**np.linspace(6.0, 8.0, 50)).astype(np.int)
+            print("Reward mode switched to 'full' instead of 'one-step' for convergence plots.")
+            args.reward_mode = args.reward_mode.replace('one-step', 'full')
+        if dims == 1:
+            CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]#, 1024, 2048, 4096, 8192]
+            #CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512, 1024, 2048, 4096, 8192]
+            #CONVERGENCE_PLOT_GRID_RANGE = (2**np.linspace(6.0, 8.0, 50)).astype(np.int)
+        elif dims == 2:
+            CONVERGENCE_PLOT_GRID_RANGE = [32, 64, 128, 256]
         envs = []
         env_args = []
         for nx in CONVERGENCE_PLOT_GRID_RANGE:
             if args.C is None:
                 args.C = 0.1
             eval_env_args = Namespace(**vars(args))
-            time_max = args.timestep * args.ep_length
-            _, dt, ep_length = AbstractPDEEnv.fill_default_time_vs_space(
-                min_value=[args.min_value], max_value=[args.max_value], num_cells=[nx],
-                dt=None, C=args.C, ep_length=None, time_max=time_max)
+
             eval_env_args.num_cells = nx
-            eval_env_args.timestep = dt
-            eval_env_args.ep_length = ep_length
+            eval_env_args.ep_length = None
+            eval_env_args.timestep = None
+            # This will choose the correct values for ep_length and timestep based on the number of
+            # cells.
+            env_builder.set_contingent_env_defaults(eval_env_args, eval_env_args)
 
             envs.append(env_builder.build_env(eval_env_args.env, eval_env_args, test=True))
             env_args.append(eval_env_args)
@@ -382,8 +382,9 @@ def main():
     metadata.create_meta_file(args.log_dir, args)
 
     # Put stable-baselines logs in same directory.
-    logger.configure(folder=args.log_dir, format_strs=['stdout'])  # ,tensorboard'
+    logger.configure(folder=args.log_dir, format_strs=['csv', 'log'])
     logger.set_level(logger.DEBUG)  # logger.INFO
+    outer_logger = logger.Logger.CURRENT
 
     # Create symlink for convenience. (Do this after loading the agent in case we are loading from last.)
     log_link_name = "last"
@@ -417,8 +418,9 @@ def main():
             x_vals = []
             error_vals = []
             for env, env_args in zip(envs, env_args):
+                nx = env_args.num_cells[0] if dims > 1 else env_args.num_cells
 
-                sub_dir = os.path.join(args.log_dir, "nx_{}".format(env_args.num_cells))
+                sub_dir = os.path.join(args.log_dir, "nx_{}".format(nx))
                 os.makedirs(sub_dir)
                 logger.configure(folder=sub_dir, format_strs=['stdout'])  # ,tensorboard'
 
@@ -432,8 +434,9 @@ def main():
                 l2_error = do_test(env, agent, env_args)
                 error.append(l2_error)
 
-                x_vals.append(env.grid.real_x)
-                error_vals.append(np.abs(env.grid.get_real() - env.solution.get_real()))
+                if dims == 1:
+                    x_vals.append(env.grid.real_x)
+                    error_vals.append(np.abs(env.grid.get_real() - env.solution.get_real()))
 
                 # Some of these trajectories can get big, so clean them out when we don't need
                 # them.
@@ -444,7 +447,14 @@ def main():
             envs = []
 
             save_convergence_plot(CONVERGENCE_PLOT_GRID_RANGE, error, args)
-            save_error_plot(x_vals, error_vals, CONVERGENCE_PLOT_GRID_RANGE, args)
+            # Also log convergence data.
+            for nx, error in zip(CONVERGENCE_PLOT_GRID_RANGE, error):
+                outer_logger.logkv("nx", nx)
+                outer_logger.logkv("l2_error", error)
+                outer_logger.dumpkvs()
+
+            if dims == 1:
+                save_error_plot(x_vals, error_vals, CONVERGENCE_PLOT_GRID_RANGE, args)
         print("Convergence plot created in {}.".format(
                 human_readable_time_delta(time.time() - convergence_start_time)))
     except KeyboardInterrupt:
