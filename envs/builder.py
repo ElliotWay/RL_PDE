@@ -177,6 +177,9 @@ def set_contingent_env_defaults(main_args, env_args):
     if env_args.time_max is not None:
         main_args.ep_length = None
 
+    just_defaults = (env_args.num_cells is None and env_args.timestep is None)
+            #and main_args.ep_length is None)
+
     num_cells, dt, ep_length = AbstractPDEEnv.fill_default_time_vs_space(
             env_args.num_cells, env_args.min_value, env_args.max_value,
             dt=env_args.timestep, C=env_args.C, ep_length=main_args.ep_length,
@@ -192,8 +195,6 @@ def set_contingent_env_defaults(main_args, env_args):
     if env_args.time_max is None:
         env_args.time_max = env_args.timestep * main_args.ep_length
 
-    just_defaults = (env_args.num_cells is None and env_args.timestep is None
-            and main_args.ep_length is None)
     if not just_defaults:
         print("Using {} cells and {}s timesteps.".format(env_args.num_cells, env_args.timestep)
                 + " Episode length is {} steps, for a total of {}s.".format(

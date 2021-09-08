@@ -236,7 +236,18 @@ def main():
         if not os.path.isfile(meta_file):
             raise Exception("Meta file \"{}\" for agent not found.".format(meta_file))
 
+        grid_params = (args.num_cells, args.min_value, args.max_value)
         metadata.load_to_namespace(meta_file, args, ignore_list=['log_dir', 'ep_length'])
+        try:
+            _ = iter(args.num_cells)
+            meta_dims = len(args.num_cells)
+        except TypeError:
+            meta_dims = 1
+
+        # Reset the grid to the default values if the dimensions do not line up.
+        if dims != meta_dims:
+            args.num_cells, args.min_value, args.max_value = grid_params
+
     #env_builder.set_contingent_env_defaults(args, args)
 
     set_global_seed(args.seed)
@@ -394,8 +405,8 @@ def main():
 
             if dims == 1:
                 plots.error_plot(x_vals, error_vals, CONVERGENCE_PLOT_GRID_RANGE, args.log_dir)
-        print("Convergence plot created in {}.".format(
-                human_readable_time_delta(time.time() - convergence_start_time)))
+            print("Convergence plot created in {}.".format(
+                    human_readable_time_delta(time.time() - convergence_start_time)))
     except KeyboardInterrupt:
         print("Test stopped by interrupt.")
         metadata.log_finish_time(args.log_dir, status="stopped by interrupt")
