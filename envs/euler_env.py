@@ -5,7 +5,7 @@ from gym import spaces
 import envs.weno_coefficients as weno_coefficients
 from envs.abstract_pde_env import AbstractPDEEnv
 from envs.plottable_env import Plottable1DEnv
-from envs.solutions import AnalyticalSolution
+from envs.solutions import RiemannSolution
 from envs.solutions import MemoizedSolution, OneStepSolution
 from envs.weno_solution import WENOSolution, PreciseWENOSolution, PreciseWENOSolution2D
 from envs.weno_solution import lf_flux_split_nd, weno_sub_stencils_nd
@@ -74,8 +74,9 @@ class AbstractEulerEnv(AbstractPDEEnv):
                 raise NotImplementedError("Analytical solutions for multiple dimensions not yet"
                  + " implemented.")
             else:
-                self.solution = AnalyticalSolution(self.grid.nx, self.grid.ng,
-                        self.grid.xmin, self.grid.xmax, vec_len=3, init_type=init_type)
+                self.solution = RiemannSolution(self.grid.nx, self.grid.ng, self.grid.xmin, self.grid.xmax,
+                                                vec_len=3, init_type=kwargs['init_type'],
+                                                gamma=kwargs['init_params']['eos_gamma'])
         else:
             if self.grid.ndim == 1:
                 self.solution = PreciseWENOSolution(
@@ -165,7 +166,6 @@ class AbstractEulerEnv(AbstractPDEEnv):
             state = self._prep_state()
 
         return state, reward, done
-
 
 
 class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):

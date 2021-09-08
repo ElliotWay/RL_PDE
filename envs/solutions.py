@@ -5,7 +5,7 @@ from scipy.optimize import brentq
 
 import envs.weno_coefficients as weno_coefficients
 from envs.grid import AbstractGrid
-from envs.grid1d import Burgers1DGrid
+from envs.grid1d import Burgers1DGrid, Euler1DGrid
 
 
 class SolutionBase(AbstractGrid):
@@ -220,7 +220,7 @@ class AnalyticalSolution(SolutionBase):
     def __init__(self, nx, ng, xmin, xmax, vec_len=1, init_type="schedule"):
         super().__init__(nx=nx, ng=ng, xmin=xmin, xmax=xmax, vec_len=vec_len)
 
-        if (not init_type in available_analytical_solutions 
+        if (not init_type in available_analytical_solutions
                 and not init_type in ['schedule', 'sample']):
             raise Exception("Invalid analytical type \"{}\", available options are {}.".format(init_type, available_analytical_solutions))
 
@@ -285,3 +285,210 @@ class AnalyticalSolution(SolutionBase):
 
     def set(self, real_values):
         raise Exception("An analytical solution cannot be set.")
+
+
+class RiemannSolution(SolutionBase):
+    def __init__(self, nx, ng, xmin, xmax, vec_len=3, init_type="sod", gamma=1.4):
+        super().__init__(nx, ng, xmin, xmax, vec_len)
+
+        self.grid = Euler1DGrid(nx=nx, ng=ng, xmin=xmin, xmax=xmax, init_type=init_type)
+        self.gamma = gamma
+        self.grid.reset({'init_type': init_type, 'gamma': gamma})
+        self.left = self.euler_state_conversion(self.grid.space[:, 0])
+        self.right = self.euler_state_conversion(self.grid.space[:, -1])
+
+        self.ustar = None
+        self.pstar = None
+        self.find_star_state()
+
+    def euler_state_conversion(self, state):
+        rho = state[0]
+        v = state[1] / state[0]
+        p = (self.gamma - 1) * (state[2] - rho * v ** 2 / 2)
+        return np.stack([rho, v, p])
+
+    def u_hugoniot(self, p, side, shock=False):
+        """define the Hugoniot curve, u(p).  If shock=True, we do a 2-shock
+        solution"""
+
+        if side == "left":
+            state = self.left
+            s = 1.0
+        elif side == "right":
+            state = self.right
+            s = -1.0
+
+        c = np.sqrt(self.gamma*state[2]/state[0])
+
+        if shock:
+            # shock
+            beta = (self.gamma+1.0)/(self.gamma-1.0)
+            u = state[1] + s*(2.0*c/np.sqrt(2.0*self.gamma*(self.gamma-1.0)))* \
+                (1.0 - p/state[2])/np.sqrt(1.0 + beta*p/state[2])
+
+        else:
+            if p < state[2]:
+                # rarefaction
+                u = state[1] + s*(2.0*c/(self.gamma-1.0))* \
+                    (1.0 - (p/state[2])**((self.gamma-1.0)/(2.0*self.gamma)))
+            else:
+                # shock
+                beta = (self.gamma+1.0)/(self.gamma-1.0)
+                u = state[1] + s*(2.0*c/np.sqrt(2.0*self.gamma*(self.gamma-1.0)))* \
+                    (1.0 - p/state[2])/np.sqrt(1.0 + beta*p/state[2])
+
+        return u
+
+    def find_star_state(self, p_min=0.001, p_max=1000.0):
+        """ root find the Hugoniot curve to find ustar, pstar """
+
+        # we need to root-find on
+        self.pstar = brentq(
+            lambda p: self.u_hugoniot(p, "left") - self.u_hugoniot(p, "right"),
+            p_min, p_max)
+        self.ustar = self.u_hugoniot(self.pstar, "left")
+
+
+    def find_2shock_star_state(self, p_min=0.001, p_max=1000.0):
+        """ root find the Hugoniot curve to find ustar, pstar """
+
+        # we need to root-find on
+        self.pstar = brentq(
+            lambda p: self.u_hugoniot(p, "left", shock=True) - self.u_hugoniot(p, "right", shock=True),
+            p_min, p_max)
+        self.ustar = self.u_hugoniot(self.pstar, "left", shock=True)
+
+    def shock_solution(self, sgn, xi, state):
+        """return the interface solution considering a shock"""
+
+        p_ratio = self.pstar/state[2]
+        c = np.sqrt(self.gamma*state[2]/state[0])
+
+        # Toro, eq. 4.52 / 4.59
+        S = state[1] + sgn*c*np.sqrt(0.5*(self.gamma + 1.0)/self.gamma*p_ratio +
+                                    0.5*(self.gamma - 1.0)/self.gamma)
+
+        # are we to the left or right of the shock?
+        if (sgn > 0 and xi > S) or (sgn < 0 and xi < S):
+            # R/L region
+            solution = state
+        else:
+            # * region -- get rhostar from Toro, eq. 4.50 / 4.57
+            gam_fac = (self.gamma - 1.0)/(self.gamma + 1.0)
+            rhostar = state[0] * (p_ratio + gam_fac)/(gam_fac * p_ratio + 1.0)
+            solution = np.stack([rhostar, self.ustar, self.pstar], axis=0)
+
+        return solution
+
+    def rarefaction_solution(self, sgn, xi, state):
+        """return the interface solution considering a rarefaction wave"""
+
+        # find the speed of the head and tail of the rarefaction fan
+
+        # isentropic (Toro eq. 4.54 / 4.61)
+        p_ratio = self.pstar/state[2]
+        c = np.sqrt(self.gamma*state[2]/state[0])
+        cstar = c*p_ratio**((self.gamma-1.0)/(2*self.gamma))
+
+        lambda_head = state[1] + sgn*c
+        lambda_tail = self.ustar + sgn*cstar
+
+        gam_fac = (self.gamma - 1.0)/(self.gamma + 1.0)
+
+        if (sgn > 0 and xi > lambda_head) or (sgn < 0 and xi < lambda_head):
+            # R/L region
+            solution = state
+
+        elif (sgn > 0 and xi < lambda_tail) or (sgn < 0 and xi > lambda_tail):
+            # * region, we use the isentropic density (Toro 4.53 / 4.60)
+            solution = np.stack([state[0]*p_ratio**(1.0/self.gamma), self.ustar, self.pstar], axis=0)
+
+        else:
+            # we are in the fan -- Toro 4.56 / 4.63
+            rho = state[0] * (2/(self.gamma + 1.0) -
+                               sgn*gam_fac*(state[1] - xi)/c)**(2.0/(self.gamma-1.0))
+            u = 2.0/(self.gamma + 1.0) * ( -sgn*c + 0.5*(self.gamma - 1.0)*state[1] + xi)
+            p = state[2] * (2/(self.gamma + 1.0) -
+                           sgn*gam_fac*(state[1] - xi)/c)**(2.0*self.gamma/(self.gamma-1.0))
+            solution = np.stack([rho, u, p], axis=0)
+
+        return solution
+
+    def sample_solution(self, time, npts, xmin=0.0, xmax=1.0):
+        """given the star state (ustar, pstar), sample the solution for npts
+        points between xmin and xmax at the given time.
+
+        this is a similarity solution in xi = x/t """
+
+        # we write it all explicitly out here -- this could be vectorized
+        # better.
+
+        dx = (xmax - xmin)/npts
+        xjump = 0.5*(xmin + xmax)
+
+        x = np.linspace(xmin, xmax, npts, endpoint=False) + 0.5*dx
+        xi = (x - xjump)/time
+
+        # which side of the contact are we on?
+        # chi = np.sign(xi - self.ustar)
+
+        # gam = self.gamma
+        # gam_fac = (gam - 1.0)/(gam + 1.0)
+
+        rho_v = []
+        u_v = []
+        p_v = []
+
+        for n in range(npts):
+
+            if xi[n] > self.ustar:
+                # we are in the R* or R region
+                state = self.right
+                sgn = 1.0
+            else:
+                # we are in the L* or L region
+                state = self.left
+                sgn = -1.0
+
+            # is non-contact wave a shock or rarefaction?
+            if self.pstar > state[2]:
+                # compression! we are a shock
+                solution = self.shock_solution(sgn, xi[n], state)
+
+            else:
+                # rarefaction
+                solution = self.rarefaction_solution(sgn, xi[n], state)
+
+            # store
+            rho_v.append(solution[0])
+            u_v.append(solution[1])
+            p_v.append(solution[2])
+
+        return x, np.array(rho_v), np.array(u_v), np.array(p_v)
+
+    def _update(self, dt, time):
+
+        x_values = self.grid.real_x
+        npts = len(x_values)
+
+        if time == 0:  # xi = (x - xjump)/time  wouldn't work with time == 0
+            pass
+        else:
+            x_e, rho_e, v_e, p_e = self.sample_solution(time, npts)
+            u = rho_e * v_e  # convert back to states of the form (rho, rho*u, rho*E)
+            e = p_e / (self.gamma - 1) / rho_e
+            E = rho_e * (e + 0.5 * v_e ** 2)
+            updated_u = np.stack([rho_e, u, E], axis=0)
+            self.grid.set(updated_u)
+
+    def _reset(self, params):
+        self.grid.reset(params)
+
+    def get_full(self):
+        return self.grid.get_full()
+
+    def get_real(self):
+        return self.grid.get_real()
+
+    def set(self, real_values):
+        self.grid.set(real_values)
