@@ -75,7 +75,7 @@ class AbstractBurgersEnv(AbstractPDEEnv):
                  + " implemented.")
             else:
                 self.solution = AnalyticalSolution(self.grid.nx, self.grid.ng,
-                        self.grid.xmin, self.grid.xmax, vec_len=1, init_type=init_type)
+                        self.grid.xmin, self.grid.xmax, vec_len=1, init_type=self.grid.init_type)
         else:
             if self.grid.ndim == 1:
                 self.solution = PreciseWENOSolution(

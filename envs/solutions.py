@@ -218,13 +218,13 @@ available_analytical_solutions = ["smooth_sine", "smooth_rare", "accelshock", "g
 #TODO account for xmin, xmax in case they're not 0 and 1.
 class AnalyticalSolution(SolutionBase):
     def __init__(self, nx, ng, xmin, xmax, vec_len=1, init_type="schedule"):
-        super().__init__(nx=nx, ng=ng, xmin=xmin, xmax=xmax, vec_len=vec_len)
+        super().__init__(nx, ng, xmin, xmax, vec_len=vec_len)
 
         if (not init_type in available_analytical_solutions
                 and not init_type in ['schedule', 'sample']):
             raise Exception("Invalid analytical type \"{}\", available options are {}.".format(init_type, available_analytical_solutions))
 
-        self.grid = Burgers1DGrid(nx=nx, ng=ng, xmin=xmin, xmax=xmax, init_type=init_type)
+        self.grid = Burgers1DGrid(nx, ng, xmin, xmax, init_type)
 
     def _update(self, dt, time):
         # Assume that Burgers1DGrid.reset() is still setting the correct parameters.
