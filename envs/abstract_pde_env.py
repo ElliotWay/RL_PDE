@@ -106,7 +106,9 @@ class AbstractPDEEnv(gym.Env):
         else:
             self.ng = num_ghosts
 
-        if type(num_cells) is int:
+        try:
+            iterator = iter(num_cells)
+        except TypeError:
             dims = 1
         else:
             dims = len(num_cells)

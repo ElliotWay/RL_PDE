@@ -10,9 +10,6 @@ import time
 import subprocess
 import gc # manual garbage collection
 
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
@@ -28,55 +25,13 @@ from envs import Plottable1DEnv, Plottable2DEnv
 from models import get_model_arg_parser
 from models import SACModel, PolicyGradientModel, TestModel
 from util import metadata
+from util import plots
 from util.function_dict import numpy_fn
 from util.lookup import get_model_class, get_emi_class, get_model_dims
 from util.misc import set_global_seed
 from util.misc import human_readable_time_delta
 
 ON_POSIX = 'posix' in sys.builtin_module_names
-
-def save_convergence_plot(grid_sizes, error, args):
-    plt.plot(grid_sizes, error, ls='-', color='k')
-
-    ax = plt.gca()
-    ax.set_xlabel("grid size")
-    #ax.set_xticks(grid_sizes)
-    ax.set_xscale('log')
-    ax.set_ylabel("L2 error")
-    #ax.set_yticks([0] + error)
-    ax.set_yscale('log')
-
-    filename = os.path.join(args.log_dir, "convergence.png")
-    plt.savefig(filename)
-    print('Saved plot to ' + filename + '.')
-    plt.close()
-
-def save_error_plot(x_vals, y_vals, labels, args):
-    vec_len = y_vals[0].shape[0]
-    fig, ax = plt.subplots(nrows=vec_len, ncols=1, figsize=[6.4, 4.8 * vec_len], dpi=100,
-            squeeze=False)
-    for x, y, label in zip(x_vals, y_vals, labels):
-        for i in range(vec_len):
-            ax[i][0].plot(x, y[i], ls='-', label=str(label))
-
-    for i in range(vec_len):
-        ax[i][0].set_xlabel("x")
-        ax[i][0].set_ylabel(f"u{i} |error|")
-
-        ax[i][0].set_yscale('log')
-        ax[i][0].set_ymargin(0.0)
-
-        ax[i][0].legend()
-
-    #extreme_cutoff = 3.0
-    #max_not_extreme = max([np.max(y[y < extreme_cutoff]) for y in y_vals])
-    #ymax = max_not_extreme*1.05 if max_not_extreme > 0.0 else 0.01
-    #ax.set_ylim((None, ymax))
-
-    filename = os.path.join(args.log_dir, "convergence_over_x.png")
-    plt.savefig(filename)
-    print("Saved plot to " + filename + ".")
-    plt.close()
 
 def do_test(env, agent, args):
     if args.animate:
@@ -224,9 +179,9 @@ def main():
     parser.add_argument('--rk4', default=False, action='store_true',
                         help="Use RK4 steps instead of Euler steps. Only available for testing,"
                         + " since the reward during training doesn't make sense.")
-    parser.add_argument('-y', default=False, action='store_true',
+    parser.add_argument('-y', '--y', default=False, action='store_true',
                         help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
-    parser.add_argument('-n', default=False, action='store_true',
+    parser.add_argument('-n', '--n', default=False, action='store_true',
                         help="Choose no for any questions, namely overwriting existing files. Useful for scripts. Overrides the -y option.")
 
     main_args, rest = parser.parse_known_args()
@@ -281,7 +236,18 @@ def main():
         if not os.path.isfile(meta_file):
             raise Exception("Meta file \"{}\" for agent not found.".format(meta_file))
 
+        grid_params = (args.num_cells, args.min_value, args.max_value)
         metadata.load_to_namespace(meta_file, args, ignore_list=['log_dir', 'ep_length'])
+        try:
+            _ = iter(args.num_cells)
+            meta_dims = len(args.num_cells)
+        except TypeError:
+            meta_dims = 1
+
+        # Reset the grid to the default values if the dimensions do not line up.
+        if dims != meta_dims:
+            args.num_cells, args.min_value, args.max_value = grid_params
+
     #env_builder.set_contingent_env_defaults(args, args)
 
     set_global_seed(args.seed)
@@ -292,28 +258,30 @@ def main():
     if not args.convergence_plot:
         env = env_builder.build_env(args.env, args, test=True)
     else:
-        if dims > 1:
-            raise NotImplementedError("Convergence plots not adapted to 2D yet.")
         #args.analytical = True # Compare to analytical solution (preferred)
         args.analytical = False # Compare to WENO (necessary when WENO isn't accurate either)
         if args.reward_mode is not None and 'one-step' in args.reward_mode:
-            print("TODO: compute error with analytical solution when using one-step error.")
-            print("(Currently forcing the error to change to full instead.)")
-            args.reward_mode = 'full'
-        CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]#, 1024, 2048, 4096, 8192]
+            print("Reward mode switched to 'full' instead of 'one-step' for convergence plots.")
+            args.reward_mode = args.reward_mode.replace('one-step', 'full')
+        if dims == 1:
+            CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]#, 1024, 2048, 4096, 8192]
+            #CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512, 1024, 2048, 4096, 8192]
+            #CONVERGENCE_PLOT_GRID_RANGE = (2**np.linspace(6.0, 8.0, 50)).astype(np.int)
+        elif dims == 2:
+            CONVERGENCE_PLOT_GRID_RANGE = [32, 64, 128, 256]
         envs = []
         env_args = []
         for nx in CONVERGENCE_PLOT_GRID_RANGE:
             if args.C is None:
                 args.C = 0.1
             eval_env_args = Namespace(**vars(args))
-            time_max = args.timestep * args.ep_length
-            _, dt, ep_length = AbstractPDEEnv.fill_default_time_vs_space(
-                min_value=[args.min_value], max_value=[args.max_value], num_cells=[nx],
-                dt=None, C=args.C, ep_length=None, time_max=time_max)
+
             eval_env_args.num_cells = nx
-            eval_env_args.timestep = dt
-            eval_env_args.ep_length = ep_length
+            eval_env_args.ep_length = None
+            eval_env_args.timestep = None
+            # This will choose the correct values for ep_length and timestep based on the number of
+            # cells.
+            env_builder.set_contingent_env_defaults(eval_env_args, eval_env_args)
 
             envs.append(env_builder.build_env(eval_env_args.env, eval_env_args, test=True))
             env_args.append(eval_env_args)
@@ -365,8 +333,9 @@ def main():
     metadata.create_meta_file(args.log_dir, args)
 
     # Put stable-baselines logs in same directory.
-    logger.configure(folder=args.log_dir, format_strs=['stdout'])  # ,tensorboard'
+    logger.configure(folder=args.log_dir, format_strs=['csv', 'log'])
     logger.set_level(logger.DEBUG)  # logger.INFO
+    outer_logger = logger.Logger.CURRENT
 
     # Create symlink for convenience. (Do this after loading the agent in case we are loading from last.)
     log_link_name = "last"
@@ -395,12 +364,14 @@ def main():
         if not args.convergence_plot:
             do_test(env, agent, args)
         else:
+            convergence_start_time = time.time()
             error = []
             x_vals = []
             error_vals = []
             for env, env_args in zip(envs, env_args):
+                nx = env_args.num_cells[0] if dims > 1 else env_args.num_cells
 
-                sub_dir = os.path.join(args.log_dir, "nx_{}".format(env_args.num_cells))
+                sub_dir = os.path.join(args.log_dir, "nx_{}".format(nx))
                 os.makedirs(sub_dir)
                 logger.configure(folder=sub_dir, format_strs=['stdout'])  # ,tensorboard'
 
@@ -414,19 +385,28 @@ def main():
                 l2_error = do_test(env, agent, env_args)
                 error.append(l2_error)
 
-                x_vals.append(env.grid.real_x)
-                error_vals.append(np.abs(env.grid.get_real() - env.solution.get_real()))
+                if dims == 1:
+                    x_vals.append(env.grid.real_x)
+                    error_vals.append(np.abs(env.grid.get_real() - env.solution.get_real()))
 
                 # Some of these trajectories can get big, so clean them out when we don't need
                 # them.
                 #TODO Make sure it's actually freeing them.
                 env.close()
                 gc.collect()
-
             envs = []
 
-            save_convergence_plot(CONVERGENCE_PLOT_GRID_RANGE, error, args)
-            save_error_plot(x_vals, error_vals, CONVERGENCE_PLOT_GRID_RANGE, args)
+            plots.convergence_plot(CONVERGENCE_PLOT_GRID_RANGE, error, args.log_dir)
+            # Also log convergence data.
+            for nx, error in zip(CONVERGENCE_PLOT_GRID_RANGE, error):
+                outer_logger.logkv("nx", nx)
+                outer_logger.logkv("l2_error", error)
+                outer_logger.dumpkvs()
+
+            if dims == 1:
+                plots.error_plot(x_vals, error_vals, CONVERGENCE_PLOT_GRID_RANGE, args.log_dir)
+            print("Convergence plot created in {}.".format(
+                    human_readable_time_delta(time.time() - convergence_start_time)))
     except KeyboardInterrupt:
         print("Test stopped by interrupt.")
         metadata.log_finish_time(args.log_dir, status="stopped by interrupt")
