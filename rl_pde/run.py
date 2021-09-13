@@ -120,9 +120,9 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, eval_env_name
     #if high < 0:
         #ax.set_ylim(top=0.0)
     ax.set_yscale('symlog')
-    min_scale = 1e-10
-    ax.yaxis.set_minor_locator(SymmetricalLogLocator(base=10, linthresh=min_scale,
-            subs=[0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 2.0, 3.0, 4.0]))
+    #min_scale = 1e-10
+    #ax.yaxis.set_minor_locator(SymmetricalLogLocator(base=10, linthresh=min_scale,
+            #subs=[0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 2.0, 3.0, 4.0]))
     #ax.set_ymargin(min_scale)
 
     reward_filename = os.path.join(summary_plot_dir, "rewards.png")

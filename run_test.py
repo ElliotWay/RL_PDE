@@ -237,7 +237,7 @@ def main():
             raise Exception("Meta file \"{}\" for agent not found.".format(meta_file))
 
         grid_params = (args.num_cells, args.min_value, args.max_value)
-        metadata.load_to_namespace(meta_file, args, ignore_list=['log_dir', 'ep_length'])
+        metadata.load_to_namespace(meta_file, args, ignore_list=['log_dir', 'ep_length', 'time_max'])
         try:
             _ = iter(args.num_cells)
             meta_dims = len(args.num_cells)

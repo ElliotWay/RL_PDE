@@ -183,6 +183,8 @@ def load_to_namespace(meta_filename, args_ns, ignore_list=[], override_args=None
 
     no_default_parser = argparse.ArgumentParser(argument_default=argparse.SUPPRESS)
     for arg, value in arg_dict.items():
+        if arg == 'y' or arg == 'n':
+            continue
         if arg == "fixed_timesteps":
             continue
         arg = "--" + arg
@@ -204,6 +206,12 @@ def load_to_namespace(meta_filename, args_ns, ignore_list=[], override_args=None
                         help="Use a memoized solution to save time. Enabled by default. See --no-memo.")
     no_default_parser.add_argument('--no-memo', dest='memoize', action='store_false', default=None,
                         help="Do not use a memoized solution.")
+    no_default_parser.add_argument('-y', '--y', default=False, action='store_true',
+                        help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
+    no_default_parser.add_argument('-n', '--n', default=False, action='store_true',
+                        help="Choose no for any questions, namely overwriting existing files."
+                        + " Useful for scripts. Overrides the -y option.")
+
 
     # Defaults to argv if override_args is None.
     explicit_args, other = no_default_parser.parse_known_args(override_args)
