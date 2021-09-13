@@ -358,8 +358,10 @@ class Plottable1DEnv(AbstractPDEEnv):
 
         if 'Euler' in str(self):
             eqn_type = 'euler'
+            ylabels = ['rho', 'u', 'p', 'e']
         else:
             eqn_type = 'burgers'
+            ylabels = ['u']
 
         override_history = (state_history is not None)
 
@@ -495,7 +497,7 @@ class Plottable1DEnv(AbstractPDEEnv):
             ax[i].legend(plots, labels)
             ax[i].set_xmargin(0.0)
             ax[i].set_xlabel('x')
-            ax[i].set_ylabel('u{}'.format(i))
+            ax[i].set_ylabel(f'{ylabels[i]}')
 
         log_dir = logger.get_dir()
         error_or_state = "error" if plot_error else "state"
