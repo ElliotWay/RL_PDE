@@ -72,10 +72,10 @@ def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels
     ax.set_ylabel("L2 error")
     ax.set_yscale('log')
 
-    if multiple_error_lists and args.labels is not None:
+    if multiple_error_lists and labels is not None:
         ax.legend()
     if title is not None:
-        ax.set_title(args.title)
+        ax.set_title(title)
 
     filename = os.path.join(log_dir, name)
     plt.savefig(filename)
@@ -147,7 +147,7 @@ def error_plot(x_vals, error_vals, labels, log_dir, name="convergence_over_x.png
         else:
             fig.colorbar(scalar_mappable, ax=ax[i][0], label="nx")
     if title is not None:
-        fig.suptitle(args.title)
+        fig.suptitle(title)
 
     #extreme_cutoff = 3.0
     #max_not_extreme = max([np.max(y[y < extreme_cutoff]) for y in error_vals])
