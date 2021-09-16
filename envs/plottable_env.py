@@ -691,6 +691,8 @@ class Plottable2DEnv(AbstractPDEEnv):
         #fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
         x, y = np.meshgrid(x_values, y_values, indexing='ij')
         z = state
+        #if plot_error:
+            #z = np.log10(z)
         surface = ax.plot_surface(x, y, z, cmap=cm.viridis,
                 linewidth=0, antialiased=False)
 
@@ -707,7 +709,7 @@ class Plottable2DEnv(AbstractPDEEnv):
             extreme_cutoff = 3.0
             max_not_extreme = np.max(state[state < extreme_cutoff])
             zmax = max_not_extreme*1.05 if max_not_extreme > 0.0 else 0.01
-            ax.set_zlim((0.0, ymax))
+            ax.set_zlim((0.0, zmax))
 
         if fixed_axes:
             #TODO Keep the colorbar fixed as well.
@@ -719,6 +721,14 @@ class Plottable2DEnv(AbstractPDEEnv):
                 ax.set_ylim(ylim)
                 ax.set_zlim(zlim)
 
+        #if plot_error:
+            ##stackoverlow.com/questions/3909794
+            #def log_tick_formatter(val, pos=None):
+                #return f"$10^{{{int(val)}}}$"
+            #ax.zaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(log_tick_formatter))
+            #ax.zaxis.set_major_locator(matplotlib.ticker.MaxNLocator(integer=True))
+        #else:
+        ax.zaxis.set_major_formatter(matplotlib.ticker.StrMethodFormatter("{x:.4g}"))
         ax.zaxis.set_major_locator(LinearLocator(10))
         #fig.colorbar(surface, shrink=0.5, aspect=5)
 
