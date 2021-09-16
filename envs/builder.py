@@ -52,8 +52,13 @@ def get_env_arg_parser():
                         + " is enabled, or choosing defaults if --timestep and --nx are not both"
                         + " used.")
     parser.add_argument('--time-max', '--time_max', '--tmax', type=positive_float, default=None,
-                        help="Set max time of episode. Overrides --ep-length parameter."
-                        + " Defaults based on --ep-length and --timestep.")
+                        help="Set max time of episode (in seconds). Defaults to 0.1s for training"
+                        + " and 0.2s for testing. Some initial conditions may override these"
+                        + " defaults.")
+    parser.add_argument('--ep-length', '--ep_length', type=positive_int, default=None,
+                        help="The number of timesteps in the episode. Overrides time-max."
+                        + " If --variable-timesteps is used, this is only an approximation"
+                        + " based on the value of --timestep.")
 
     parser.add_argument('--init_type', '--init-type', type=str, default="smooth_sine",
                         help="The type of initial condition.")
@@ -110,7 +115,7 @@ def get_env_arg_parser():
 
     return parser
 
-def set_contingent_env_defaults(main_args, env_args):
+def set_contingent_env_defaults(main_args, env_args, test=False):
     if env_args.memoize is None:
         if env_args.fixed_timesteps:
             env_args.memoize = True
@@ -127,6 +132,10 @@ def set_contingent_env_defaults(main_args, env_args):
     
     env_args.reward_mode = AbstractPDEEnv.fill_default_reward_mode(env_args.reward_mode)
     print("Full reward mode is '{}'.".format(env_args.reward_mode))
+
+    just_defaults = (env_args.num_cells is None and env_args.timestep is None
+            and env_args.time_max is None and env_args.ep_length is None)
+    default_time_max = (env_args.time_max is None)
 
     # Some environments have specific defaults.
     if env_args.init_type == "jsz7":
@@ -170,39 +179,33 @@ def set_contingent_env_defaults(main_args, env_args):
     if dims > 1 and len(env_args.max_value) == 1:
         env_args.max_value = (env_args.max_value[0],) * dims
 
+    if env_args.time_max is None and env_args.ep_length is None:
+        env_args.time_max = 0.1
+    if default_time_max and test and env_args.init_type != "jsz7":
+        # Keeping jsz7 always 0.5s, for whatever reason. Not sure why I'm handling this one
+        # differently.
+        env_args.time_max = 2 * env_args.time_max
+
     # Make timestep length depend on grid size or vice versa.
-    #TODO ep_length should probably be an env parameter. Unless we should have a fixed time limit
-    # instead?
-    # Specifying time_max overrides ep_length.
-    if env_args.time_max is not None:
-        main_args.ep_length = None
-
-    just_defaults = (env_args.num_cells is None and env_args.timestep is None)
-            #and main_args.ep_length is None)
-
-    num_cells, dt, ep_length = AbstractPDEEnv.fill_default_time_vs_space(
+    num_cells, dt, ep_length, time_max = AbstractPDEEnv.fill_default_time_vs_space(
             env_args.num_cells, env_args.min_value, env_args.max_value,
-            dt=env_args.timestep, C=env_args.C, ep_length=main_args.ep_length,
+            dt=env_args.timestep, C=env_args.C, ep_length=env_args.ep_length,
             time_max=env_args.time_max)
 
-    if env_args.num_cells is None:
-        env_args.num_cells = num_cells
-    if env_args.timestep is None:
-        env_args.timestep = dt
-    if main_args.ep_length is None:
-        main_args.ep_length = ep_length
+    env_args.num_cells = num_cells
+    env_args.timestep = dt
+    env_args.ep_length = ep_length
+    env_args.time_max = time_max
 
-    if env_args.time_max is None:
-        env_args.time_max = env_args.timestep * main_args.ep_length
-
+    print("Using {} cells and {}s timesteps.".format(env_args.num_cells, env_args.timestep)
+            + " Episode length is {} steps, for a total of {}s.".format(
+                env_args.ep_length, env_args.time_max))
     if not just_defaults:
-        print("Using {} cells and {}s timesteps.".format(env_args.num_cells, env_args.timestep)
-                + " Episode length is {} steps, for a total of {}s.".format(
-                    main_args.ep_length, main_args.ep_length * dt))
         # Add to argv - if we load an agent later, this prevents the agent's parameters
         # from overwriting these, as at least one of which was explicit.
         sys.argv += ['--num-cells', str(num_cells)]
         sys.argv += ['--timestep', str(dt)]
+        sys.argv += ['--time_max', std(time_max)]
         sys.argv += ['--ep_length', str(ep_length)]
     if not env_args.fixed_timesteps:
         sys.argv += ['--C', str(env_args.C)]

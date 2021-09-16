@@ -411,6 +411,14 @@ class AbstractPDEEnv(gym.Env):
 
     @staticmethod
     def fill_default_time_vs_space(num_cells, min_value, max_value, dt, C, ep_length, time_max):
+        if ep_length is not None and time_max is not None:
+            if dt is None:
+                dt = time_max / ep_length
+            elif ep_length != int(np.ceil(time_max / dt)):
+                raise Exception("{} timesteps is inconsistent with {}s total time and {}s"
+                        .format(ep_length, time_max, dt)
+                        + " length timesteps.")
+
         approximate_max = 2.0 # Is this a good number?
         if num_cells is None:
             if dt is None:
@@ -425,11 +433,13 @@ class AbstractPDEEnv(gym.Env):
 
         if ep_length is None:
             if time_max is None:
-                ep_length = 500
+                raise Exception("Either time_max or ep_length must be initialized.")
             else:
                 ep_length = int(np.ceil(time_max / dt))
+        elif time_max is None:
+            time_max = dt * ep_length
 
-        return num_cells, dt, ep_length
+        return num_cells, dt, ep_length, time_max
 
     def timestep(self):
         if self.C is None:  # return a constant time step

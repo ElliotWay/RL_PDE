@@ -56,13 +56,11 @@ def main():
     parser.add_argument('--eval-env', '--eval_env', default='std',
                         help="Evaluation env. Pass 'std' for the representative"
                         + " sine/rarefaction/accelshock combination. Pass 'long' to use the"
-                        + " training environment with 500 timesteps. Pass 'same' to use"
+                        + " training environment with twice as many timesteps. Pass 'same' to use"
                         + " an identical copy of the training environment.")
     parser.add_argument('--log-dir', '--log_dir', type=str, default=None,
                         help="Directory to place log file and other results. Default is"
                         + " log/env/model/timestamp.")
-    parser.add_argument('--ep-length', '--ep_length', type=int, default=250,
-                        help="Number of timesteps in an episode.")
     parser.add_argument('--total-episodes', '--total_episodes', type=int, default=1000,
                         help="Total number of episodes to train.")
     parser.add_argument('--log-freq', '--log_freq', type=int, default=10,
@@ -85,7 +83,7 @@ def main():
 
     env_arg_parser = env_builder.get_env_arg_parser()
     env_args, rest = env_arg_parser.parse_known_args(rest)
-    env_builder.set_contingent_env_defaults(main_args, env_args)
+    env_builder.set_contingent_env_defaults(main_args, env_args, test=False)
 
     model_arg_parser = get_model_arg_parser()
     model_args, rest = model_arg_parser.parse_known_args(rest)
@@ -132,25 +130,25 @@ def main():
         if args.env == "weno_burgers":
             eval_envs = []
             eval_env_args.boundary = None
+            eval_env_args.ep_length = args.ep_length * 2
+            eval_env_args.time_max = args.time_max * 2
             smooth_sine_args = Namespace(**vars(eval_env_args))
             smooth_sine_args.init_type = "smooth_sine"
-            smooth_sine_args.ep_length = args.ep_length * 2
             eval_envs.append(env_builder.build_env(args.env, smooth_sine_args, test=True))
 
             smooth_rare_args = Namespace(**vars(eval_env_args))
             smooth_rare_args.init_type = "smooth_rare"
-            smooth_rare_args.ep_length = args.ep_length * 2
             eval_envs.append(env_builder.build_env(args.env, smooth_rare_args, test=True))
 
             accelshock_args = Namespace(**vars(eval_env_args))
             accelshock_args.init_type = "accelshock"
-            accelshock_args.ep_length = args.ep_length * 2
             eval_envs.append(env_builder.build_env(args.env, accelshock_args, test=True))
 
         elif args.env == "weno_burgers_2d":
             eval_envs = []
             eval_env_args.boundary = None
             eval_env_args.ep_length = args.ep_length * 2
+            eval_env_args.time_max = args.time_max * 2
             gaussian_args = Namespace(**vars(eval_env_args))
             gaussian_args.init_type = "gaussian"
             eval_envs.append(env_builder.build_env(args.env, gaussian_args, test=True))
@@ -164,11 +162,11 @@ def main():
             # Restore jsz7 defaults.
             vars(jsz_args).update({"min_value":None, "max_value":None, "num_cells":None,
                 "time_max":None})
-            env_builder.set_contingent_env_defaults(jsz_args, jsz_args)
+            env_builder.set_contingent_env_defaults(jsz_args, jsz_args, test=True)
             eval_envs.append(env_builder.build_env(args.env, jsz_args, test=True))
 
     elif args.eval_env == "long":
-        eval_env_args.ep_length = 500
+        eval_env_args.ep_length = args.ep_length * 2
         eval_envs = [env_builder.build_env(args.env, eval_env_args, test=True)]
     elif args.eval_env == "same" or args.eval_env is None:
         eval_envs = [env_builder.build_env(args.env, eval_env_args, test=True)]

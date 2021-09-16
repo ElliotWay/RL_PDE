@@ -159,8 +159,6 @@ def main():
                         + " divides by the sum of the weights, 'none' does nothing.")
     parser.add_argument('--log-dir', type=str, default=None,
                         help="Directory to place log file and other results. Default is test/env/agent/timestamp.")
-    parser.add_argument('--ep-length', type=int, default=500,
-                        help="Number of timesteps in an episode.")
     parser.add_argument('--seed', type=int, default=1,
                         help="Set random seed for reproducibility.")
     parser.add_argument('--plot-actions', '--plot_actions', default=False, action='store_true',
@@ -188,7 +186,7 @@ def main():
 
     env_arg_parser = env_builder.get_env_arg_parser()
     env_args, rest = env_arg_parser.parse_known_args(rest)
-    env_builder.set_contingent_env_defaults(main_args, env_args)
+    env_builder.set_contingent_env_defaults(main_args, env_args, test=True)
 
     # run_test.py has model arguments that can be overidden, if desired,
     # but are intended to be loaded from a meta file.
@@ -236,19 +234,10 @@ def main():
         if not os.path.isfile(meta_file):
             raise Exception("Meta file \"{}\" for agent not found.".format(meta_file))
 
-        grid_params = (args.num_cells, args.min_value, args.max_value)
-        metadata.load_to_namespace(meta_file, args, ignore_list=['log_dir', 'ep_length', 'time_max'])
-        try:
-            _ = iter(args.num_cells)
-            meta_dims = len(args.num_cells)
-        except TypeError:
-            meta_dims = 1
-
-        # Reset the grid to the default values if the dimensions do not line up.
-        if dims != meta_dims:
-            args.num_cells, args.min_value, args.max_value = grid_params
-
-    #env_builder.set_contingent_env_defaults(args, args)
+        #TODO: Just make it only load model parameters.
+        metadata.load_to_namespace(meta_file, args,
+                ignore_list=['log_dir', 'ep_length', 'time_max', 'timestep',
+                            'num_cells', 'min_value', 'max_value'])
 
     set_global_seed(args.seed)
 
@@ -280,8 +269,8 @@ def main():
             eval_env_args.ep_length = None
             eval_env_args.timestep = None
             # This will choose the correct values for ep_length and timestep based on the number of
-            # cells.
-            env_builder.set_contingent_env_defaults(eval_env_args, eval_env_args)
+            # cells and time_max.
+            env_builder.set_contingent_env_defaults(eval_env_args, eval_env_args, test=True)
 
             envs.append(env_builder.build_env(eval_env_args.env, eval_env_args, test=True))
             env_args.append(eval_env_args)
