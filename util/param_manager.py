@@ -23,6 +23,23 @@ class ArgTreeManager:
 
         self.args = None
 
+    def copy(self, new_parent=None):
+        manager_copy = ArgTreeManager()
+        manager_copy.argparser = self.argparser
+        manager_copy.parent = new_parent
+        for child_name, child in self.children.items():
+            manager_copy.children[child_name] = child.copy(new_parent=manager_copy)
+        manager_copy.children_long_names = dict(self.children_long_names)
+        manager_copy.explicit = dict(self.explicit)
+
+        manager_copy.args = Namespace(**vars(self.args))
+        manager_dict = vars(manager_copy.args)
+        for name, value in manager_dict.items():
+            if isinstance(value, Namespace):
+                manager_dict[name] = manager_copy.children[name]
+
+        return manager_copy
+
     def set_parser(self, argparser):
         self.argparser = argparser
 
