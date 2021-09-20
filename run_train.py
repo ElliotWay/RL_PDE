@@ -24,7 +24,7 @@ from stable_baselines import logger
 from rl_pde.run import train
 from rl_pde.emi import DimensionalAdapterEMI, VectorAdapterEMI
 from envs import builder as env_builder
-from models import get_model_arg_parser
+from models import builder as model_builder
 from util import metadata, action_snapshot
 from util.param_manager import ArgTreeManager
 from util.function_dict import numpy_fn
@@ -48,7 +48,6 @@ def main():
                         help="Name of the environment in which to train the agent.")
     parser.add_argument('--emi', type=str, default='batch',
                         help="Environment-model interface. Options are 'batch' and 'std'.")
-    #TODO move these into model parameters, probably
     parser.add_argument('--obs-scale', '--obs_scale', type=str, default='z_score_last',
                         help="Adjustment function to observation. Compute Z score along the last"
                         + " dimension (the stencil) with 'z_score_last', the Z score along every"
@@ -87,12 +86,12 @@ def main():
     env_arg_manager = arg_manager.get_child("e", long_name="Environment Parameters")
     env_arg_manager.set_parser(env_builder.get_env_arg_parser())
     model_arg_manager = arg_manager.get_child("m", long_name="Model Parameters")
-    model_arg_manager.set_parser(get_model_arg_parser())
+    model_arg_manager.set_parser(model_builder.get_model_arg_parser())
 
     args, rest = arg_manager.parse_known_args()
 
-    env_builder.set_contingent_env_defaults(args, test=False)
-    # TODO Create separate model contingent defaults too, probably.
+    env_builder.set_contingent_env_defaults(args, args.e, test=False)
+    model_builder.set_contingent_model_defaults(args, args.m, test=False)
      
     if args.env.startswith("weno"):
         mode = "weno"
@@ -128,9 +127,10 @@ def main():
 
     dims = env_builder.env_dimensions(args.env)
 
-    env = env_builder.build_env(args.env, args)
+    env = env_builder.build_env(args.env, args.e)
 
-    eval_env_args = Namespace(**vars(args))
+    eval_env_arg_manager = arg_manager.get_child('e').copy()
+    eval_env_args = eval_env_arg_manager.args
     eval_env_args.follow_solution = False # Doesn't make sense for eval envs to do that.
     if args.eval_env == "std" or args.eval_env == "custom":
         #eval_env_args.memoize = True
@@ -140,38 +140,34 @@ def main():
             eval_env_args.boundary = None
             eval_env_args.ep_length = args.ep_length * 2
             eval_env_args.time_max = args.time_max * 2
-            smooth_sine_args = Namespace(**vars(eval_env_args))
-            smooth_sine_args.init_type = "smooth_sine"
-            eval_envs.append(env_builder.build_env(args.env, smooth_sine_args, test=True))
+            
+            eval_env_args.init_type = "smooth_sine"
+            eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
 
-            smooth_rare_args = Namespace(**vars(eval_env_args))
-            smooth_rare_args.init_type = "smooth_rare"
-            eval_envs.append(env_builder.build_env(args.env, smooth_rare_args, test=True))
+            eval_env_args.init_type = "smooth_rare"
+            eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
 
-            accelshock_args = Namespace(**vars(eval_env_args))
-            accelshock_args.init_type = "accelshock"
-            eval_envs.append(env_builder.build_env(args.env, accelshock_args, test=True))
+            eval_env_args.init_type = "accelshock"
+            eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
 
         elif args.env == "weno_burgers_2d":
             eval_envs = []
             eval_env_args.boundary = None
             eval_env_args.ep_length = args.ep_length * 2
             eval_env_args.time_max = args.time_max * 2
-            gaussian_args = Namespace(**vars(eval_env_args))
-            gaussian_args.init_type = "gaussian"
-            eval_envs.append(env_builder.build_env(args.env, gaussian_args, test=True))
 
-            smooth_sine_args = Namespace(**vars(eval_env_args))
-            smooth_sine_args.init_type = "1d-smooth_sine-x"
-            eval_envs.append(env_builder.build_env(args.env, smooth_sine_args, test=True))
+            eval_env_args.init_type = "gaussian"
+            eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
 
-            jsz_args = Namespace(**vars(eval_env_args))
-            jsz_args.init_type = "jsz7"
+            eval_env_args.init_type = "1d-smooth_sine-x"
+            eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
+
+            eval_env_args.init_type = "jsz7"
             # Restore jsz7 defaults.
-            vars(jsz_args).update({"min_value":None, "max_value":None, "num_cells":None,
+            vars(eval_env_args).update({"min_value":None, "max_value":None, "num_cells":None,
                 "time_max":None})
-            env_builder.set_contingent_env_defaults(jsz_args, jsz_args, test=True)
-            eval_envs.append(env_builder.build_env(args.env, jsz_args, test=True))
+            env_builder.set_contingent_env_defaults(args, eval_env_args, test=True)
+            eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
 
     elif args.eval_env == "long":
         eval_env_args.ep_length = args.ep_length * 2
@@ -183,39 +179,16 @@ def main():
 
     action_snapshot.declare_standard_envs(args)
 
-    # Fill in default args that depend on other args.
-    if args.model == "sac":
-        if args.buffer_size is None:
-            args.buffer_size = 10000 if args.emi == "std" else 500000
-        if args.train_freq is None:
-            args.train_freq = 1 if args.emi == "std" else env.action_space.shape[0]
-    if args.batch_size is None:
-        args.batch_size = 10 if args.model == "full" else 64
-
+    # Fill in defaults that are contingent on other arguments.
     if args.replay_style == 'marl':
         if args.emi != 'marl':
             args.emi = 'marl'
             print("EMI set to MARL for MARL-style replay buffer.")
-        if args.batch_size % (args.nx + 1) != 0:
-            old_batch_size = args.batch_size
-            new_batch_size = old_batch_size + (args.nx + 1) - (old_batch_size % (args.nx + 1))
-            args.batch_size = new_batch_size
-            print("Batch size changed from {} to {} to align with MARL-style replay buffer."
-                    .format(old_batch_size, new_batch_size))
-        if args.buffer_size % (args.nx + 1) != 0:
-            old_buffer_size = args.buffer_size
-            new_buffer_size = old_buffer_size + (args.nx + 1) - (old_buffer_size % (args.nx + 1))
-            args.buffer_size = new_buffer_size
-            print("Replay buffer size changed from {} to {} to align with MARL-style buffer."
-                    .format(old_buffer_size, new_buffer_size))
-
-    if args.model == 'pg' or args.model == 'reinforce':
-        if args.gamma == 0.0:
-            args.return_style = "myopic"
     if args.model == 'full':
         if args.emi != 'batch-global':
             args.emi = 'batch-global'
             print("EMI set to batch-global to fit \'full\' model.")
+
     model_cls = get_model_class(args.model)
 
     if args.obs_scale is None:

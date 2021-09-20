@@ -16,11 +16,12 @@ from rl_pde.agents import StationaryAgent, EqualAgent, MiddleAgent, LeftAgent, R
 
 standard_envs = None
 
-def declare_standard_envs(args):
+def declare_standard_envs(env_args):
+    env_name = "weno_burgers" # Could we have other types of standard 1D environments here?
+
     # Make a copy - we need to change the args, but the caller should not
     # have to worry about args changing.
-    args = Namespace(**vars(args))
-    args.env = "weno_burgers" # Should we allow for other sorts of 1D environments here?
+    args = Namespace(**vars(env_args))
     args.memoize = False # No point memoizing any of these environments.
     args.analytical = False
     args.min_value = 0.0
@@ -36,7 +37,7 @@ def declare_standard_envs(args):
     args.init_type = flat
     args.boundary = "outflow"
     args.num_cells = len(flat_state)
-    flat_env = build_env(args.env, args)
+    flat_env = build_env(env_name, args)
     standard_envs.append(flat_env)
 
     rising_state = np.arange(1, 1.2, 0.02)
@@ -45,7 +46,7 @@ def declare_standard_envs(args):
     args.init_type = rising
     args.boundary = "first"
     args.num_cells = len(rising_state)
-    rising_env = build_env(args.env, args)
+    rising_env = build_env(env_name, args)
     standard_envs.append(rising_env)
 
     falling_state = np.arange(1.2, 1, -0.02)
@@ -54,7 +55,7 @@ def declare_standard_envs(args):
     args.init_type = falling
     args.boundary = "first"
     args.num_cells = len(falling_state)
-    falling_env = build_env(args.env, args)
+    falling_env = build_env(env_name, args)
     standard_envs.append(falling_env)
 
     shock_state = np.full(10, 1.0)
@@ -64,7 +65,7 @@ def declare_standard_envs(args):
     args.init_type = shock
     args.boundary = "outflow"
     args.num_cells = len(shock_state)
-    shock_env = build_env(args.env, args)
+    shock_env = build_env(env_name, args)
     standard_envs.append(shock_env)
 
     rare_state = np.full(10, -1.0)
@@ -74,7 +75,7 @@ def declare_standard_envs(args):
     args.init_type = rare
     args.boundary = "outflow"
     args.num_cells = len(rare_state)
-    rare_env = build_env(args.env, args)
+    rare_env = build_env(env_name, args)
     standard_envs.append(rare_env)
 
 def save_action_snapshot(agent, weno_agent=None, suffix=""):

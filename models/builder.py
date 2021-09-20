@@ -50,6 +50,34 @@ def get_model_arg_parser():
  
     return parser
 
+
+def set_contingent_model_defaults(main_args, model_args, test=False):
+    if main_args.model == "sac":
+        if model_args.buffer_size is None:
+            model_args.buffer_size = 10000 if main_args.emi == "std" else 500000
+        if model_args.train_freq is None:
+            model_args.train_freq = 1 if main_args.emi == "std" else env.action_space.shape[0]
+    if model_args.batch_size is None:
+        model_args.batch_size = 10 if main_args.model == "full" else 64
+    if main_args.model == 'pg' or main_args.model == 'reinforce':
+        if model_args.gamma == 0.0:
+            model_args.return_style = "myopic"
+
+    if model_args.replay_style == 'marl':
+        if args.batch_size % (args.nx + 1) != 0:
+            old_batch_size = args.batch_size
+            new_batch_size = old_batch_size + (args.nx + 1) - (old_batch_size % (args.nx + 1))
+            args.batch_size = new_batch_size
+            print("Batch size changed from {} to {} to align with MARL-style replay buffer."
+                    .format(old_batch_size, new_batch_size))
+        if args.buffer_size % (args.nx + 1) != 0:
+            old_buffer_size = args.buffer_size
+            new_buffer_size = old_buffer_size + (args.nx + 1) - (old_buffer_size % (args.nx + 1))
+            args.buffer_size = new_buffer_size
+            print("Replay buffer size changed from {} to {} to align with MARL-style buffer."
+                    .format(old_buffer_size, new_buffer_size))
+ 
+
 def get_optimizer(args):
     if (args.optimizer is None
             or args.optimizer == "sgd"):
