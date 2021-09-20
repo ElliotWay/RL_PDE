@@ -4,7 +4,9 @@ import re
 import sys
 import time
 import argparse
+from argparse import Namespace
 
+from util.param_manager import ArgTreeManager
 from util.misc import get_git_commit_id, is_clean_git_repo, float_dict
 
 META_FILE_NAME = "meta.txt"
@@ -139,9 +141,9 @@ def destring_value(string):
     except Exception:
         return string
 
-def load_to_namespace(meta_filename, args_ns, ignore_list=[], override_args=None):
+def load_to_namespace(meta_filename, arg_manager, ignore_list=[], override_args=None):
     """
-    Load a meta file into a namespace, i.e. the args created by an ArgumentParser.
+    Load a meta file into an argument manager.
 
     Arguments in the meta file can be overridden with explicitly specified values. Explicitly
     specified values are loaded from the command line arguments by default, but can be specified
@@ -149,7 +151,8 @@ def load_to_namespace(meta_filename, args_ns, ignore_list=[], override_args=None
 
     Arguments in the meta file can also be ignored with ignore_list.
 
-    This is a bit of a hack right now - it works because of assumptions I've made about how
+    This provides compatability for the new ArgTreeManager system with the original hacky system.
+    The original system relies on assumptions I've made about how
     arguments are formatted. Two such assumptions are:
     - bool arguments are all False by default and they are set to true by passing them as flags,
       e.g. --use-thing.
@@ -160,8 +163,8 @@ def load_to_namespace(meta_filename, args_ns, ignore_list=[], override_args=None
     ----------
     meta_filename : string
         String containing the path to the meta file.
-    args_ns : Namespace
-        Namespace to load the meta file into, i.e. the args created by the ArgumentParser.
+    arg_manager : ArgTreeManager
+        Argument manager to load the meta file into.
     ignore_list : iterable of string
         List of parameters to NOT load. These paremeters remain None, even if they had
         no explicit overriding value.
@@ -170,33 +173,35 @@ def load_to_namespace(meta_filename, args_ns, ignore_list=[], override_args=None
         file. By default, use the arguments passed on the command line instead.   
 
     """
-    # TODO find a way to get around some of this stuff? Might not be possible.
 
     print("M Loading from meta file: {}".format(meta_filename))
-    print("TODO Clean this up so you don't see a lot of irrelevant information.")
 
     ALWAYS_IGNORE = ['y', 'n']
     ignore_list += ALWAYS_IGNORE
 
-    # Note that this is not a deep copy - changes to the dict will also change the namespace.
-    arg_dict = vars(args_ns)
+    args = arg_manager.args
 
     no_default_parser = argparse.ArgumentParser(argument_default=argparse.SUPPRESS)
-    for arg, value in arg_dict.items():
-        if arg == 'y' or arg == 'n':
-            continue
-        if arg == "fixed_timesteps":
-            continue
-        arg = "--" + arg
-        arg_names = [arg]
-        # Allow for arguments with - instead of _.
-        if '_' in arg:
-            arg_names.append(arg.replace('_', '-'))
-        # Assume bools are flags.
-        if isinstance(value, bool):
-            no_default_parser.add_argument(*arg_names, action='store_true')
-        else:
-            no_default_parser.add_argument(*arg_names)
+    def add_to_no_default_parser(args):
+        for arg, value in vars(args).items():
+            if isinstance(value, Namespace):
+                add_to_no_default_parser(value)
+            else:
+                if arg == 'y' or arg == 'n':
+                    continue
+                if arg == "fixed_timesteps":
+                    continue
+                arg = "--" + arg
+                arg_names = [arg]
+                # Allow for arguments with - instead of _.
+                if '_' in arg:
+                    arg_names.append(arg.replace('_', '-'))
+                # Assume bools are flags.
+                if isinstance(value, bool):
+                    no_default_parser.add_argument(*arg_names, action='store_true')
+                else:
+                    no_default_parser.add_argument(*arg_names)
+    add_to_no_default_parser(args)
     # This is one of the huge problems with this approach.
     no_default_parser.add_argument('--fixed-timesteps', dest='fixed_timesteps', action='store_true',
                         help="Use fixed timesteps. (This is enabled by default.)")
@@ -211,7 +216,6 @@ def load_to_namespace(meta_filename, args_ns, ignore_list=[], override_args=None
     no_default_parser.add_argument('-n', '--n', default=False, action='store_true',
                         help="Choose no for any questions, namely overwriting existing files."
                         + " Useful for scripts. Overrides the -y option.")
-
 
     # Defaults to argv if override_args is None.
     explicit_args, other = no_default_parser.parse_known_args(override_args)
@@ -234,15 +238,21 @@ def load_to_namespace(meta_filename, args_ns, ignore_list=[], override_args=None
         meta_dict['init_params'] = float_dict(meta_dict['init_params'])
         # meta_dict['init_params'] = dict(item.split("=") for item in meta_dict['init_params'].split(", "))
 
-    for arg in arg_dict:
-        if arg not in meta_dict:
-            print("M {} not found in meta file - using default/explicit value ({}).".format(arg, arg_dict[arg]))
-        elif arg in ignore_list:
-            print("M Ignoring {} parameter. (Was {}.)".format(arg, meta_dict[arg]))
-        elif arg in explicit_args:
-            print("M Explicit {} overriding parameter in {}.".format(arg, meta_filename))
-        else:
-            arg_dict[arg] = destring_value(meta_dict[arg])
-
-        # Note: If a parameter was in the meta file, but not the arg namespace,
-        # it was probably a non-parameter field in the meta file.
+    def load_into_nested_namespace(args, meta_dict):
+        arg_dict = vars(args)
+        for arg, old_value in arg_dict.items():
+            if isinstance(old_value, Namespace):
+                load_into_nested_namespace(old_value, meta_dict)
+            else:
+                if arg not in meta_dict:
+                    print("M {} not found in meta file - using default/explicit value ({}).".format(
+                                                                    arg, arg_dict[arg]))
+                elif arg in ignore_list:
+                    print("M Ignoring {} parameter. (Was {}.)".format(arg, meta_dict[arg]))
+                elif arg in explicit_args:
+                    print("M Explicit {} overriding parameter in {}.".format(arg, meta_filename))
+                else:
+                    arg_dict[arg] = destring_value(meta_dict[arg])
+                # Note: If a parameter was in the meta file, but not the arg namespace,
+                # it was probably a non-parameter field in the meta file.
+    load_into_nested_namespace(args, meta_dict)

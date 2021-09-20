@@ -115,91 +115,91 @@ def get_env_arg_parser():
 
     return parser
 
-def set_contingent_env_defaults(main_args, env_args, test=False):
-    if env_args.memoize is None:
-        if env_args.fixed_timesteps:
-            env_args.memoize = True
+def set_contingent_env_defaults(args, test=False):
+    if args.memoize is None:
+        if args.fixed_timesteps:
+            args.memoize = True
         else:
-            env_args.memoize = False
-        #if env_args.init_type in ['random', 'random-many-shocks', 'schedule', 'sample']:
-            #env_args.memoize = False
+            args.memoize = False
+        #if args.init_type in ['random', 'random-many-shocks', 'schedule', 'sample']:
+            #args.memoize = False
         #else:
-            #env_args.memoize = True
+            #args.memoize = True
 
-    if main_args.model == "full" and env_args.reward_mode is None:
+    if args.model == "full" and args.reward_mode is None:
         print("Reward mode forced to use 'one-step' to work with 'full' model.")
-        env_args.reward_mode = "one-step"
+        args.reward_mode = "one-step"
     
-    env_args.reward_mode = AbstractPDEEnv.fill_default_reward_mode(env_args.reward_mode)
-    print("Full reward mode is '{}'.".format(env_args.reward_mode))
+    args.reward_mode = AbstractPDEEnv.fill_default_reward_mode(args.reward_mode)
+    print("Full reward mode is '{}'.".format(args.reward_mode))
 
-    just_defaults = (env_args.num_cells is None and env_args.timestep is None
-            and env_args.time_max is None and env_args.ep_length is None)
-    default_time_max = (env_args.time_max is None)
+    just_defaults = (args.num_cells is None and args.timestep is None
+            and args.time_max is None and args.ep_length is None)
+    default_time_max = (args.time_max is None)
 
     # Some environments have specific defaults.
-    if env_args.init_type == "jsz7":
-        if env_args.min_value is None:
-            env_args.min_value = (0.0,)
-        if env_args.max_value is None:
-            env_args.max_value = (4.0,)
-        if env_args.num_cells is None:
-            env_args.num_cells = (160,)
-        if env_args.time_max is None:
-            env_args.time_max = 0.5
+    if args.init_type == "jsz7":
+        if args.min_value is None:
+            args.min_value = (0.0,)
+        if args.max_value is None:
+            args.max_value = (4.0,)
+        if args.num_cells is None:
+            args.num_cells = (160,)
+        if args.time_max is None:
+            args.time_max = 0.5
     else:
-        if env_args.min_value is None:
-            env_args.min_value = (0.0,)
-        if env_args.max_value is None:
-            env_args.max_value = (1.0,)
+        if args.min_value is None:
+            args.min_value = (0.0,)
+        if args.max_value is None:
+            args.max_value = (1.0,)
 
     try:
-        if env_args.num_cells is not None:
-            _ = iter(env_args.num_cells)
+        if args.num_cells is not None:
+            _ = iter(args.num_cells)
     except TypeError:
-        env_args.num_cells = (env_args.num_cells,)
-        print("num cells changed to ", env_args.num_cells)
+        args.num_cells = (args.num_cells,)
+        print("num cells changed to ", args.num_cells)
     try:
-        _ = iter(env_args.min_value)
+        _ = iter(args.min_value)
     except TypeError:
-        env_args.min_value = (env_args.min_value,)
+        args.min_value = (args.min_value,)
     try:
-        _ = iter(env_args.max_value)
+        _ = iter(args.max_value)
     except TypeError:
-        env_args.max_value = (env_args.max_value,)
+        args.max_value = (args.max_value,)
 
-    dims = env_dimensions(main_args.env)
+    dims = env_dimensions(args.env)
 
     # Most functions expect num_cells to be a tuple of length dims.
-    if env_args.num_cells is not None and len(env_args.num_cells) == 1:
-        env_args.num_cells = (env_args.num_cells[0],) * dims
+    if args.num_cells is not None and len(args.num_cells) == 1:
+        args.num_cells = (args.num_cells[0],) * dims
 
-    if dims > 1 and len(env_args.min_value) == 1:
-        env_args.min_value = (env_args.min_value[0],) * dims
-    if dims > 1 and len(env_args.max_value) == 1:
-        env_args.max_value = (env_args.max_value[0],) * dims
+    if dims > 1 and len(args.min_value) == 1:
+        args.min_value = (args.min_value[0],) * dims
+    if dims > 1 and len(args.max_value) == 1:
+        args.max_value = (args.max_value[0],) * dims
 
-    if env_args.time_max is None and env_args.ep_length is None:
-        env_args.time_max = 0.1
-    if default_time_max and test and env_args.init_type != "jsz7":
+    if args.time_max is None and args.ep_length is None:
+        args.time_max = 0.1
+    if default_time_max and test and args.init_type != "jsz7":
         # Keeping jsz7 always 0.5s, for whatever reason. Not sure why I'm handling this one
         # differently.
-        env_args.time_max = 2 * env_args.time_max
+        args.time_max = 2 * args.time_max
 
     # Make timestep length depend on grid size or vice versa.
     num_cells, dt, ep_length, time_max = AbstractPDEEnv.fill_default_time_vs_space(
-            env_args.num_cells, env_args.min_value, env_args.max_value,
-            dt=env_args.timestep, C=env_args.C, ep_length=env_args.ep_length,
-            time_max=env_args.time_max)
+            args.num_cells, args.min_value, args.max_value,
+            dt=args.timestep, C=args.C, ep_length=args.ep_length,
+            time_max=args.time_max)
 
-    env_args.num_cells = num_cells
-    env_args.timestep = dt
-    env_args.ep_length = ep_length
-    env_args.time_max = time_max
+    args.num_cells = num_cells
+    args.timestep = dt
+    args.ep_length = ep_length
+    args.time_max = time_max
 
-    print("Using {} cells and {}s timesteps.".format(env_args.num_cells, env_args.timestep)
+    print("Using {} cells and {}s timesteps.".format(args.num_cells, args.timestep)
             + " Episode length is {} steps, for a total of {}s.".format(
-                env_args.ep_length, env_args.time_max))
+                args.ep_length, args.time_max))
     if not just_defaults:
         # Add to argv - if we load an agent later, this prevents the agent's parameters
         # from overwriting these, as at least one of which was explicit.
@@ -207,18 +207,18 @@ def set_contingent_env_defaults(main_args, env_args, test=False):
         sys.argv += ['--timestep', str(dt)]
         sys.argv += ['--time_max', std(time_max)]
         sys.argv += ['--ep_length', str(ep_length)]
-    if not env_args.fixed_timesteps:
-        sys.argv += ['--C', str(env_args.C)]
+    if not args.fixed_timesteps:
+        sys.argv += ['--C', str(args.C)]
 
     # Grid constructors expect singletons for 1 dimension.
-    if len(env_args.num_cells) == 1:
-        env_args.num_cells = env_args.num_cells[0]
-    if len(env_args.min_value) == 1:
-        env_args.min_value = env_args.min_value[0]
-    if len(env_args.max_value) == 1:
-        env_args.max_value = env_args.max_value[0]
-    if env_args.boundary is not None and type(env_args.boundary) is not str:
-        env_args.boundary = env_args.boundary[0]
+    if len(args.num_cells) == 1:
+        args.num_cells = args.num_cells[0]
+    if len(args.min_value) == 1:
+        args.min_value = args.min_value[0]
+    if len(args.max_value) == 1:
+        args.max_value = args.max_value[0]
+    if args.boundary is not None and type(args.boundary) is not str:
+        args.boundary = args.boundary[0]
 
 
 def env_dimensions(env_name):

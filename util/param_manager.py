@@ -6,7 +6,7 @@ import yaml
 class _ExplicitArgSentinel:
     pass
 
-class HierarchyParser:
+class ArgTreeManager:
     """
     Assumes that keys in the namespace are valid identifiers and do not contain periods.
     (argparse does not prevent this).
@@ -26,11 +26,14 @@ class HierarchyParser:
     def set_parser(self, argparser):
         self.argparser = argparser
 
+    def print_help(self):
+        self.arg_parser.print_help()
+
     def get_child(self, name, long_name=None):
         if name in self.children:
             return self.children[name]
         else:
-            new_child = HierarchyParser(parent=self)
+            new_child = ArgTreeManager(parent=self)
             self.children[name] = new_child
             self.children_long_names[name] = long_name
             return new_child
@@ -56,14 +59,14 @@ class HierarchyParser:
             # (or in arg_string), and which args are defaults.
             sentinel_dict = dict(vars(main_args)) # Deep copy.
             for key in sentinel_dict:
-                sentinel_dict[key] = HierarchyParser.sentinel
+                sentinel_dict[key] = ArgTreeManager.sentinel
             sentinel_ns = Namespace(**sentinel_dict)
             # ArgumentParser.parse_known_args() can take a 'namespace' argument. Not only will this
             # populate the passed namespace instead of creating a new one, but anything already in
             # that namespace will override any defaults.
             self.argparser.parse_known_args(arg_string, namespace=sentinel_ns)
             # Now anything in sentinel_ns that is still a sentinel was NOT passed explicitly.
-            self.explicit = {key: value is not HierarchyParser.sentinel for key, value in
+            self.explicit = {key: value is not ArgTreeManager.sentinel for key, value in
                     vars(sentinel_ns).items()}
 
             arg_string = remaining_arg_string
@@ -93,11 +96,12 @@ class HierarchyParser:
         indent_prefix = "  " * indent
         for k, v in vars(self.args).items():
             if not isinstance(v, Namespace):
-                comment = "" if not self.explicit[k] else " #(Explicit)"
-                lines.append(f"{indent_prefix}{k}: {v}{comment}")
+                value = yaml.dump(v, default_flow_style=True)
+                comment = "" if not self.explicit[k] else " # (Explicit)"
+                lines.append(f"{indent_prefix}{k}: {value}{comment}")
         for child_name, child in self.children.items():
             comment = ("" if self.children_long_names[child_name] is None else
-                            f" #{self.children_long_names[child_name]}")
+                            f" # {self.children_long_names[child_name]}")
             lines.append(f"{indent_prefix}{child_name}:{comment}")
             lines.append(child.serialize(indent+1))
         return "\n".join(lines)
@@ -112,10 +116,7 @@ class HierarchyParser:
             elif name in self.children:
                 print(f"Param: {name} parameter family not found, cannot load, using defaults.")
         for name in load_dict_names - my_names:
-            if not isinstance(load_dict[name], dict):
-                print(f"Param: {name} not recognized, cannot load.")
-            else:
-                print(f"Param: {name} parameter family not recognized, cannot load.")
+            print(f"Param: {name} not recognized, cannot load.")
 
         for name in my_names & load_dict_names:
             if not name in self.children:
@@ -138,7 +139,7 @@ if __name__ == "__main__":
     child3_args = argparse.ArgumentParser()
     child3_args.add_argument('--child3_arg', default=3)
 
-    root_parser = HierarchyParser()
+    root_parser = ArgTreeManager()
     child1_parser = root_parser.get_child('child1', "Child1 Long Name")
     child1_parser.set_parser(child1_args)
 

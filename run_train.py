@@ -15,6 +15,7 @@ import tensorflow as tf
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 import matplotlib
 matplotlib.use("Agg")
+import yaml
 
 #TODO: Remove dependency on this logger. The functionality we need can be easily implemented.
 from stable_baselines import logger
@@ -25,6 +26,7 @@ from rl_pde.emi import DimensionalAdapterEMI, VectorAdapterEMI
 from envs import builder as env_builder
 from models import get_model_arg_parser
 from util import metadata, action_snapshot
+from util.param_manager import ArgTreeManager
 from util.function_dict import numpy_fn
 from util.lookup import get_model_class, get_emi_class, get_model_dims
 from util.misc import rescale, set_global_seed
@@ -32,6 +34,7 @@ from util.misc import rescale, set_global_seed
 ON_POSIX = 'posix' in sys.builtin_module_names
 
 def main():
+    arg_manager = ArgTreeManager()
     parser = argparse.ArgumentParser(
         description="Train an RL agent in an environment. Note that this script also takes various arguments not listed here.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -45,6 +48,7 @@ def main():
                         help="Name of the environment in which to train the agent.")
     parser.add_argument('--emi', type=str, default='batch',
                         help="Environment-model interface. Options are 'batch' and 'std'.")
+    #TODO move these into model parameters, probably
     parser.add_argument('--obs-scale', '--obs_scale', type=str, default='z_score_last',
                         help="Adjustment function to observation. Compute Z score along the last"
                         + " dimension (the stencil) with 'z_score_last', the Z score along every"
@@ -70,51 +74,55 @@ def main():
     parser.add_argument('--seed', type=int, default=1,
                         help="Set random seed for reproducibility.")
     parser.add_argument('--repeat', type=str, default=None,
-                        help="Copy parameters from a meta.txt file to run a similar or identical experiment."
-                        + " Explicitly passed parameters override parameters in the meta file."
-                        + " Passing an explicit --log-dir is recommended.")
+                        help="Load all of the parameters from a previous experiment to run a"
+                        + " similar or identical experiment. Explicitly passed parameters override"
+                        + " loaded paramters. Passing an explicit --log-dir is recommend.")
     parser.add_argument('-y', '--y', default=False, action='store_true',
                         help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
     parser.add_argument('-n', '--n', default=False, action='store_true',
                         help="Choose no for any questions, namely overwriting existing files."
                         + " Useful for scripts. Overrides the -y option.")
 
-    main_args, rest = parser.parse_known_args()
+    arg_manager.set_parser(parser)
+    env_arg_manager = arg_manager.get_child("e", long_name="Environment Parameters")
+    env_arg_manager.set_parser(env_builder.get_env_arg_parser())
+    model_arg_manager = arg_manager.get_child("m", long_name="Model Parameters")
+    model_arg_manager.set_parser(get_model_arg_parser())
 
-    env_arg_parser = env_builder.get_env_arg_parser()
-    env_args, rest = env_arg_parser.parse_known_args(rest)
-    env_builder.set_contingent_env_defaults(main_args, env_args, test=False)
+    args, rest = arg_manager.parse_known_args()
 
-    model_arg_parser = get_model_arg_parser()
-    model_args, rest = model_arg_parser.parse_known_args(rest)
+    env_builder.set_contingent_env_defaults(args, test=False)
     # TODO Create separate model contingent defaults too, probably.
      
-    if main_args.env.startswith("weno"):
+    if args.env.startswith("weno"):
         mode = "weno"
-    elif main_args.env.startswith("split_flux"):
+    elif args.env.startswith("split_flux"):
         mode = "split_flux"
-    elif main_args.env.startswith("flux"):
+    elif args.env.startswith("flux"):
         mode = "flux"
     else:
         mode = "n/a"
-    # TODO internal args? Shouldn't such args be external? IE replace env arg with mode+problem?
-    # Reason not to is that it would hide the fact that different modes are really different envs.
-    internal_args = {'mode':mode}
-
-    args = Namespace(**vars(main_args), **vars(env_args), **vars(model_args), **internal_args)
+    args.mode = mode
 
     if args.help_env or args.help_model:
         if args.help_env:
-            env_arg_parser.print_help()
+            env_arg_manager.print_help()
         if args.help_model:
-            model_arg_parser.print_help()
+            model_arg_manager.print_help()
         sys.exit(0)
 
     if len(rest) > 0:
         raise Exception("Unrecognized arguments: " + " ".join(rest))
 
     if args.repeat is not None:
-        metadata.load_to_namespace(args.repeat, args)
+        _, extension = os.path.splitext(args.repeat)
+
+        if extension == '.yaml':
+            args_dict = yaml.safe_load(args.repeat)
+            arg_manager.load_from_dict(args_dict)
+        else:
+            # Original meta.txt format.
+            metadata.load_to_namespace(args.repeat, arg_manager)
 
     set_global_seed(args.seed)
 
