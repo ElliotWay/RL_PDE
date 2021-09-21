@@ -55,7 +55,7 @@ class BatchGlobalEMI(EMI, OneDimensionalStencil):
                                           # environment is randomized.
             env_args_copy.analytical = False
 
-            self.weno_solution_env = build_env(args.env, env_args_copy)
+            self.weno_solution_env = build_env(self.args.env, env_args_copy)
 
     def training_episode(self, env):
         self._declare_solution_env()

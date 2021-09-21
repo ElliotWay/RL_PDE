@@ -171,8 +171,6 @@ def main():
     else:
         raise Exception("eval env type \"{}\" not recognized.".format(args.eval_env))
 
-    action_snapshot.declare_standard_envs(args.e)
-
     # Fill in defaults that are contingent on other arguments.
     if args.m.replay_style == 'marl':
         if args.emi != 'marl':
@@ -303,14 +301,14 @@ def main():
         train(env, eval_envs, emi, args)
     except KeyboardInterrupt:
         print("Training stopped by interrupt.")
-        meta_file.log_finish_time(args.log_dir, status="stopped by interrupt")
+        meta_file.log_finish_time(status="stopped by interrupt")
         sys.exit(0)
     except Exception as e:
-        meta_file.log_finish_time(args.log_dir, status="stopped by exception: {}".format(type(e).__name__))
+        meta_file.log_finish_time(status="stopped by exception: {}".format(type(e).__name__))
         raise  # Re-raise so exception is also printed.
 
     print("Finished!")
-    meta_file.log_finish_time(args.log_dir, status="finished cleanly")
+    meta_file.log_finish_time(status="finished cleanly")
 
     model_file_name = os.path.join(args.log_dir, "model_final")
     emi.save_model(model_file_name)

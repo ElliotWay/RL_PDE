@@ -226,9 +226,9 @@ def write_final_plots(log_dir, summary_plot_dir, total_episodes, eval_env_names)
 
 def train(env, eval_envs, emi, args):
 
-    action_snapshot.declare_standard_envs(args)
+    action_snapshot.declare_standard_envs(args.e)
 
-    weno_agent = StandardWENOAgent(order=args.order,
+    weno_agent = StandardWENOAgent(order=args.e.order,
             action_type=env_builder.env_action_type(args.env))
 
     ep_precision = int(np.ceil(np.log(1+args.total_episodes) / np.log(10)))

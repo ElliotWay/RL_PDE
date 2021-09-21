@@ -80,7 +80,7 @@ class MetaFile:
         self.preamble = "\n".join(preamble_lines)
 
     def _write(self):
-        meta_file = open(self.path, 'x')
+        meta_file = open(self.path, 'w')
         meta_file.write(self.preamble)
         meta_file.write("\n\n")
         meta_file.write(self.serialized_parameters)
