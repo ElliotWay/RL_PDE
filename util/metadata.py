@@ -7,17 +7,131 @@ import argparse
 from argparse import Namespace
 
 from util.param_manager import ArgTreeManager
-from util.misc import get_git_commit_id, is_clean_git_repo, float_dict
+from util.misc import float_dict
+from util.git import git_commit_hash, git_is_clean, git_branch_name
 
-META_FILE_NAME = "meta.txt"
+META_FILE_NAME = "meta.yaml"
+OLD_META_FILE_NAME = "meta.txt"
+
+class MetaFile:
+    def __init__(self, log_dir, arg_manager, name=META_FILE_NAME):
+        self.path = os.path.join(log_dir, name)
+        self.arg_manager = arg_manager
+        self.preamble = None
+        self.serialized_parameters = None
+
+    def _create_preamble_information(self):
+        args = self.arg_manager.args
+
+        preamble_lines = []
+
+        preamble_lines.append("# {}".format(self.path))
+        preamble_lines.append("# Experiment Parameter File")
+
+        start_time = time.localtime()
+        time_str = time.strftime("%Y/%m/%d, %I:%M:%S %p (%Z), %a", start_time)
+        preamble_lines.append("# time started: {}".format(time_str))
+
+        preamble_lines.append("# time finished: ????")
+        preamble_lines.append("# status: running")
+
+        try:
+            import pwd
+            current_user = pwd.getpwuid(os.getuid()).pw_name
+            preamble_lines.append("# initiated by user: {}".format(current_user))
+        except ImportError:
+            preamble_lines.append("# initiated by user: UNKNOWN (run on Windows machine)")
+
+        return_code, commit_id = git_commit_hash()
+        if return_code != 0:
+            if args.n:
+                raise Exception("Git couldn't find HEAD! Are we still in a git repo?")
+            elif not args.y:
+                _ignore = input("Git couldn't find HEAD."
+                                + " Hit <Enter> to continue without recording commit id, or Ctrl-C to stop.")
+        else:
+            if not re.match("^[0-9a-f]*$", commit_id):
+                if not args.y:
+                    print("Corrupted commit hash: {}. Fix your git repo before continuing.".format(commit_id))
+                    sys.exit(1)
+                else:
+                    print("Commit hash is corrupted: {}. Something is seriously wrong!".format(commit_id))
+            preamble_lines.append("# git commit hash: {}".format(commit_id))
+
+            if git_is_clean():
+                preamble_lines.append("git status: clean")
+            else:
+                preamble_lines.append("git status: uncommited changes")
+
+            return_code, branch_name = git_branch_name()
+            if return_code != 0:
+                if args.n:
+                    raise Exception("Git couldn't find a branch name?")
+                elif not args.y:
+                    _ignore = input("Git couldn't find a branch name. Hit <Enter> to continue"
+                            + " without recording the branch name, or Ctrl-C to stop.")
+                preamble_lines.append("# git branch: <error>")
+            else:
+                preamble_lines.append("# git branch: {}".format(branch_name))
+
+        pid = os.getpid()
+        preamble_lines.append("pid: {}".format(pid))
+
+        self.preamble = "\n".join(preamble_lines)
+
+    def _write(self):
+        meta_file = open(self.path, 'x')
+        meta_file.write(self.preamble)
+        meta_file.write("\n\n")
+        meta_file.write(self.serialized_parameters)
+        meta_file.write("\n")
+        meta_file.close()
+
+    def write_new(self):
+        if self.preamble is None:
+            self._create_preamble_information()
+        self.serialized_parameters = self.arg_manager.serialize()
+        self._write()
+
+    def log_finish_time(self, status="finished"):
+        end_time = time.localtime()
+        time_str = time.strftime("%Y/%m/%d, %I:%M:%S %p (%Z), %a", end_time)
+
+        preamble_lines = self.preamble.split("\n")
+        set_finish_time = False
+        set_status = False
+        for index, line in enumerate(preamble_lines):
+            if not set_finish_time and re.search("time finished:", line):
+                set_finish_time = True
+                new_line = "# time finished: {}".format(time_str)
+                preamble_lines[index] = new_line
+            elif not set_status and re.search("status:", line):
+                set_status = True
+                new_line = "# status: {}".format(status)
+                preamble_lines[index] = new_line
+
+            if set_finish_time and set_status:
+                break
+
+        if not set_finish_time or not set_status:
+            print("Meta: Failed to log finish time correctly.")
+
+        self.preamble = "\n".join(preamble_lines)
+        self._write()
+
+    def update(self):
+        self.serialized_parameters = self.arg_manager.serialize()
+        self._write()
 
 
-def create_meta_file(log_dir, args):
+# The original function for creating a meta file. This version is left here for reference, as we still
+# have a lot of experiments with this format of meta file around.
+def create_old_meta_file(log_dir, args):
     #################################################################
     # If adding new metadata, remember that lines MUST end with \n. #
     #################################################################
 
-    meta_filename = os.path.join(log_dir, META_FILE_NAME)
+    meta_filename = os.path.join(log_dir, OLD_META_FILE_NAME)
     meta_file = open(meta_filename, 'x')
 
     start_time = time.localtime()
@@ -67,9 +181,9 @@ def create_meta_file(log_dir, args):
 
     meta_file.close()
 
-
+# The original function for logging the finish time. Kept for reference.
 def log_finish_time(log_dir, status="finished"):
-    meta_filename = os.path.join(log_dir, META_FILE_NAME)
+    meta_filename = os.path.join(log_dir, OLD_META_FILE_NAME)
 
     end_time = time.localtime()
     time_str = time.strftime("%Y/%m/%d, %I:%M:%S %p (%Z), %a", end_time)
@@ -102,6 +216,7 @@ def log_finish_time(log_dir, status="finished"):
         meta_file.write(line)
     meta_file.close()
 
+# The original function for loading a meta file. Kept for reference.
 def load_meta_file(meta_filename):
     meta_file = open(meta_filename)
     meta_dict = {}
@@ -112,35 +227,14 @@ def load_meta_file(meta_filename):
     meta_file.close()
     return meta_dict
 
-# This version didn't quite work as intended.
-def override_argv(meta_arg_name="--repeat"):
-    new_argv = sys.argv
-    new_argv.append("$override_sentinel")
-    if meta_arg_name in sys.argv:
-        meta_filename = sys.argv[sys.argv.index(meta_arg_name) + 1]
-        meta_dict = load_meta_file(meta_filename)
-        for arg, value in meta_dict.items():
-            if value != "None":
-                arg = "--" + arg
-                if arg in sys.argv or arg.replace('_', '-') in sys.argv:
-                    print("Explicit {} overriding parameter in {}.".format(arg, meta_filename))
-                else:
-                    if isinstance(value, bool):
-                        new_argv.append(arg)
-                    elif value[0] == '[' and value[-1] == ']':
-                        values = value[1:-1].split(",")
-                        new_argv.append(arg)
-                        new_argv += values
-                    else:
-                        new_argv += [arg, value]
-    return new_argv[1:] # Remove name of file.
-
 def destring_value(string):
     try:
         return eval(string)
     except Exception:
         return string
 
+# Not the original function - this is the updated version of the old function to allow backwards
+# compatability with existing meta files.
 def load_to_namespace(meta_filename, arg_manager, ignore_list=[], override_args=None):
     """
     Load a meta file into an argument manager.

@@ -109,6 +109,19 @@ class ArgTreeManager:
         return args_dict
 
     def serialize(self, indent=0):
+        """
+        Convert all of the parameters and nested parameters into a YAML string.
+        Comments are added for the long names of each children, and for each explicit parameter.
+
+        Parameters
+        ----------
+        indent : int
+            Level of indentation. Used internally to manager the indentation of children.
+
+        Returns
+        -------
+        The string representation of the parameters.
+        """
         lines = []
         indent_prefix = "  " * indent
         for k, v in vars(self.args).items():

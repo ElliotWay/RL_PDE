@@ -25,7 +25,8 @@ from rl_pde.run import train
 from rl_pde.emi import DimensionalAdapterEMI, VectorAdapterEMI
 from envs import builder as env_builder
 from models import builder as model_builder
-from util import metadata, action_snapshot
+from util import action_snapshot
+from util.metadata import MetaFile
 from util.param_manager import ArgTreeManager
 from util.function_dict import numpy_fn
 from util.lookup import get_model_class, get_emi_class, get_model_dims
@@ -296,7 +297,8 @@ def main():
         except OSError:
             print("Failed to create \"last\" symlink. Continuing without it.")
 
-    metadata.create_meta_file(args.log_dir, args)
+    meta_file = MetaFile(args.log_dir, arg_manager)
+    meta_file.write_new()
 
     # Put stable-baselines logs in same directory.
     #TODO Get rid of this dependency, only connect these logs when using an SB model wrapper.
@@ -309,14 +311,14 @@ def main():
         train(env, eval_envs, emi, args)
     except KeyboardInterrupt:
         print("Training stopped by interrupt.")
-        metadata.log_finish_time(args.log_dir, status="stopped by interrupt")
+        meta_file.log_finish_time(args.log_dir, status="stopped by interrupt")
         sys.exit(0)
     except Exception as e:
-        metadata.log_finish_time(args.log_dir, status="stopped by exception: {}".format(type(e).__name__))
+        meta_file.log_finish_time(args.log_dir, status="stopped by exception: {}".format(type(e).__name__))
         raise  # Re-raise so exception is also printed.
 
     print("Finished!")
-    metadata.log_finish_time(args.log_dir, status="finished cleanly")
+    meta_file.log_finish_time(args.log_dir, status="finished cleanly")
 
     model_file_name = os.path.join(args.log_dir, "model_final")
     emi.save_model(model_file_name)
