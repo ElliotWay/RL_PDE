@@ -48,6 +48,7 @@ def main():
                         help="Name of the environment in which to train the agent.")
     parser.add_argument('--emi', type=str, default='batch',
                         help="Environment-model interface. Options are 'batch' and 'std'.")
+    # TODO Should obs-scale and action-scale be in model parameters?
     parser.add_argument('--obs-scale', '--obs_scale', type=str, default='z_score_last',
                         help="Adjustment function to observation. Compute Z score along the last"
                         + " dimension (the stencil) with 'z_score_last', the Z score along every"
@@ -138,8 +139,8 @@ def main():
         if args.env == "weno_burgers":
             eval_envs = []
             eval_env_args.boundary = None
-            eval_env_args.ep_length = args.ep_length * 2
-            eval_env_args.time_max = args.time_max * 2
+            eval_env_args.ep_length = args.e.ep_length * 2
+            eval_env_args.time_max = args.e.time_max * 2
             
             eval_env_args.init_type = "smooth_sine"
             eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
@@ -153,8 +154,8 @@ def main():
         elif args.env == "weno_burgers_2d":
             eval_envs = []
             eval_env_args.boundary = None
-            eval_env_args.ep_length = args.ep_length * 2
-            eval_env_args.time_max = args.time_max * 2
+            eval_env_args.ep_length = args.e.ep_length * 2
+            eval_env_args.time_max = args.e.time_max * 2
 
             eval_env_args.init_type = "gaussian"
             eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
@@ -170,7 +171,7 @@ def main():
             eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
 
     elif args.eval_env == "long":
-        eval_env_args.ep_length = args.ep_length * 2
+        eval_env_args.ep_length = args.e.ep_length * 2
         eval_envs = [env_builder.build_env(args.env, eval_env_args, test=True)]
     elif args.eval_env == "same" or args.eval_env is None:
         eval_envs = [env_builder.build_env(args.env, eval_env_args, test=True)]

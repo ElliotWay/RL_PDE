@@ -14,7 +14,7 @@ class FixedOneStepModel(Model):
     def __init__(self, env, args):
         #self.weights = np.zeros(env.action_space.shape)
         self.weights = np.random.uniform(-1.0, 1.0, env.action_space.shape)
-        self.learning_rate = args.learning_rate
+        self.learning_rate = args.m.learning_rate
         self.learning_rate_decay = 1.0 #0.999
         self.action_noise = 0.1
         self.noise_decay = 1.0 #0.99

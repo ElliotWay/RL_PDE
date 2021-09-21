@@ -131,7 +131,7 @@ class GlobalBackpropModel(GlobalModel):
                 # Could restrict steps to something smaller.
                 # This loses some of the benefits of RL long-term planning, but may be necessary in
                 # high dimensional environments.
-                state, action, reward = rnn(initial_state_ph, num_steps=self.args.ep_length)
+                state, action, reward = rnn(initial_state_ph, num_steps=self.args.e.ep_length)
                 self.state_dict[boundary] = state
                 self.action_dict[boundary] = action
                 self.reward_dict[boundary] = reward
@@ -167,7 +167,7 @@ class GlobalBackpropModel(GlobalModel):
             self.params_nan_check = {param.name: tf.reduce_any(tf.is_nan(param))
                                         for param in self.policy_params}
 
-            self.optimizer = get_optimizer(self.args)
+            self.optimizer = get_optimizer(self.args.m)
             self.train_policy = self.optimizer.apply_gradients(self.grads)
 
             if not self.preloaded:
@@ -190,7 +190,7 @@ class GlobalBackpropModel(GlobalModel):
             # Note: passing a name to the constructor of a Keras Layer has the effect
             # of putting everything in that layer in the scope of that name.
             # tf.variable_scope does not play well with Keras.
-            self.policy = PolicyNet(layers=self.args.layers, action_shape=action_shape,
+            self.policy = PolicyNet(layers=self.args.m.layers, action_shape=action_shape,
                     activation_fn=tf.nn.relu, name="policy", dtype=self.dtype)
 
             # Direct policy input and output used in predict() method during testing.

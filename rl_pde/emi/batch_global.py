@@ -42,9 +42,9 @@ class BatchGlobalEMI(EMI, OneDimensionalStencil):
             # To record the "full" error, that is, the difference between the solution following the
             # agent and the solution following WENO from the beginning, we need to keep a separate copy
             # of the WENO solution.
-            args_copy = Namespace(**vars(self.args))
-            if args_copy.reward_mode is not None:
-                args_copy.reward_mode = args_copy.reward_mode.replace('one-step', 'full')
+            env_args_copy = Namespace(**vars(self.args.e))
+            if env_args_copy.reward_mode is not None:
+                env_args_copy.reward_mode = env_args_copy.reward_mode.replace('one-step', 'full')
             # Note: just use the given memoization parameter for now.
             # The random environments have been discretized so that they can be memoized anyway.
             #if not "random" in args_copy.init_type and args_copy.fixed_timesteps:
@@ -53,14 +53,14 @@ class BatchGlobalEMI(EMI, OneDimensionalStencil):
             #else:
                 #args_copy.memoize = False # Unfortunately we HAVE to recompute each time if the
                                           # environment is randomized.
-            args_copy.analytical = False
+            env_args_copy.analytical = False
 
-            self.weno_solution_env = build_env(args_copy.env, args_copy)
+            self.weno_solution_env = build_env(args.env, env_args_copy)
 
     def training_episode(self, env):
         self._declare_solution_env()
 
-        num_inits = self.args.batch_size
+        num_inits = self.args.m.batch_size
         initial_conditions = []
         init_params = []
         for _ in range(num_inits):
@@ -105,7 +105,7 @@ class BatchGlobalEMI(EMI, OneDimensionalStencil):
         info_dict['reward'] = tuple([np.mean(np.sum(reward_part, axis=0), axis=0) for
                                         reward_part in rewards])
         info_dict['l2_error'] = avg_l2_error
-        info_dict['timesteps'] = num_inits * self.args.ep_length
+        info_dict['timesteps'] = num_inits * self.args.e.ep_length
         info_dict.update(extra_info)
         return info_dict
 

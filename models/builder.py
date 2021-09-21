@@ -78,18 +78,18 @@ def set_contingent_model_defaults(main_args, model_args, test=False):
                     .format(old_buffer_size, new_buffer_size))
  
 
-def get_optimizer(args):
-    if (args.optimizer is None
-            or args.optimizer == "sgd"):
-        optimizer = tf.train.GradientDescentOptimizer(learning_rate=args.learning_rate)
-    elif args.optimizer == "adam":
-        optimizer = tf.train.AdamOptimizer(learning_rate=args.learning_rate)
-    elif args.optimizer == "momentum":
-        optimizer = tf.train.MomentumOptimizer(learning_rate=args.learning_rate,
-                momemntum=args.momentum)
-    elif args.optimizer == "rmsprop":
-        optimizer = tf.train.RMSPropOptimizer(learning_rate=args.learning_rate,
-                decay=0.99, momentum=args.momentum, epsilon=1e-5)
+def get_optimizer(model_args):
+    if (model_args.optimizer is None
+            or model_args.optimizer == "sgd"):
+        optimizer = tf.train.GradientDescentOptimizer(learning_rate=model_args.learning_rate)
+    elif model_args.optimizer == "adam":
+        optimizer = tf.train.AdamOptimizer(learning_rate=model_args.learning_rate)
+    elif model_args.optimizer == "momentum":
+        optimizer = tf.train.MomentumOptimizer(learning_rate=model_args.learning_rate,
+                momemntum=model_args.momentum)
+    elif model_args.optimizer == "rmsprop":
+        optimizer = tf.train.RMSPropOptimizer(learning_rate=model_args.learning_rate,
+                decay=0.99, momentum=model_args.momentum, epsilon=1e-5)
     else:
-        raise Exception("Unknown optimizer: {}".format(args.optimizer))
+        raise Exception("Unknown optimizer: {}".format(model_args.optimizer))
     return optimizer
