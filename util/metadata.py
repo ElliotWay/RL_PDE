@@ -268,9 +268,7 @@ def load_to_namespace(meta_filename, arg_manager, ignore_list=[], override_args=
 
     """
 
-    print("M Loading from meta file: {}".format(meta_filename))
-
-    ALWAYS_IGNORE = ['y', 'n']
+    ALWAYS_IGNORE = ['y', 'n', 'fixed_timesteps', 'memoize']
     ignore_list += ALWAYS_IGNORE
 
     args = arg_manager.args
@@ -334,19 +332,32 @@ def load_to_namespace(meta_filename, arg_manager, ignore_list=[], override_args=
 
     def load_into_nested_namespace(args, meta_dict):
         arg_dict = vars(args)
-        for arg, old_value in arg_dict.items():
-            if isinstance(old_value, Namespace):
-                load_into_nested_namespace(old_value, meta_dict)
+        sub_namespaces = []
+        only_in_self = []
+        ignored = []
+        explicit = []
+        for arg in arg_dict:
+            if isinstance(arg_dict[arg], Namespace):
+                sub_namespaces.append(arg_dict[arg])
+            elif arg not in meta_dict:
+                only_in_self.append(arg)
+            elif arg in ignore_list:
+                ignored.append(arg)
+            elif arg in explicit_args:
+                explicit.append(arg)
             else:
-                if arg not in meta_dict:
-                    print("M {} not found in meta file - using default/explicit value ({}).".format(
-                                                                    arg, arg_dict[arg]))
-                elif arg in ignore_list:
-                    print("M Ignoring {} parameter. (Was {}.)".format(arg, meta_dict[arg]))
-                elif arg in explicit_args:
-                    print("M Explicit {} overriding parameter in {}.".format(arg, meta_filename))
-                else:
-                    arg_dict[arg] = destring_value(meta_dict[arg])
-                # Note: If a parameter was in the meta file, but not the arg namespace,
-                # it was probably a non-parameter field in the meta file.
+                arg_dict[arg] = destring_value(meta_dict[arg])
+
+        if len(only_in_self) > 0:
+            print("M Some parameters were not found in loaded file: "
+                    + ", ".join([f"{name}: {arg_dict[name]}" for name in only_in_self]))
+        if len(ignored) > 0:
+            print("M Intentionally ignoring some parameters: "
+                    + ", ".join(ignored))
+        if len(explicit) > 0:
+            print("M Explicit parameters overriding loaded parameters: "
+                    + ", ".join(explicit))
+
+        for sub_args in sub_namespaces:
+            load_into_nested_namespace(sub_args, meta_dict)
     load_into_nested_namespace(args, meta_dict)

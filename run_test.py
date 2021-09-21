@@ -22,10 +22,11 @@ from rl_pde.agents import get_agent, ExtendAgent2D
 from envs import builder as env_builder
 from envs import AbstractPDEEnv
 from envs import Plottable1DEnv, Plottable2DEnv
-from models import get_model_arg_parser
+from models import builder as model_builder
 from models import SACModel, PolicyGradientModel, TestModel
-from util import metadata
 from util import plots
+from util import metadata
+from util.param_manager import ArgTreeManager
 from util.function_dict import numpy_fn
 from util.lookup import get_model_class, get_emi_class, get_model_dims
 from util.misc import set_global_seed
@@ -69,7 +70,7 @@ def do_test(env, agent, args):
             env.plot_action(**render_args)
         if step == next_update + 1:
             update_count += 1
-            next_update = int(args.ep_length * (update_count / NUM_UPDATES))
+            next_update = int(args.e.ep_length * (update_count / NUM_UPDATES))
 
     start_time = time.time()
     _, _, rewards, _, _ = rollout(env, agent,
@@ -132,6 +133,7 @@ def do_test(env, agent, args):
     return error
 
 def main():
+    arg_manager = ArgTreeManager()
     parser = argparse.ArgumentParser(
         description="Deploy an existing RL agent in an environment. Note that this script also takes various arguments not listed here.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -139,7 +141,7 @@ def main():
                         help="Do not test and show the environment parameters not listed here.")
     parser.add_argument('--agent', '-a', type=str, default="default",
                         help="Agent to test. Either a file or a string for a standard agent."
-                        + " Parameters are loaded from 'meta.txt' in the same directory as the"
+                        + " Parameters are loaded from 'meta.[yaml|txt]' in the same directory as the"
                         + " agent file, but can be overriden."
                         + " 'default' uses standard weno coefficients. 'none' forces no agent and"
                         + " only plots the true solution (ONLY IMPLEMENTED FOR EVOLUTION PLOTS).")
@@ -182,84 +184,89 @@ def main():
     parser.add_argument('-n', '--n', default=False, action='store_true',
                         help="Choose no for any questions, namely overwriting existing files. Useful for scripts. Overrides the -y option.")
 
-    main_args, rest = parser.parse_known_args()
+    arg_manager.set_parser(parser)
+    env_arg_manager = arg_manager.get_child("e", long_name="Environment Parameters")
+    env_arg_manager.set_parser(env_builder.get_env_arg_parser())
+    # Testing has 'model parameters', but these are really intended to be loaded from a file.
+    model_arg_manager = arg_manager.get_child("m", long_name="Model Parameters")
+    model_arg_manager.set_parser(model_builder.get_model_arg_parser())
 
-    env_arg_parser = env_builder.get_env_arg_parser()
-    env_args, rest = env_arg_parser.parse_known_args(rest)
-    env_builder.set_contingent_env_defaults(main_args, env_args, test=True)
-
-    # run_test.py has model arguments that can be overidden, if desired,
-    # but are intended to be loaded from a meta file.
-    model_arg_parser = get_model_arg_parser()
-    model_args, rest = model_arg_parser.parse_known_args(rest)
-
-    if len(rest) > 0:
-        print("Unrecognized arguments: " + " ".join(rest))
-        sys.exit(0)
+    args, rest = arg_manager.parse_known_args()
 
     if args.help_env:
         env_arg_parser.print_help()
         sys.exit(0)
 
+    if len(rest) > 0:
+        print("Unrecognized arguments: " + " ".join(rest))
+        sys.exit(0)
+
+    env_builder.set_contingent_env_defaults(args, args.e, test=True)
+    model_builder.set_contingent_model_defaults(args, args.m, test=True)
+
     env_action_type = env_builder.env_action_type(args.env)
     dims = env_builder.env_dimensions(args.env)
 
     # Load basic agent, if one was specified.
-    agent = get_agent(args.agent, order=args.order, env_action_type=env_action_type, dimensions=dims)
+    agent = get_agent(args.agent, order=args.e.order, action_type=env_action_type, dimensions=dims)
     # If the returned agent is None, assume it is the file name of a real agent.
-    # If a real agent is specified, load parameters from its meta file.
+    # If a real agent is specified, load the model parameters from its meta file.
     # This only overrides arguments that were not explicitly specified.
-    #TODO: Find more reliable way of doing this so we are robust to argument changes.
     if agent is None:
         if not os.path.isfile(args.agent):
             raise Exception("Agent file \"{}\" not found.".format(args.agent))
 
         model_file = os.path.abspath(args.agent)
         model_directory = os.path.dirname(model_file)
-        meta_file = os.path.join(model_directory, "meta.txt")
-        if not os.path.isfile(meta_file):
-            raise Exception("Meta file \"{}\" for agent not found.".format(meta_file))
+        meta_file = os.path.join(model_directory, metadata.META_FILE_NAME)
+        if os.path.isfile(meta_file):
+            args_dict = yaml.safe_load(meta_file)
+            model_arg_manager.load_from_dict(args_dict['m'])
+        else:
+            meta_file = os.path.join(model_directory, metadata.OLD_META_FILE_NAME)
+            if not os.path.isfile(meta_file):
+                raise Exception("Meta file \"{}\" for agent not found.".format(meta_file))
 
-        #TODO: Just make it only load model parameters.
-        metadata.load_to_namespace(meta_file, args,
-                ignore_list=['log_dir', 'ep_length', 'time_max', 'timestep',
-                            'num_cells', 'min_value', 'max_value'])
+            metadata.load_to_namespace(meta_file, arg_manager,
+                    ignore_list=['log_dir', 'ep_length', 'time_max', 'timestep',
+                                'num_cells', 'min_value', 'max_value'])
 
     set_global_seed(args.seed)
 
-    if args.memoize is None:
-        args.memoize = False
-
     if not args.convergence_plot:
-        env = env_builder.build_env(args.env, args, test=True)
+        env = env_builder.build_env(args.env, args.e, test=True)
     else:
-        #args.analytical = True # Compare to analytical solution (preferred)
-        args.analytical = False # Compare to WENO (necessary when WENO isn't accurate either)
-        if args.reward_mode is not None and 'one-step' in args.reward_mode:
+        env_manager_copy = env_arg_manager.copy()
+        env_args = env_manager_copy.args
+        #env_args.analytical = True # Compare to analytical solution (preferred)
+        env_args.analytical = False # Compare to WENO (necessary when WENO isn't accurate either)
+        if env_args.reward_mode is not None and 'one-step' in env_args.reward_mode:
             print("Reward mode switched to 'full' instead of 'one-step' for convergence plots.")
-            args.reward_mode = args.reward_mode.replace('one-step', 'full')
+            env_args.reward_mode = env_args.reward_mode.replace('one-step', 'full')
         if dims == 1:
             CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]#, 1024, 2048, 4096, 8192]
             #CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512, 1024, 2048, 4096, 8192]
             #CONVERGENCE_PLOT_GRID_RANGE = (2**np.linspace(6.0, 8.0, 50)).astype(np.int)
         elif dims == 2:
             CONVERGENCE_PLOT_GRID_RANGE = [32, 64, 128, 256]
-        envs = []
-        env_args = []
+
+        # Set ep_length and timestep based on number of cells and time_max.
+        env_args.ep_length = None
+        env_args.timestep = None
+        if env_args.C is None:
+            env_args.C = 0.1
+
+        conv_envs = []
+        conv_env_args = []
         for nx in CONVERGENCE_PLOT_GRID_RANGE:
-            if args.C is None:
-                args.C = 0.1
-            eval_env_args = Namespace(**vars(args))
+            specific_env_copy = env_manager_copy.copy()
+            env_args = specific_env_copy.args
+            env_args.num_cells = nx
 
-            eval_env_args.num_cells = nx
-            eval_env_args.ep_length = None
-            eval_env_args.timestep = None
-            # This will choose the correct values for ep_length and timestep based on the number of
-            # cells and time_max.
-            env_builder.set_contingent_env_defaults(eval_env_args, eval_env_args, test=True)
+            env_builder.set_contingent_env_defaults(args, env_args, test=True)
 
-            envs.append(env_builder.build_env(eval_env_args.env, eval_env_args, test=True))
-            env_args.append(eval_env_args)
+            conv_envs.append(env_builder.build_env(args.env, env_args, test=True))
+            conv_env_args.append(env_args)
         env = envs[0]
 
     if agent is None:
@@ -305,7 +312,8 @@ def main():
         shutil.rmtree(args.log_dir)
         os.makedirs(args.log_dir)
 
-    metadata.create_meta_file(args.log_dir, args)
+    meta_file = metadata.MetaFile(args.log_dir, arg_manager)
+    meta_file.write_new()
 
     # Put stable-baselines logs in same directory.
     logger.configure(folder=args.log_dir, format_strs=['csv', 'log'])
@@ -343,7 +351,7 @@ def main():
             error = []
             x_vals = []
             error_vals = []
-            for env, env_args in zip(envs, env_args):
+            for env, env_args in zip(conv_envs, conv_env_args):
                 nx = env_args.num_cells[0] if dims > 1 else env_args.num_cells
 
                 sub_dir = os.path.join(args.log_dir, "nx_{}".format(nx))
@@ -357,7 +365,7 @@ def main():
                 else:
                     print(("Convergence run with {} grid cells and dynamic timesteps ({}s total).")
                             .format(env_args.num_cells, env_args.time_max))
-                l2_error = do_test(env, agent, env_args)
+                l2_error = do_test(env, agent, args)
                 error.append(l2_error)
 
                 if dims == 1:
@@ -384,14 +392,14 @@ def main():
                     human_readable_time_delta(time.time() - convergence_start_time)))
     except KeyboardInterrupt:
         print("Test stopped by interrupt.")
-        metadata.log_finish_time(args.log_dir, status="stopped by interrupt")
+        meta_file.log_finish_time(status="stopped by interrupt")
         sys.exit(0)
     except Exception as e:
-        metadata.log_finish_time(args.log_dir, status="stopped by exception: {}".format(type(e).__name__))
+        meta_file.log_finish_time(status="stopped by exception: {}".format(type(e).__name__))
         raise  # Re-raise so exception is also printed.
 
     print("Done.")
-    metadata.log_finish_time(args.log_dir, status="finished cleanly")
+    meta_file.log_finish_time(status="finished cleanly")
 
 
 if __name__ == "__main__":

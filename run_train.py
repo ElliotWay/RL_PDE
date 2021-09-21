@@ -92,20 +92,18 @@ def main():
 
     args, rest = arg_manager.parse_known_args()
 
-    env_builder.set_contingent_env_defaults(args, args.e, test=False)
-    model_builder.set_contingent_model_defaults(args, args.m, test=False)
-     
-    action_type = env_builder.env_action_type(args.env)
-
-    if args.help_env or args.help_model:
-        if args.help_env:
-            env_arg_manager.print_help()
-        if args.help_model:
-            model_arg_manager.print_help()
+    if args.help_env:
+        env_arg_manager.print_help()
+        sys.exit(0)
+    if args.help_model:
+        model_arg_manager.print_help()
         sys.exit(0)
 
     if len(rest) > 0:
         raise Exception("Unrecognized arguments: " + " ".join(rest))
+
+    env_builder.set_contingent_env_defaults(args, args.e, test=False)
+    model_builder.set_contingent_model_defaults(args, args.m, test=False)
 
     if args.repeat is not None:
         _, extension = os.path.splitext(args.repeat)
@@ -119,11 +117,12 @@ def main():
 
     set_global_seed(args.seed)
 
+    action_type = env_builder.env_action_type(args.env)
     dims = env_builder.env_dimensions(args.env)
 
     env = env_builder.build_env(args.env, args.e)
 
-    eval_env_arg_manager = arg_manager.get_child('e').copy()
+    eval_env_arg_manager = env_arg_manager.copy()
     eval_env_args = eval_env_arg_manager.args
     eval_env_args.follow_solution = False # Doesn't make sense for eval envs to do that.
     if args.eval_env == "std" or args.eval_env == "custom":

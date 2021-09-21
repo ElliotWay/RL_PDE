@@ -115,9 +115,28 @@ def get_env_arg_parser():
 
     return parser
 
-def set_contingent_env_defaults(main_args, env_args, test=False):
+def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=False):
+    """
+    Set the defaults of environment parameters that depend on other parameters.
+
+    Parameters
+    ----------
+    main_args : Namespace
+        The main 'args' namespace, containing high level parameters like 'total_episodes'.
+    env_args : Namespace
+        The sub namespace containing parameters for the environment.
+    arg_manager : ArgTreeManager
+        Argument manager used to flag some arguments as explicit if they depend tightly on
+        arguments that actually were explicit. If None is passed, then those arguments will not be
+        marked as explicit. Pass the arg_manager when you want to set these defaults before loading
+        from another file.
+    test : bool
+        Whether this is a test or training run. Some defaults depend on this.
+    """
     if env_args.memoize is None:
-        if env_args.fixed_timesteps:
+        if test:
+            env_args.memoize = False
+        elif env_args.fixed_timesteps:
             env_args.memoize = True
         else:
             env_args.memoize = False
@@ -200,15 +219,26 @@ def set_contingent_env_defaults(main_args, env_args, test=False):
     print("Using {} cells and {}s timesteps.".format(env_args.num_cells, env_args.timestep)
             + " Episode length is {} steps, for a total of {}s.".format(
                 env_args.ep_length, env_args.time_max))
-    if not just_defaults:
-        # Add to argv - if we load an agent later, this prevents the agent's parameters
-        # from overwriting these, as at least one of which was explicit.
-        sys.argv += ['--num-cells', str(num_cells)]
-        sys.argv += ['--timestep', str(dt)]
-        sys.argv += ['--time_max', std(time_max)]
-        sys.argv += ['--ep_length', str(ep_length)]
-    if not env_args.fixed_timesteps:
-        sys.argv += ['--C', str(env_args.C)]
+    if arg_manager is not None:
+        # Mark these arguments as explicitly passed.
+        if not just_defaults:
+            env_arg_manager = arg_manager.get_child('e')
+            env_arg_manager.explicit['num_cells'] = True
+            env_arg_manager.explicit['timestep'] = True
+            env_arg_manager.explicit['time_max'] = True
+            env_arg_manager.explicit['ep_length'] = True
+
+            # The original way to do this before creating the argument manager was to add the
+            # arguments directly to argv. We still need these if we want to load from an old file.
+            # Remove them if we no longer need that backwards compatability.
+            sys.argv += ['--num-cells', str(num_cells)]
+            sys.argv += ['--timestep', str(dt)]
+            sys.argv += ['--time_max', str(time_max)]
+            sys.argv += ['--ep_length', str(ep_length)]
+        if not env_args.fixed_timesteps:
+            env_arg_manager = arg_manager.get_child('e')
+            env_arg_manager.explicit['C'] = True
+            sys.argv += ['--C', str(env_args.C)]
 
     # Grid constructors expect singletons for 1 dimension.
     if len(env_args.num_cells) == 1:

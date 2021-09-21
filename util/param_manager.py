@@ -136,27 +136,43 @@ class ArgTreeManager:
             lines.append(child.serialize(indent+1))
         return "\n".join(lines)
 
-    def load_from_dict(self, load_dict, override_explicit=True):
+    def load_from_dict(self, load_dict):
         args_dict = vars(self.args)
         my_names = set(args_dict.keys())
         load_dict_names = set(load_dict.keys())
-        for name in my_names - load_dict_names:
-            if name not in self.children and not self.explicit[name]:
-                print(f"Param: {name} not found, cannot load, using default ({args_dict[name]}).")
-            elif name in self.children:
-                print(f"Param: {name} parameter family not found, cannot load, using defaults.")
-        for name in load_dict_names - my_names:
-            print(f"Param: {name} not recognized, cannot load.")
 
-        for name in my_names & load_dict_names:
-            if not name in self.children:
-                if not self.explicit[name]:
-                    args_dict[name] = load_dict[name]
-                else:
-                    print(f"Param: Explicit {name} overriding loaded parameter.")
-        for name in my_names & load_dict_names:
-            if name in self.children:
-                self.children[name].load_from_dict(load_dict[name])
+        only_in_self = my_names - load_dict_names
+        params_only_in_self = list(filter(lambda n: n not in self.children, only_in_self))
+        child_only_in_self = list(filter(lambda n: n in self.children, only_in_self))
+        if len(params_only_in_self) > 0:
+            print("Param: Some parameters were not found in loaded file: "
+                    + ", ".join([f"{name}: {args_dict[name]}" for name in params_only_in_self]))
+        if len(child_only_in_self) > 0:
+            print("Param: Entire parameter families were missing from the loaded file;"
+                    + " using defaults: " + ", ".join(child_only_in_self))
+
+        only_in_loaded = load_dict_names - my_names
+        if len(only_in_loaded) > 0:
+            print("Param: Some parameters in loaded file were not recognized and ignored: "
+                    + ", ".join(only_in_loaded))
+
+        names_in_both = my_names & load_dict_names
+        params_in_both = list(filter(lambda n: n not in self.children, names_in_both))
+        children_in_both = list(filter(lambda n: n in self.children, names_in_both))
+
+        explicit_overrides = list(filter(lambda n: self.explicit[n], params_in_both))
+        loaded_params = list(filter(lambda n: not self.explicit[n], params_in_both))
+
+        if len(explicit_overrides) > 0:
+            print("Param: Explicit parameters overriding loaded parameters: "
+                    + ", ".join(explicit_overrides))
+        if len(loaded_params) > 0:
+            for param in loaded_params:
+                args_dict[param] = load_dict[param]
+
+        if len(children_in_both) > 0:
+            for child_name in children_in_both:
+                self.children[child_name].load_from_dict(load_dict[child_name])
 
 
 if __name__ == "__main__":
