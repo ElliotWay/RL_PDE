@@ -27,4 +27,4 @@ def git_branch_name():
 
     output_str = git_proc.stdout.strip()
 
-    return git_proc.return_code, output_str
+    return git_proc.returncode, output_str

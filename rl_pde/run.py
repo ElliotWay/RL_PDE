@@ -12,6 +12,7 @@ from matplotlib.ticker import SymmetricalLogLocator
 from stable_baselines import logger
 
 # More imports below rollout() to avoid circular dependency.
+# Maybe rollout() should be in a separate file?
 
 def rollout(env, policy, num_rollouts=1, rk4=False, deterministic=False, every_step_hook=None):
     """
@@ -77,6 +78,7 @@ def rollout(env, policy, num_rollouts=1, rk4=False, deterministic=False, every_s
 
 from rl_pde.agents import StandardWENOAgent
 from rl_pde.emi import OneDimensionalStencil
+from envs import builder as env_builder
 from envs.plottable_env import Plottable1DEnv, Plottable2DEnv
 from util import action_snapshot
 from util.misc import human_readable_time_delta
@@ -226,7 +228,8 @@ def train(env, eval_envs, emi, args):
 
     action_snapshot.declare_standard_envs(args)
 
-    weno_agent = StandardWENOAgent(order=args.order, mode=args.mode)
+    weno_agent = StandardWENOAgent(order=args.order,
+            action_type=env_builder.env_action_type(args.env))
 
     ep_precision = int(np.ceil(np.log(1+args.total_episodes) / np.log(10)))
     log_dir = logger.get_dir()

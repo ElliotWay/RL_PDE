@@ -231,34 +231,46 @@ def env_dimensions(env_name):
     else:
         return 1
 
+
+def env_action_type(env_name):
+    if env_name.startswith("weno"):
+        return "weno"
+    elif env_name.startswith("split_flux"):
+        return "split_flux"
+    elif env_name.startswith("flux"):
+        return "flux"
+    else:
+        return "n/a"
+ 
+
 def build_env(env_name, env_args, test=False):
 
-    if args.fixed_timesteps:
-        args.C = None
+    if env_args.fixed_timesteps:
+        env_args.C = None
 
     # These all apply to AbstractBurgersEnvs, but might not to other envs.
-    kwargs = {  'num_cells': args.num_cells,
-                'min_value': args.min_value,
-                'max_value': args.max_value,
-                'init_type': args.init_type,
-                'schedule': args.schedule,
-                'init_params': args.init_params,
-                'boundary': args.boundary,
-                'C': args.C,
-                'fixed_step': args.timestep,
-                'weno_order': args.order,
-                'state_order': args.state_order,
-                'nu': args.nu,
-                'episode_length': args.ep_length,
-                'analytical': args.analytical,
-                'precise_weno_order': args.precise_order,
-                'precise_scale': args.precise_scale,
-                'reward_adjustment': args.reward_adjustment,
-                'reward_mode': args.reward_mode,
-                'memoize': args.memoize,
-                'srca': args.srca,
-                'follow_solution': args.follow_solution,
-                'time_max': args.time_max,
+    kwargs = {  'num_cells': env_args.num_cells,
+                'min_value': env_args.min_value,
+                'max_value': env_args.max_value,
+                'init_type': env_args.init_type,
+                'schedule': env_args.schedule,
+                'init_params': env_args.init_params,
+                'boundary': env_args.boundary,
+                'C': env_args.C,
+                'fixed_step': env_args.timestep,
+                'weno_order': env_args.order,
+                'state_order': env_args.state_order,
+                'nu': env_args.nu,
+                'episode_length': env_args.ep_length,
+                'analytical': env_args.analytical,
+                'precise_weno_order': env_args.precise_order,
+                'precise_scale': env_args.precise_scale,
+                'reward_adjustment': env_args.reward_adjustment,
+                'reward_mode': env_args.reward_mode,
+                'memoize': env_args.memoize,
+                'srca': env_args.srca,
+                'follow_solution': env_args.follow_solution,
+                'time_max': env_args.time_max,
                 'test': test,
                 }
 

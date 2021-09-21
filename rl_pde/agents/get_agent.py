@@ -3,22 +3,22 @@ from rl_pde.agents.basic_agents import StationaryAgent, EqualAgent, MiddleAgent,
 from rl_pde.agents.basic_agents import RandomAgent
 from rl_pde.agents.extend_agent_2d import ExtendAgent2D
 
-def get_agent(name, order, mode="weno", dimensions=1):
+def get_agent(name, order, action_type="weno", dimensions=1):
     if dimensions > 2:
         raise NotImplementedError()
 
     if (name == "default" or name == "none"
         or name == "weno" or name == "std"):
         if dimensions == 1:
-            return StandardWENOAgent(order=order, mode=mode)
+            return StandardWENOAgent(order=order, action_type=action_type)
         elif dimensions == 2:
-            return StandardWENO2DAgent(order=order, mode=mode)
+            return StandardWENO2DAgent(order=order, action_type=action_type)
             # This would be work but would be substantially slower:
-            #return ExtendAgent2D(StandardWENOAgent(order=order, mode=mode))
+            #return ExtendAgent2D(StandardWENOAgent(order=order, action_type=action_type))
 
     else:
         if name == "stationary":
-            agent = StationaryAgent(order=args.order, mode=mode)
+            agent = StationaryAgent(order=args.order, action_type=action_type)
         elif name == "equal":
             agent = EqualAgent(order=args.order)
         elif name == "middle":
@@ -28,7 +28,7 @@ def get_agent(name, order, mode="weno", dimensions=1):
         elif name == "right":
             agent = RightAgent(order=args.order)
         elif name == "random":
-            agent = RandomAgent(order=args.order, mode=mode)
+            agent = RandomAgent(order=args.order, action_type=action_type)
         else:
             return None
 

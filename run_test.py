@@ -193,21 +193,6 @@ def main():
     model_arg_parser = get_model_arg_parser()
     model_args, rest = model_arg_parser.parse_known_args(rest)
 
-    internal_args = {}
-    internal_args['total_episodes'] = 1000
-
-    if main_args.env.startswith("weno"):
-        mode = "weno"
-    elif main_args.env.startswith("split_flux"):
-        mode = "split_flux"
-    elif main_args.env.startswith("flux"):
-        mode = "flux"
-    else:
-        mode = "n/a"
-    internal_args['mode'] = mode
-
-    args = Namespace(**vars(main_args), **vars(env_args), **vars(model_args), **internal_args)
-
     if len(rest) > 0:
         print("Unrecognized arguments: " + " ".join(rest))
         sys.exit(0)
@@ -216,10 +201,11 @@ def main():
         env_arg_parser.print_help()
         sys.exit(0)
 
+    env_action_type = env_builder.env_action_type(args.env)
     dims = env_builder.env_dimensions(args.env)
 
     # Load basic agent, if one was specified.
-    agent = get_agent(args.agent, order=args.order, mode=mode, dimensions=dims)
+    agent = get_agent(args.agent, order=args.order, env_action_type=env_action_type, dimensions=dims)
     # If the returned agent is None, assume it is the file name of a real agent.
     # If a real agent is specified, load parameters from its meta file.
     # This only overrides arguments that were not explicitly specified.

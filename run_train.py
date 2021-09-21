@@ -95,15 +95,7 @@ def main():
     env_builder.set_contingent_env_defaults(args, args.e, test=False)
     model_builder.set_contingent_model_defaults(args, args.m, test=False)
      
-    if args.env.startswith("weno"):
-        mode = "weno"
-    elif args.env.startswith("split_flux"):
-        mode = "split_flux"
-    elif args.env.startswith("flux"):
-        mode = "flux"
-    else:
-        mode = "n/a"
-    args.mode = mode
+    action_type = env_builder.env_action_type(args.env)
 
     if args.help_env or args.help_model:
         if args.help_env:
@@ -179,10 +171,10 @@ def main():
     else:
         raise Exception("eval env type \"{}\" not recognized.".format(args.eval_env))
 
-    action_snapshot.declare_standard_envs(args)
+    action_snapshot.declare_standard_envs(args.e)
 
     # Fill in defaults that are contingent on other arguments.
-    if args.replay_style == 'marl':
+    if args.m.replay_style == 'marl':
         if args.emi != 'marl':
             args.emi = 'marl'
             print("EMI set to MARL for MARL-style replay buffer.")
@@ -194,11 +186,11 @@ def main():
     model_cls = get_model_class(args.model)
 
     if args.obs_scale is None:
-        if args.mode == 'weno':
+        if action_type == 'weno':
             args.obs_scale = 'z_score_last_dim'
-        elif args.mode == "split_flux":
+        elif action_type == "split_flux":
             args.obs_scale = 'z_score_last_dim'
-        elif args.mode == "flux":
+        elif action_type == "flux":
             args.obs_scale = 'z_score_last_dim'
         else:
             print("No state normalization coded for {}.".format(args.env))
@@ -206,7 +198,7 @@ def main():
     obs_adjust = numpy_fn(args.obs_scale)
 
     if args.action_scale is None:
-        if args.mode == 'weno':
+        if action_type == 'weno':
             args.action_scale = 'softmax'
         else:
             print("No action normalization coded for {}".format(args.env))
@@ -227,7 +219,7 @@ def main():
     else:
         emi = emi_cls(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
 
-    #DDPG stuff.
+    #Old DDPG stuff. Probably won't need this again, but leaving it here just in case.
     """
         # Parse noise_type
         action_noise = None
