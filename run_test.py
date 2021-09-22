@@ -10,6 +10,7 @@ import time
 import subprocess
 import gc # manual garbage collection
 
+import yaml
 import numpy as np
 import tensorflow as tf
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
@@ -220,7 +221,10 @@ def main():
         model_directory = os.path.dirname(model_file)
         meta_file = os.path.join(model_directory, metadata.META_FILE_NAME)
         if os.path.isfile(meta_file):
-            args_dict = yaml.safe_load(meta_file)
+            open_file = open(meta_file, 'r')
+            args_dict = yaml.safe_load(open_file)
+            open_file.close()
+            
             model_arg_manager.load_from_dict(args_dict['m'])
         else:
             meta_file = os.path.join(model_directory, metadata.OLD_META_FILE_NAME)

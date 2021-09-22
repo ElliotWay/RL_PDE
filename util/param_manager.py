@@ -93,14 +93,13 @@ class ArgTreeManager:
         else:
             main_args = Namespace()
 
-        self.main_args = main_args
+        self.args = main_args
 
-        args_dict = dict(vars(main_args))
+        # Not a deep copy - changes to args_dict will change self.args.
+        args_dict = vars(self.args)
         for child, child_parser in self.children.items():
             child_args, arg_string = child_parser.parse_known_args(arg_string)
             args_dict[child] = child_args
-
-        self.args = Namespace(**args_dict)
 
         return self.args, arg_string
 
@@ -133,7 +132,8 @@ class ArgTreeManager:
         The string representation of the parameters.
         """
         # Encode args at this node into YAML.
-        yaml_encoded = yaml.dump(vars(self.main_args))
+        main_args_dict = {k:v for k,v in vars(self.args).items() if k not in self.children}
+        yaml_encoded = yaml.dump(main_args_dict)
 
         # Add comments to the encoding, and possibly additional indentation.
         lines = yaml_encoded.split('\n')
