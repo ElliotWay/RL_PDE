@@ -226,6 +226,9 @@ def main():
             open_file.close()
             
             model_arg_manager.load_from_dict(args_dict['m'])
+
+            # action scale and obs_scale ought to be model parameters.
+            arg_manager.load_keys(args_dict, ['model', 'emi', 'action_scale', 'obs_scale'])
         else:
             meta_file = os.path.join(model_directory, metadata.OLD_META_FILE_NAME)
             if not os.path.isfile(meta_file):

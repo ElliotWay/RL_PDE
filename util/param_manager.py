@@ -193,6 +193,14 @@ class ArgTreeManager:
             for child_name in children_in_both:
                 self.children[child_name].load_from_dict(load_dict[child_name])
 
+    def load_keys(self, load_dict, keys):
+        args_dict = vars(self.args)
+        for key in keys:
+            if key not in self.children:
+                args_dict[key] = load_dict[key]
+            else:
+                args_dict[ley] = self.children[key].load_from_dict(load_dict[key])
+
 
 if __name__ == "__main__":
     child1_args = argparse.ArgumentParser()
