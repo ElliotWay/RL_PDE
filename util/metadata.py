@@ -59,14 +59,14 @@ class MetaFile:
             preamble_lines.append("# git commit hash: {}".format(commit_id))
 
             if git_is_clean():
-                preamble_lines.append("git status: clean")
+                preamble_lines.append("# git status: clean")
             else:
-                preamble_lines.append("git status: uncommited changes")
+                preamble_lines.append("# git status: uncommited changes")
 
             return_code, branch_name = git_branch_name()
             if return_code != 0:
                 if args.n:
-                    raise Exception("Git couldn't find a branch name?")
+                    raise Exception("# Git couldn't find a branch name?")
                 elif not args.y:
                     _ignore = input("Git couldn't find a branch name. Hit <Enter> to continue"
                             + " without recording the branch name, or Ctrl-C to stop.")
@@ -75,7 +75,7 @@ class MetaFile:
                 preamble_lines.append("# git branch: {}".format(branch_name))
 
         pid = os.getpid()
-        preamble_lines.append("pid: {}".format(pid))
+        preamble_lines.append("# pid: {}".format(pid))
 
         self.preamble = "\n".join(preamble_lines)
 

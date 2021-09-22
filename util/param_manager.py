@@ -2,6 +2,7 @@ import sys
 import argparse
 from argparse import Namespace
 import yaml
+import re
 
 class _ExplicitArgSentinel:
     pass
@@ -10,6 +11,8 @@ class ArgTreeManager:
     """
     Assumes that keys in the namespace are valid identifiers and do not contain periods.
     (argparse does not prevent this).
+    Also assumes that identifiers are unique, even across hierarchy levels. So args.foo and
+    args.e.foo is not valid.
     """
  
     sentinel = _ExplicitArgSentinel()
@@ -90,15 +93,16 @@ class ArgTreeManager:
         else:
             main_args = Namespace()
 
-        # Not a deep copy: writing to main_args_dict will also affect main_args.
-        main_args_dict = vars(main_args)
+        self.main_args = main_args
+
+        args_dict = dict(vars(main_args))
         for child, child_parser in self.children.items():
             child_args, arg_string = child_parser.parse_known_args(arg_string)
-            main_args_dict[child] = child_args
+            args_dict[child] = child_args
 
-        self.args = main_args
+        self.args = Namespace(**args_dict)
 
-        return main_args, arg_string
+        return self.args, arg_string
 
     @staticmethod
     def nested_ns_to_dict(args):
@@ -107,6 +111,12 @@ class ArgTreeManager:
             if isinstance(v, Namespace):
                 args_dict[k] = nested_ns_to_dict(v)
         return args_dict
+
+    def _preorder(self, func, input_arg):
+        acc = func(self, input_arg)
+        for child in self.children.values():
+            acc = child._preorder(func, acc)
+        return acc
 
     def serialize(self, indent=0):
         """
@@ -122,13 +132,22 @@ class ArgTreeManager:
         -------
         The string representation of the parameters.
         """
-        lines = []
+        # Encode args at this node into YAML.
+        yaml_encoded = yaml.dump(vars(self.main_args))
+
+        # Add comments to the encoding, and possibly additional indentation.
+        lines = yaml_encoded.split('\n')
+        explicit_variables = [name for name in self.explicit if self.explicit[name]]
+
         indent_prefix = "  " * indent
-        for k, v in vars(self.args).items():
-            if not isinstance(v, Namespace):
-                value = yaml.dump(v, default_flow_style=True)
-                comment = "" if not self.explicit[k] else " # (Explicit)"
-                lines.append(f"{indent_prefix}{k}: {value}{comment}")
+        for index, line in enumerate(lines):
+            comment = ""
+            match = re.match(r"\s*(\w+):", line)
+            if match is not None and match.group(1) in explicit_variables:
+                comment = " # (Explicit)"
+            lines[index] = f"{indent_prefix}{line}{comment}"
+
+        # Add children.
         for child_name, child in self.children.items():
             comment = ("" if self.children_long_names[child_name] is None else
                             f" # {self.children_long_names[child_name]}")
