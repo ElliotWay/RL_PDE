@@ -133,8 +133,12 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
     test : bool
         Whether this is a test or training run. Some defaults depend on this.
     """
+    if main_args.model == "full" and env_args.reward_mode is None:
+        print("Reward mode forced to use 'one-step' to work with 'full' model.")
+        env_args.reward_mode = "one-step"
+
     if env_args.memoize is None:
-        if test:
+        if test or 'one-step' in env_args.reward_mode or env_args.analytical:
             env_args.memoize = False
         elif env_args.fixed_timesteps:
             env_args.memoize = True
@@ -144,10 +148,6 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
             #env_args.memoize = False
         #else:
             #env_args.memoize = True
-
-    if main_args.model == "full" and env_args.reward_mode is None:
-        print("Reward mode forced to use 'one-step' to work with 'full' model.")
-        env_args.reward_mode = "one-step"
     
     env_args.reward_mode = AbstractPDEEnv.fill_default_reward_mode(env_args.reward_mode)
     print("Full reward mode is '{}'.".format(env_args.reward_mode))
