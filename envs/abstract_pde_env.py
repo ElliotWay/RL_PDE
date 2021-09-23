@@ -420,6 +420,8 @@ class AbstractPDEEnv(gym.Env):
                         + " length timesteps.")
 
         approximate_max = 2.0 # Is this a good number?
+        if C is None:
+            C = 0.1
         if num_cells is None:
             if dt is None:
                 dt = 0.0004

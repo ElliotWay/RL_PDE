@@ -22,11 +22,11 @@ def get_model_class(model_name):
         return SACModel
     elif model_name == 'full':
         return GlobalBackpropModel
-    elif model_name == 'pg' or model_name == 'reinforce':
+    elif model_name == 'pg': # Policy Gradient
         return PolicyGradientModel
     elif model_name == 'test':
         return TestModel
-    elif model_name == "fixed-1step" or model_name == "fixed":
+    elif model_name == "fixed-1step":
         return FixedOneStepModel
     else:
         raise Exception("Unrecognized model type: \"{}\"".format(model_name))

@@ -126,6 +126,11 @@ def main():
     eval_env_args = eval_env_arg_manager.args
     eval_env_args.follow_solution = False # Doesn't make sense for eval envs to do that.
     if args.eval_env == "std" or args.eval_env == "custom":
+        # We could restore defaults to do this - have env_arg_manager parse the empty string to get
+        # defaults, set some values manually, then use set_contingent_env_defaults.
+        # But do we want that behavior? Do we want unusual parameters to affect both the training
+        # and evaluation environments?
+
         #eval_env_args.memoize = True
         # Use standard default evaluation environments.
         if args.env == "weno_burgers":
@@ -158,9 +163,14 @@ def main():
             eval_env_args.init_type = "jsz7"
             # Restore jsz7 defaults.
             vars(eval_env_args).update({"min_value":None, "max_value":None, "num_cells":None,
-                "time_max":None})
+                "time_max":None, "ep_length":None, "timestep":None})
             env_builder.set_contingent_env_defaults(args, eval_env_args, test=True)
             eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
+
+        else:
+            print(f"No standard evaluation environments declared for {args.env};"
+                    + " evaluation environment will be identical to training environment.")
+            eval_envs = [env_builder.build_env(args.env, eval_env_args, test=True)]
 
     elif args.eval_env == "long":
         eval_env_args.ep_length = args.e.ep_length * 2

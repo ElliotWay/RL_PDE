@@ -4,10 +4,11 @@ import tensorflow as tf
 
 from util.misc import positive_int, nonnegative_float, positive_float
 
-def get_model_arg_parser():
+def get_model_arg_parser(model_type=None):
     parser = argparse.ArgumentParser(
             add_help=False,
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+
     parser.add_argument('--layers', type=int, nargs='+', default=[32, 32],
             help="Size of network layers.")
     parser.add_argument('--layer-norm', '--layer_norm', default=False, action='store_true',
@@ -24,8 +25,8 @@ def get_model_arg_parser():
             help="Size of the replay buffer. The default is 10000 for std EMI, and 500000"
             + " otherwise.")
     parser.add_argument('--batch-size', '--batch_size', type=positive_int, default=None,
-            help="Size of batch samples from replay buffer. Default is 10 for global backprop,"
-            + " and 64 otherwise.")
+            help="Size of batch samples from replay buffer. For global backprop, the default"
+            + " depends on the environment. 64 for other models.")
     parser.add_argument('--train-freq', '--train_freq', type=int, default=None,
             help="(SAC) Ratio between the number of steps and the number of times to train."
             + " The default for std is 1, i.e. train every step. The default otherwise"
@@ -57,8 +58,16 @@ def set_contingent_model_defaults(main_args, model_args, test=False):
             model_args.buffer_size = 10000 if main_args.emi == "std" else 500000
         if model_args.train_freq is None:
             model_args.train_freq = 1 if main_args.emi == "std" else main_args.e.num_cells
+
     if model_args.batch_size is None:
-        model_args.batch_size = 10 if main_args.model == "full" else 64
+        if main_args.model == "full":
+            if main_args.env == "weno_euler" or main_args.env.contains("2d"):
+                model_args.batch_size = 1
+            else:
+                model_args.batch_size = 10
+        else:
+            model_args.batch_size = 64
+
     if main_args.model == 'pg' or main_args.model == 'reinforce':
         if model_args.gamma == 0.0:
             model_args.return_style = "myopic"
@@ -78,7 +87,7 @@ def set_contingent_model_defaults(main_args, model_args, test=False):
             model_args.buffer_size = new_buffer_size
             print("Replay buffer size changed from {} to {} to align with MARL-style buffer."
                     .format(old_buffer_size, new_buffer_size))
- 
+
 
 def get_optimizer(model_args):
     if (model_args.optimizer is None

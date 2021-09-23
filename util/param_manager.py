@@ -9,10 +9,17 @@ class _ExplicitArgSentinel:
 
 class ArgTreeManager:
     """
-    Assumes that keys in the namespace are valid identifiers and do not contain periods.
-    (argparse does not prevent this).
-    Also assumes that identifiers are unique, even across hierarchy levels. So args.foo and
-    args.e.foo is not valid.
+    Makes the following assumptions:
+    - Keys in the namespace are valid identifiers i.e. they do not contain perioids. The argparse
+      library does not check for this.
+    - Identifiers are unique, even across hierarchy levels. So an intended namespace that contains
+      both args.foo and args.e.foo is invalid.
+    - Parameters are all 'simple' types. That is, integers, floats, strings, bools, None type,
+      and the composite types lists, dicts, and sets. No object types are permitted. Tuples are
+      encoded as lists.
+      This assumption is part of a precaution to avoid executing arbitrary code from the yaml file.
+      We can probably trust these files, but the precaution doesn't cost much since parameters are
+      probably simple anyway.
     """
  
     sentinel = _ExplicitArgSentinel()
@@ -133,7 +140,7 @@ class ArgTreeManager:
         """
         # Encode args at this node into YAML.
         main_args_dict = {k:v for k,v in vars(self.args).items() if k not in self.children}
-        yaml_encoded = yaml.dump(main_args_dict)
+        yaml_encoded = yaml.safe_dump(main_args_dict, sort_keys=False)
 
         # Add comments to the encoding, and possibly additional indentation.
         lines = yaml_encoded.split('\n')

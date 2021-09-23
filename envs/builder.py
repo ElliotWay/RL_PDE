@@ -159,7 +159,7 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
     # Some environments have specific defaults.
     if env_args.init_type == "jsz7":
         if env_args.min_value is None:
-            nv_args.min_value = (0.0,)
+            env_args.min_value = (0.0,)
         if env_args.max_value is None:
             env_args.max_value = (4.0,)
         if env_args.num_cells is None:
