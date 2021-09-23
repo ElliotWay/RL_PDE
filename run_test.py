@@ -274,7 +274,7 @@ def main():
 
             conv_envs.append(env_builder.build_env(args.env, env_args, test=True))
             conv_env_args.append(env_args)
-        env = envs[0]
+        env = conv_envs[0]
 
     if agent is None:
         obs_adjust = numpy_fn(args.obs_scale)
@@ -365,7 +365,7 @@ def main():
                 os.makedirs(sub_dir)
                 logger.configure(folder=sub_dir, format_strs=['stdout'])  # ,tensorboard'
 
-                if args.fixed_timesteps:
+                if args.e.fixed_timesteps:
                     print(("Convergence run with {} grid cells and {}s timesteps ({}s total).")
                             .format(env_args.num_cells, env_args.timestep,
                                 env_args.ep_length*env_args.timestep))
