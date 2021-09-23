@@ -58,6 +58,12 @@ def nonnegative_int(value):
         raise argparse.ArgumentTypeError("{} is not non-negative".format(ivalue))
     return ivalue
 
+def proportion_float(value):
+    fvalue = float(value)
+    if fvalue < 0.0 or fvalue > 1.0:
+        raise argparse.ArgumentTypeError("{} is not a proportion".format(fvalue))
+    return fvalue
+
 def float_dict(string_dict):
     pairs = string_dict.split(sep=',')
     # empty string returns empty dict

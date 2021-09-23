@@ -24,17 +24,32 @@ class ArgTreeManager:
  
     sentinel = _ExplicitArgSentinel()
 
-    def __init__(self, parent=None):
-        self.argparser = None
+    def __init__(self, parent=None, parser=None):
+        if callable(parser):
+            self._parser_constructor = parser
+            self.argparser = None
+        else:
+            self._parser_constructor = None
+            self.argparser = parser
         self.parent = parent
         self.children = {}
         self.children_long_names = {}
         self.explicit = {}
 
         self.args = None
+        self.loaded_arg_string = ""
+
+    def set_parser(self, parser):
+        if callable(parser):
+            self._parser_constructor = parser
+            self.argparser = None
+        else:
+            self._parser_constructor = None
+            self.argparser = parser
 
     def copy(self, new_parent=None):
         manager_copy = ArgTreeManager()
+        manager_copy._parser_constructor = self._parser_constructor
         manager_copy.argparser = self.argparser
         manager_copy.parent = new_parent
         for child_name, child in self.children.items():
@@ -50,20 +65,17 @@ class ArgTreeManager:
 
         return manager_copy
 
-    def set_parser(self, argparser):
-        self.argparser = argparser
-
     def print_help(self):
-        self.arg_parser.print_help()
+        self.argparser.print_help()
+
+    def create_child(self, name, long_name=None, parser=None):
+        new_child = ArgTreeManager(parent=self, parser=parser)
+        self.children[name] = new_child
+        self.children_long_names[name] = long_name
+        return new_child
 
     def get_child(self, name, long_name=None):
-        if name in self.children:
-            return self.children[name]
-        else:
-            new_child = ArgTreeManager(parent=self)
-            self.children[name] = new_child
-            self.children_long_names[name] = long_name
-            return new_child
+        return self.children[name]
 
     def get_parent(self):
         return self.parent
@@ -75,9 +87,16 @@ class ArgTreeManager:
         else:
             return self.explicit[arg_name]
 
-    def parse_known_args(self, arg_string=None):
+    def parse_known_args(self, arg_string=None, parent_args=None):
         if arg_string is None:
             arg_string = sys.argv[1:]
+
+        self.loaded_arg_string = arg_string
+
+        if self._parser_constructor is not None:
+            if parent_args is None:
+                parent_args = Namespace()
+            self.argparser = self._parser_constructor(parent_args)
 
         if self.argparser is not None:
             main_args, remaining_arg_string = self.argparser.parse_known_args(arg_string)
@@ -104,9 +123,11 @@ class ArgTreeManager:
 
         # Not a deep copy - changes to args_dict will change self.args.
         args_dict = vars(self.args)
-        for child, child_parser in self.children.items():
-            child_args, arg_string = child_parser.parse_known_args(arg_string)
-            args_dict[child] = child_args
+        for child_name, child in self.children.items():
+            # This allows for conditional sub-parsing. The child parser may now have a different
+            # set of arguments depending on the arguments we've already parsed.
+            child_args, arg_string = child.parse_known_args(arg_string, parent_args=self.args)
+            args_dict[child_name] = child_args
 
         return self.args, arg_string
 
@@ -162,30 +183,39 @@ class ArgTreeManager:
             lines.append(child.serialize(indent+1))
         return "\n".join(lines)
 
-    def load_from_dict(self, load_dict):
+    def load_from_dict(self, load_dict, parent_args=None):
+        # Reparse in case we're using a conditional parser and parent_args have changed.
+        if self._parser_constructor is not None:
+            if parent_args is None:
+                parent_args = self.parent.args
+            self.argparser = self._parser_constructor(parent_args)
+            self.args, _ = self.argparser.parse_known_args(self.loaded_arg_string)
+        else:
+            self.args, _ = self.argparser.parse_known_args(self.loaded_arg_string)
+
         args_dict = vars(self.args)
-        my_names = set(args_dict.keys())
+        my_params = set(args_dict.keys())
+        my_children = set(self.children.keys())
         load_dict_names = set(load_dict.keys())
 
-        only_in_self = my_names - load_dict_names
-        params_only_in_self = list(filter(lambda n: n not in self.children, only_in_self))
-        child_only_in_self = list(filter(lambda n: n in self.children, only_in_self))
+        params_only_in_self = my_params - load_dict_names
+        child_only_in_self = my_children - load_dict_names
+        only_in_loaded = load_dict_names - (my_params | my_children)
+
         if len(params_only_in_self) > 0:
             print("Param: Some parameters were not found in loaded file: "
                     + ", ".join([f"{name}: {args_dict[name]}" for name in params_only_in_self]))
         if len(child_only_in_self) > 0:
             print("Param: Entire parameter families were missing from the loaded file;"
                     + " using defaults: " + ", ".join(child_only_in_self))
-
-        only_in_loaded = load_dict_names - my_names
+            for child_name in child_only_in_self:
+                args_dict[child_name] = self.children[child_name].args
         if len(only_in_loaded) > 0:
             print("Param: Some parameters in loaded file were not recognized and ignored: "
                     + ", ".join(only_in_loaded))
 
-        names_in_both = my_names & load_dict_names
-        params_in_both = list(filter(lambda n: n not in self.children, names_in_both))
-        children_in_both = list(filter(lambda n: n in self.children, names_in_both))
-
+        params_in_both = my_params & load_dict_names
+        children_in_both = my_children & load_dict_names
         explicit_overrides = list(filter(lambda n: self.explicit[n], params_in_both))
         loaded_params = list(filter(lambda n: not self.explicit[n], params_in_both))
 
@@ -195,10 +225,10 @@ class ArgTreeManager:
         if len(loaded_params) > 0:
             for param in loaded_params:
                 args_dict[param] = load_dict[param]
-
         if len(children_in_both) > 0:
             for child_name in children_in_both:
                 self.children[child_name].load_from_dict(load_dict[child_name])
+                args_dict[child_name] = self.children[child_name].args
 
     def load_keys(self, load_dict, keys):
         args_dict = vars(self.args)

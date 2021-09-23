@@ -42,7 +42,8 @@ def main():
     parser.add_argument('--help-env', default=False, action='store_true',
                         help="Do not train and show the environment parameters not listed here.")
     parser.add_argument('--help-model', default=False, action='store_true',
-                        help="Do not train and show the model training parameters not listed here.")
+                        help="Do not train and show the model training parameters not listed here."
+                        + " Available parameters depend on the --model argument.")
     parser.add_argument('--model', type=str, default='full',
                         help="Type of model to train. Options are 'full', 'sac', and 'pg'.")
     parser.add_argument('--env', type=str, default="weno_burgers",
@@ -85,10 +86,11 @@ def main():
                         + " Useful for scripts. Overrides the -y option.")
 
     arg_manager.set_parser(parser)
-    env_arg_manager = arg_manager.get_child("e", long_name="Environment Parameters")
+    temp_args, _ = arg_manager.parse_known_args()
+    env_arg_manager = arg_manager.create_child("e", long_name="Environment Parameters")
     env_arg_manager.set_parser(env_builder.get_env_arg_parser())
-    model_arg_manager = arg_manager.get_child("m", long_name="Model Parameters")
-    model_arg_manager.set_parser(model_builder.get_model_arg_parser())
+    model_arg_manager = arg_manager.create_child("m", long_name="Model Parameters")
+    model_arg_manager.set_parser(lambda args: model_builder.get_model_arg_parser(args.model))
 
     args, rest = arg_manager.parse_known_args()
 
@@ -181,7 +183,7 @@ def main():
         raise Exception("eval env type \"{}\" not recognized.".format(args.eval_env))
 
     # Fill in defaults that are contingent on other arguments.
-    if args.m.replay_style == 'marl':
+    if args.model == 'sac' and args.m.replay_style == 'marl':
         if args.emi != 'marl':
             args.emi = 'marl'
             print("EMI set to MARL for MARL-style replay buffer.")

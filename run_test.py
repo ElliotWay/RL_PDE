@@ -148,9 +148,9 @@ def main():
                         + " only plots the true solution (ONLY IMPLEMENTED FOR EVOLUTION PLOTS).")
     parser.add_argument('--env', type=str, default="weno_burgers",
                         help="Name of the environment in which to deploy the agent.")
-    parser.add_argument('--model', type=str, default='sac',
+    parser.add_argument('--model', type=str, default=None,
                         help="Type of model to be loaded. (Overrides the meta file.)")
-    parser.add_argument('--emi', type=str, default='batch',
+    parser.add_argument('--emi', type=str, default=None,
                         help="Environment-model interface. (Overrides the meta file.)")
     parser.add_argument('--obs-scale', '--obs_scale', type=str, default='z_score_last',
                         help="Adjustment function to observation. Compute Z score along the last"
@@ -186,11 +186,11 @@ def main():
                         help="Choose no for any questions, namely overwriting existing files. Useful for scripts. Overrides the -y option.")
 
     arg_manager.set_parser(parser)
-    env_arg_manager = arg_manager.get_child("e", long_name="Environment Parameters")
+    env_arg_manager = arg_manager.create_child("e", long_name="Environment Parameters")
     env_arg_manager.set_parser(env_builder.get_env_arg_parser())
     # Testing has 'model parameters', but these are really intended to be loaded from a file.
-    model_arg_manager = arg_manager.get_child("m", long_name="Model Parameters")
-    model_arg_manager.set_parser(model_builder.get_model_arg_parser())
+    model_arg_manager = arg_manager.create_child("m", long_name="Model Parameters")
+    model_arg_manager.set_parser(lambda args: model_builder.get_model_arg_parser(args.model))
 
     args, rest = arg_manager.parse_known_args()
 
@@ -224,11 +224,11 @@ def main():
             open_file = open(meta_file, 'r')
             args_dict = yaml.safe_load(open_file)
             open_file.close()
-            
-            model_arg_manager.load_from_dict(args_dict['m'])
 
             # action scale and obs_scale ought to be model parameters.
             arg_manager.load_keys(args_dict, ['model', 'emi', 'action_scale', 'obs_scale'])
+            
+            model_arg_manager.load_from_dict(args_dict['m'])
         else:
             meta_file = os.path.join(model_directory, metadata.OLD_META_FILE_NAME)
             if not os.path.isfile(meta_file):
