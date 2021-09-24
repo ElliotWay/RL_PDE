@@ -117,6 +117,51 @@ def weno_stencils_batch(order, q_batch):
 
     return np.array([q_fp_stencil, q_fm_stencil])
 
+# Dheeraj - add
+# weno function to work on single stencil
+
+def weno_ii(order, q):
+    """
+    Do WENO reconstruction at a given location
+
+    Parameters
+    ----------
+
+    order : int
+        The stencil width
+    q : numpy array
+        Scalar data to reconstruct
+
+    Returns
+    -------
+
+    qL : float
+        Reconstructed data - boundary points are zero
+    """
+    C = weno_coefficients.C_all[order]
+    a = weno_coefficients.a_all[order]
+    sigma = weno_coefficients.sigma_all[order]
+
+    qL = numpy.zeros(3)
+    beta = numpy.zeros((order))
+    w = numpy.zeros_like(beta)
+    epsilon = 1e-16
+
+    for nv in range(3):
+        q_stencils = numpy.zeros(order)
+        alpha = numpy.zeros(order)
+        for k in range(order):
+            for l in range(order):
+                for m in range(l + 1):
+                    beta[k] += sigma[k, l, m] * q[nv, order - 1 + k - l] * q[nv, order - 1 + k - m]
+            alpha[k] = C[k] / (epsilon + beta[k] ** 2)
+            for l in range(order):
+                q_stencils[k] += a[k, l] * q[nv, order - 1 + k - l]
+        w[:] = alpha / numpy.sum(alpha)
+        qL[nv] = numpy.dot(w[:], q_stencils)
+
+    return qL
+#dheeraj -end
 
 def weno(order, q):
     """
@@ -343,6 +388,103 @@ class WENOSimulation(object):
         rhs = g.scratch_array()
         rhs[:, 1:-1] = 1 / g.dx * (flux[:, 1:-1] - flux[:, 2:])
         return rhs
+#dheeraj - add
+
+    def evecs_vectorized(self, boundary_state):
+        g= self.grid
+        ilo = g.ilo
+        ihi = g.ihi
+        real_length = g.nx + 2 * g.ng
+        revecs = numpy.zeros((3, 3, real_length))
+        levecs = numpy.zeros((3, 3, real_length))
+        rho = boundary_state[0, :] #numpy.zeros((real_length))
+        S = boundary_state[1, :] #numpy.zeros((real_length))
+        E = boundary_state[2, :] #numpy.zeros((real_length))
+        # rho, S, E = boundary_state[0, :]
+        v = numpy.zeros((real_length))
+        p = numpy.zeros((real_length))
+        cs = numpy.zeros((real_length))
+        indices = [_ for _ in range(ilo, ihi+2)]
+        v[indices] = S[indices] / rho[indices]
+        p[indices] = (self.eos_gamma - 1) * (E[indices] - rho[indices] * v[indices]**2 / 2)
+        cs[indices] = numpy.sqrt(self.eos_gamma * p[indices] / rho[indices])
+        b1 = (self.eos_gamma - 1) / cs[indices]**2
+        b2 = b1 * v[indices]**2 / 2
+        revecs[0, 0, indices] = 1
+        revecs[0, 1, indices] = v[indices] - cs[indices]
+        revecs[0, 2, indices] = (E[indices] + p[indices]) / rho[indices] - v[indices] * cs[indices]
+        revecs[1, 0, indices] = 1
+        revecs[1, 1, indices] = v[indices]
+        revecs[1, 2, indices] = v[indices]**2 / 2
+        revecs[2, 0, indices] = 1
+        revecs[2, 1, indices] = v[indices] + cs[indices]
+        revecs[2, 2, indices] = (E[indices] + p[indices]) / rho[indices] + v[indices] * cs[indices]
+        levecs[0, 0, indices] = (b2 + v[indices] / cs[indices]) / 2
+        levecs[0, 1, indices] = -(b1 * v[indices] + 1 / cs[indices]) / 2
+        levecs[0, 2, indices] = b1 / 2
+        levecs[1, 0, indices] = 1 - b2
+        levecs[1, 1, indices] = b1 * v[indices]
+        levecs[1, 2, indices] = -b1
+        levecs[2, 0, indices] = (b2 - v[indices] / cs[indices]) / 2
+        levecs[2, 1, indices] = -(b1 * v[indices] - 1 / cs[indices]) / 2
+        levecs[2, 2, indices] = b1 / 2
+        return revecs, levecs
+    
+    def rk_substep_characteristic_vector(self):
+        """
+        There is a major issue with the way that I've set up the weno
+        function that means the code below requires the number of ghostzones
+        to be weno_order+2, not just weno_order+1. This should not be needed,
+        but I am too lazy to modify every weno routine to remove the extra,
+        not required, point.
+
+        The results aren't symmetric, so I'm not 100% convinced this is right.
+        """
+
+        g = self.grid
+        g.fill_BCs()
+        f = self.euler_flux(g.q)
+        alpha = self.max_lambda()
+        fp = (f + alpha * g.q) / 2
+        fm = (f - alpha * g.q) / 2
+        # compute the left fluxes
+        fp_stencil_indexes = create_stencil_indexes(stencil_size=self.weno_order * 2 - 1,
+                                                    num_stencils=g.nx + 1,
+                                                    offset=g.ng - self.weno_order)
+
+        fm_stencil_indexes = fp_stencil_indexes + 1
+
+        fp_stencils = numpy.zeros((3, 2*self.weno_order-1, g.nx + 2*g.ng))
+        indices = numpy.array([_ for _ in range(g.ilo, g.ihi + 2)])
+        indices_minus_1 = indices - 1
+        fp_stencils[:, :, indices] = numpy.transpose(numpy.array([fp[i][fp_stencil_indexes] for i in range(3)]), (0,2,1))
+        fm_stencils = numpy.zeros((3, 2 * self.weno_order - 1, g.nx + 2 * g.ng))
+        fm_stencils[:, :, indices] = numpy.transpose(numpy.array([fm[i][fm_stencil_indexes] for i in range(3)]), (0,2,1))
+
+        boundary_state = numpy.zeros((3, g.nx + 2*g.ng))
+        boundary_state[:, indices] = (g.q[:, indices_minus_1] + g.q[:, indices]) * 0.5
+        revecs, levecs = self.evecs_vectorized(boundary_state)
+        # first index - primary variable vector (=3)
+        # second index - stencil size
+        # third index - grid
+        char_fp = numpy.einsum('jil, jkl-> kil', fp_stencils, levecs)
+        char_fm = numpy.einsum('jil, jkl-> kil', fm_stencils, levecs)
+
+        fpr = g.scratch_array()
+        fml = g.scratch_array()
+
+        # perhaps use apply_on_axis to vectorize this?
+        for i in range(g.ilo, g.ihi+2):
+            fpr[:, i] = weno_ii(order, char_fp[:, :, i])
+            fml[:, i] = weno_ii(order, numpy.flip(char_fm[:, :, i], 1))
+
+
+        flux = numpy.einsum('jil, il-> jl', revecs, fpr+fml)
+        rhs = g.scratch_array()
+        rhs[:, 1:-1] = 1 / g.dx * (flux[:, 1:-1] - flux[:, 2:])  # left - right
+        return rhs
+#dheeraj - end
+
 
     def evolve(self, tmax, reconstruction='componentwise'):
         """ evolve the Euler equation using RK4 """
