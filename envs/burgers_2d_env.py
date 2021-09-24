@@ -135,6 +135,8 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
                     - vertical_flux_reconstructed[:, 1:]) / cell_size_y
                 )
 
+        step += super()._substep()
+
         return step
 
     #@tf.function
@@ -215,20 +217,21 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
 
         cell_size_x, cell_size_y = self.grid.cell_size
 
-        step = (  (horizontal_flux_reconstructed[:-1, :]
+        rhs = (  (horizontal_flux_reconstructed[:-1, :]
                     - horizontal_flux_reconstructed[1:, :]) / cell_size_x
                 + (vertical_flux_reconstructed[:, :-1]
                     - vertical_flux_reconstructed[:, 1:]) / cell_size_y
                 )
 
         dt = self.tf_timestep(real_state)
-        step = dt * step
 
         if self.nu != 0.0:
-            step += dt * self.nu * self.grid.tf_laplacian(real_state)
+            rhs += self.nu * self.grid.tf_laplacian(real_state)
         if self.source != None:
             raise NotImplementedError("External source has not been implemented"
                     + " in global backprop.")
+
+        step = dt * rhs
 
         new_state = real_state + step
         return new_state
