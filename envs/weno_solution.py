@@ -388,13 +388,18 @@ class PreciseWENOSolution2D(WENOSolution):
             else:
                 raise Exception("Unrecognized action type: '{}'".format(self.record_actions))
 
-        step = (  (horizontal_flux_reconstructed[:-1, :]
+        rhs = (  (horizontal_flux_reconstructed[:-1, :]
                     - horizontal_flux_reconstructed[1:, :]) / cell_size_x
                 + (vertical_flux_reconstructed[:, :-1]
                     - vertical_flux_reconstructed[:, 1:]) / cell_size_y
                 )
 
-        return step
+        if self.nu > 0.0:
+            rhs += self.nu * self.precise_grid.laplacian()
+        if self.source is not None:
+            rhs += self.source.get_real()
+
+        return rhs
 
     def _update(self, dt, time):
         u_start = np.array(self.precise_grid.get_real())
@@ -413,15 +418,6 @@ class PreciseWENOSolution2D(WENOSolution):
 
         else: #Euler
             full_step = dt * self.rk_substep()
-
-        if self.nu > 0.0:
-            if self.use_rk4:
-                self.precise_grid.set(u_start)
-            R = self.nu * self.precise_grid.laplacian()
-            full_step += dt * R
-
-        if self.source is not None:
-            step += dt * self.source.get_real()
 
         self.precise_grid.set(u_start + full_step)
         self.precise_grid.update_boundary()

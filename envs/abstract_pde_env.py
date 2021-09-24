@@ -28,9 +28,11 @@ class AbstractPDEEnv(gym.Env):
      - Implement render(), which displays the state in some way.
      - Implement _prep_state(), which calculates and returns the RL state representation of the
        grid.
-     - Implement _rk_substep(), which calculates the next step based on the action.
-     - Optionally override step() and _finish_step(), if something else needs to happen before or
-       after the step respectively.
+     - Override _rk_substep(), which calculates the next step based on the action. It is
+       recommended to add the output to super._rk_substep(). Here, _rk_substep() returns the source
+       term, or zeros if the source amplitude is 0.0.
+     - Optionally override step(), rk_step(), or _finish_step(), if something else needs to happen
+       before or after the step.
      - Optionally override reset(), if something else needs to happen on each new episode.
     """
 
@@ -190,7 +192,10 @@ class AbstractPDEEnv(gym.Env):
         The return value may be applied on its own for Euler stepping, or used as part of a
         Runge-Kutta method.
         """
-        raise NotImplementedError()
+        rhs = np.zeros_like(self.grid.get_real())
+        if self.source is not None:
+            rhs += self.source.get_real()
+        return rhs
 
     @property
     def dimensions(self): return self.grid.ndim
@@ -226,6 +231,10 @@ class AbstractPDEEnv(gym.Env):
         self.action_history.append(action)
 
         dt = self.timestep()
+
+        if self.source is not None:
+            self.source.update(dt, self.t + dt) # Why is this t + dt? Why is source based on the
+                                                # time after we integrate forward?
 
         step = dt * self._rk_substep(action)
 
@@ -263,21 +272,24 @@ class AbstractPDEEnv(gym.Env):
             self.u_start = np.array(self.grid.get_real())
             self.dt = self.timestep()
 
-            self.k1 = self.dt * self.rk_substep_weno(action)
+            if self.source is not None:
+                self.source.update(dt, self.t + dt)
+
+            self.k1 = self.dt * self._rk_substep(action)
             self.grid.set(self.u_start + self.k1/2)
             state = self._prep_state()
 
             self.rk_state = 2
             return state, np.zeros_like(action), False
         elif self.rk_state == 2:
-            self.k2 = self.dt * self.rk_substep_weno(action)
+            self.k2 = self.dt * self._rk_substep(action)
             self.grid.set(self.u_start + self.k2/2)
             state = self._prep_state()
 
             self.rk_state = 3
             return state, np.zeros_like(action), False
         elif self.rk_state == 3:
-            self.k3 = self.dt * self.rk_substep_weno(action)
+            self.k3 = self.dt * self._rk_substep(action)
             self.grid.set(self.u_start + self.k3)
             state = self._prep_state()
 
@@ -288,7 +300,7 @@ class AbstractPDEEnv(gym.Env):
 
             self.action_history.append(action)
 
-            k4 = self.dt * self.rk_substep_weno(action)
+            k4 = self.dt * self._rk_substep(action)
             step = (self.k1 + 2*(self.k2 + self.k3) + k4) / 6
 
             if isinstance(self.solution, WENOSolution):
@@ -325,11 +337,6 @@ class AbstractPDEEnv(gym.Env):
         self.solution.update(dt, self.t)
         if self.weno_solution is not None:
             self.weno_solution.update(dt, self.t)
-
-        if self.source is not None:
-            self.source.update(dt, self.t + dt) # Why is this t + dt? Why is source based on the
-                                                # time after we integrate forward?
-            step += dt * self.source.get_real()
 
         if prev is None:
             u_start = self.grid.get_real()
