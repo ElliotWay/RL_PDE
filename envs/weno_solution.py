@@ -163,6 +163,9 @@ def weno_weights_nd(stencils_array, order):
         #assert False
 
     alpha = C / (epsilon + beta ** 2)
+    # This uses a slightly different version. Why? Is computing WENO for Euler somehow different?
+    # https://github.com/python-hydro/hydro_examples/blob/master/compressible/weno_euler.py#L97
+    # alpha = C / (epsilon + np.abs(beta) ** order)
 
     # Keep the sub-stencil dimension after the sum so numpy broadcasts there
     # instead of on the stencil dimension.
@@ -185,6 +188,7 @@ def tf_weno_weights(stencils_tensor, order):
                 * tf.expand_dims(sub_stencils_flipped, axis=-1))
     beta = tf.reduce_sum(sigma * squared, axis=(-2, -1))
     alpha = C / (epsilon + beta ** 2)
+    # alpha = C / (epsilon + tf.abs(beta) ** order)
     weights = alpha / tf.reduce_sum(alpha, axis=-1, keepdims=True)
     return weights
 
@@ -604,18 +608,23 @@ class PreciseWENOSolution(WENOSolution):
         # get the solution data
         g = self.precise_grid
         g.update_boundary()
-
+        order = self.precise_order
 
         # compute flux at each point
         f = self.flux_function(g.u)
 
-        # # get maximum velocity
-        # alpha = np.max(abs(g.u))
-        #
-        # # Lax Friedrichs Flux Splitting
-        # fp = (f + alpha * g.u) / 2
-        # fm = (f - alpha * g.u) / 2
-        fm, fp = lf_flux_split_nd(f, g.u)
+        flux_minus, flux_plus = lf_flux_split_nd(f, g.u)
+
+        plus_stencil_indexes = create_stencil_indexes(stencil_size=order * 2 - 1,
+                                                       num_stencils=g.nx + 1,
+                                                       offset=g.ng - order)
+        minus_stencil_indexes = np.flip(plus_stencil_indexes, axis=-1) + 1
+        plus_stencils = flux_plus[:, plus_stencil_indexes]
+        minus_stencils = flux_minus[:, minus_stencil_indexes]
+
+        plus_reconstructed, plus_weights = weno_reconstruct_nd(order, plus_stencils)
+        minus_reconstructed, minus_weights = weno_reconstruct_nd(order, minus_stencils)
+        flux_reconstructed = minus_reconstructed + plus_reconstructed
 
         fpr = g.scratch_array()
         fml = g.scratch_array()
@@ -655,10 +664,13 @@ class PreciseWENOSolution(WENOSolution):
             else:
                 raise Exception("Unrecognized action type: '{}'".format(self.record_actions))
 
+
+        step = (flux_reconstructed[:-1] - flux_reconstructed[1:]) / g.dx
+
+        # Should viscosity and source be computed per rk_step, or per actual step?
         # compute flux from fpr and fml
         flux[:, 1:-1] = fpr[:, 1:-1] + fml[:, 1:-1]
         rhs = g.scratch_array()
-
         if self.nu > 0.0:
             R = self.nu * self.precise_grid.laplacian()
             # Hack to make the new version of grid.laplacian (which returns a real sized grid)
