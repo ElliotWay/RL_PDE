@@ -86,7 +86,6 @@ def main():
                         + " Useful for scripts. Overrides the -y option.")
 
     arg_manager.set_parser(parser)
-    temp_args, _ = arg_manager.parse_known_args()
     env_arg_manager = arg_manager.create_child("e", long_name="Environment Parameters")
     env_arg_manager.set_parser(env_builder.get_env_arg_parser())
     model_arg_manager = arg_manager.create_child("m", long_name="Model Parameters")
