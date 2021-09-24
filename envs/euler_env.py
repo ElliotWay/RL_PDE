@@ -153,11 +153,13 @@ class AbstractEulerEnv(AbstractPDEEnv):
         flux[2, :] = (E + p) * v
         return flux
 
-    def _finish_step(self, step, dt, prev=None):
+    def _rk_substep(self, action):
+        rhs = super()._rk_substep(action)
         if self.nu > 0.0:
-            R = self.nu * self.grid.laplacian()
-            step += dt * R
+            rhs += self.nu * self.grid.laplacian()
+        return rhs
 
+    def _finish_step(self, step, dt, prev=None):
         state, reward, done = super()._finish_step(step, dt, prev)
 
         if self.follow_solution:
@@ -296,6 +298,8 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
             raise NotImplementedError
 
         rhs = (flux[:, :-1] - flux[:, 1:]) / self.grid.dx
+
+        rhs = rhs + super()._rk_substep(weights)
 
         return rhs
 
