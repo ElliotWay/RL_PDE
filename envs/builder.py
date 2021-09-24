@@ -157,7 +157,8 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
     default_time_max = (env_args.time_max is None)
 
     # Some environments have specific defaults.
-    if env_args.init_type == "jsz7":
+    if env_args.init_type == 'jsz7':
+        assert main_args.env == "weno_burgers_2d"
         if env_args.min_value is None:
             env_args.min_value = (0.0,)
         if env_args.max_value is None:
@@ -166,6 +167,12 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
             env_args.num_cells = (160,)
         if env_args.time_max is None:
             env_args.time_max = 0.5
+    elif env_args.init_type == 'sod':
+        assert main_args.env == "weno_euler"
+        if env_args.min_value is None:
+            env_args.min_value = (-0.5)
+        if env_args.max_value is None:
+            env_args.max_value = (0.5)
     else:
         if env_args.min_value is None:
             env_args.min_value = (0.0,)
