@@ -391,9 +391,9 @@ class PreciseWENOSolution2D(WENOSolution):
                 )
 
         if self.nu > 0.0:
-            rhs += self.nu * self.precise_grid.laplacian()
+            rhs = rhs + self.nu * self.precise_grid.laplacian()
         if self.source is not None:
-            rhs += self.source.get_real()
+            rhs = rhs + self.source.get_real()
 
         return rhs
 
@@ -660,9 +660,9 @@ class PreciseWENOSolution(WENOSolution):
             # Hack to make the new version of grid.laplacian (which returns a real sized grid)
             # work with code that expects the old version (which returned a full sized grid with
             # ghost cells). The ghost cells will be overwritten anyway.
-            R = np.concatenate([np.zeros(self.precise_grid.ng),
-                R, np.zeros(self.precise_grid.ng)])
-            rhs[:, 1:-1] = 1 / g.dx * (flux[:, :, 1:-1] - flux[2:]) + R[:, 1:-1]
+            R = np.concatenate([np.zeros((1,self.precise_grid.ng)),
+                R, np.zeros((1,self.precise_grid.ng))], axis=-1)
+            rhs[:, 1:-1] = 1 / g.dx * (flux[:, 1:-1] - flux[:, 2:]) + R[:, 1:-1]
         else:
             rhs[:, 1:-1] = 1 / g.dx * (flux[:, 1:-1] - flux[:, 2:])
 

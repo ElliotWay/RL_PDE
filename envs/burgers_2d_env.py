@@ -135,7 +135,7 @@ class WENOBurgers2DEnv(AbstractBurgersEnv, Plottable2DEnv):
                     - vertical_flux_reconstructed[:, 1:]) / cell_size_y
                 )
 
-        step += super()._substep()
+        step = step + super()._rk_substep(action)
 
         return step
 
