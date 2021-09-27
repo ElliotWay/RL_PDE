@@ -313,7 +313,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         reconstructed_flux = fpr + fml
 
         derivative_u_t = (reconstructed_flux[:-1] - reconstructed_flux[1:]) / self.grid.dx
-        rhs = deriviative_u_t
+        rhs = derivative_u_t
 
         dt = self.tf_timestep(real_state)
 
