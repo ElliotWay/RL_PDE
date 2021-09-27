@@ -633,6 +633,19 @@ class IntegrateCell(Layer):
                 dtype=real_state.dtype, # Specify dtype because different from input (not a tuple).
                 name='map_integrate')
 
+        # We could implement RK4 here by repeatedly calling the policy.
+        # E.g.
+        # u0 = state
+        # s = prep_state(u0); a = policy(s); k1 = integrate(s,a); u1 = u0 + k1/2
+        # s = prep_state(u1); a = policy(s); k2 = integrate(s,a); u2 = u0 + k2/2
+        # s = prep_state(u2); a = policy(s); k3 = integrate(s,a); u3 = u0 + k3
+        # s = prep_state(u3); a = policy(s); k4 = integrate(s,a); u4 = u0 + (k1+2*k2+2*k3+k4)/6
+        # r = reward_fn(u0, u4)
+        # The reward function should make use of RK4 WENO instead of Euler WENO.
+        # Does that make sense, though? Is it impossible to learn a scheme of weights that doesn't
+        # need this iterative process? We could have just the reward function use RK4 while the
+        # agent does not?
+
         rl_reward = tf.map_fn(self.reward_fn, (real_state, rl_state, rl_action, next_real_state),
                 dtype=tuple_type,
                 name='map_reward')
