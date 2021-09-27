@@ -23,17 +23,12 @@ class StandardWENO2DAgent(Policy):
             a_mat = weno_coefficients.a_all[order]
             a_mat = np.flip(a_mat, axis=-1)
     
-            # a_mat is [sub_stencil_index, inner_index]
-            # weno_weights is [x, y, (fp,fm), sub_stencil_index]
-            # We want [x, y, (fp,fm), inner_index].
             combined_weights = [a_mat[None, None, None, :, :] * weights[:, :, :, :, None]
                                         for weights in weno_weights]
 
             all_flux_weights = []
             for weights, state_part in zip(combined_weights, state):
                 flux_weights = np.zeros_like(state_part)
-                # TODO: figure out a way to vectorize this. This is a weird broadcast I'm trying to do,
-                # which would be easier if numpy had builtin support for banded matrices.
                 for sub_stencil_index in range(order):
                     flux_weights[:, :, sub_stencil_index:sub_stencil_index + order] += \
                                                             weights[:, :, sub_stencil_index, :]
@@ -54,20 +49,16 @@ class StandardWENOAgent(Policy):
             return weno_weights, None
 
         if self.action_type == "split_flux":
+            # Same as in weno_solution.
             order = self.order
             a_mat = weno_coefficients.a_all[order]
             a_mat = np.flip(a_mat, axis=-1)
-    
-            # a_mat is [sub_stencil_index, inner_index]
-            # weno_weights is [location, (fp,fm), sub_stencil_index]
-            # We want [location, (fp,fm), inner_index].
-            combined_weights = a_mat[None, None, :, :] * weno_weights[:, :, :, None]
+            combined_weights = a_mat[:, None, None, :, :] * weno_weights[:, :, :, :, None]
 
             flux_weights = np.zeros_like(state)
-            # TODO: figure out a way to vectorize this. This is a weird broadcast I'm trying to do,
-            # which would be easier if numpy had builtin support for banded matrices.
             for sub_stencil_index in range(order):
-                flux_weights[:, :, sub_stencil_index:sub_stencil_index + order] += combined_weights[:, :, sub_stencil_index, :]
+                i = sub_stencil_index
+                flux_weights[:, :, :, i:i + order] += combined_weights[:, :, :, i, :]
 
             return flux_weights, None
 
