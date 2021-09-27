@@ -228,8 +228,8 @@ def main():
 
             if commands_started < len(arg_matrix):
                 # Check that git repo hasn't changed before starting a new proc.
-                return_code, current_id = get_git_commit_id()
-                dirty_repo = not is_clean_git_repo()
+                return_code, current_id = git_commit_hash()
+                dirty_repo = not git_is_clean()
                 if (original_id is not None and args.run and
                         (return_code != 0 or current_id != original_id or dirty_repo)):
                     while True:
@@ -345,6 +345,10 @@ def main():
         print("{}{}/{} processes had nonzero return values.{}".format(
             colors.FAIL, commands_with_errors, len(arg_matrix), colors.ENDC))
 
+    if commands_with_errors == 0 and commands_started == len(arg_matrix):
+        sys.exit(0)
+    else:
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()

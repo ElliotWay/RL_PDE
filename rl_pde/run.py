@@ -383,10 +383,12 @@ def train(env, eval_envs, emi, args):
         human_readable_time_delta(time.time() - start_time), total_timesteps))
 
     # Rename best models based on their final rank.
+    best_names = []
     print("Best models:")
     for index, model in enumerate(best_models):
         base_best_name = "best_{}_model_{}".format(index+1, model["episodes"])
         new_file_name = os.path.join(log_dir, base_best_name + ".zip")
+        best_names.append(new_file_name)
         shutil.move(model["file_name"], new_file_name)
         print("{}: {} eps, {}, {}".format(index+1, model["episodes"], model["reward"],
             new_file_name))
@@ -395,5 +397,9 @@ def train(env, eval_envs, emi, args):
             new_plot_name = os.path.join(log_dir,
                     "{}_{}{}".format(base_best_name, plot_index+1, plot_ext))
             shutil.copy(plot_file_name, new_plot_name)
+
+    # And keep a copy of the best model with the same name across experiments.
+    best_file_name = os.path.join(log_dir, "model_best.zip")
+    shutil.copy(best_names[0], best_file_name)
 
 
