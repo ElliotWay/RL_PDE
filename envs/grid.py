@@ -338,7 +338,9 @@ class GridBase(AbstractGrid):
         """
         partial_2nd_derivatives = []
 
+
         for axis, (ng, dx) in enumerate(zip(self.num_ghosts, self.cell_size)):
+            axis = axis + 1 # Axis 0 is the vector axis.
             # Slice away ghost values on all but the relevant axis.
             mostly_real_slice = list(self.real_slice)
             mostly_real_slice[axis] = slice(None)

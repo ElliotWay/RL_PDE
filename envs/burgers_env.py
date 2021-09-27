@@ -148,7 +148,7 @@ class AbstractBurgersEnv(AbstractPDEEnv):
         """
         # Note: This function is now defined in envs/grid.py#GridBase.laplacian(). Use that instead.
 
-    def _rk_substep(action):
+    def _rk_substep(self, action):
         rhs = super()._rk_substep(action)
         if self.nu > 0.0:
             rhs += self.nu * self.grid.laplacian()
@@ -249,7 +249,8 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
 
         rhs = (flux[:-1] - flux[1:]) / self.grid.dx
 
-        rhs += super()._rk_substep()
+        # Don't change this to +=; there's a hidden broadcast over the vector dimension.
+        rhs = rhs + super()._rk_substep(weights)
 
         return rhs
 

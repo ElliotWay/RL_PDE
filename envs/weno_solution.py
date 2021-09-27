@@ -355,9 +355,9 @@ class PreciseWENOSolution2D(WENOSolution):
                 )
 
         if self.nu > 0.0:
-            rhs += self.nu * self.precise_grid.laplacian()
+            rhs = rhs + self.nu * self.precise_grid.laplacian()
         if self.source is not None:
-            rhs += self.source.get_real()
+            rhs = rhs + self.source.get_real()
 
         return rhs
 
@@ -467,6 +467,7 @@ class PreciseWENOSolution(WENOSolution):
         self.record_actions = record_mode
     def get_action_history(self):
         return self.action_history
+
     def rk_substep(self):
 
         # get the solution data
@@ -661,8 +662,6 @@ class PreciseWENOSolution(WENOSolution):
             for i in range(self.order, num_points + self.order):
                 qL[nv, i] = np.dot(weights[nv, :, i], q_stencils[nv, :, i])
         return qL, weights
-
-
 
 if __name__ == "__main__":
     import os

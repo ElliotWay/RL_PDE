@@ -5,11 +5,10 @@ from gym import spaces
 import envs.weno_coefficients as weno_coefficients
 from envs.abstract_pde_env import AbstractPDEEnv
 from envs.plottable_env import Plottable1DEnv
-from envs.solutions import RiemannSolution
 from envs.solutions import MemoizedSolution, OneStepSolution
-from envs.weno_solution import WENOSolution, PreciseWENOSolution, PreciseWENOSolution2D
-from envs.weno_solution import lf_flux_split_nd, weno_sub_stencils_nd
-from envs.weno_solution import tf_lf_flux_split, tf_weno_sub_stencils, tf_weno_weights
+from envs.solutions import RiemannSolution
+from envs.weno_solution import WENOSolution, PreciseWENOSolution
+from envs.weno_solution import weno_sub_stencils_nd, tf_weno_sub_stencils
 from util.misc import create_stencil_indexes
 from util.softmax_box import SoftmaxBox
 
@@ -29,11 +28,11 @@ class AbstractEulerEnv(AbstractPDEEnv):
     """
 
     def __init__(self,
-            nu=0.0,
-            analytical=False, memoize=False,
-            precise_weno_order=None, precise_scale=1,
-            follow_solution=False,
-            *args, **kwargs):
+                 nu=0.0,
+                 analytical=False, memoize=False,
+                 precise_weno_order=None, precise_scale=1,
+                 follow_solution=False,
+                 *args, **kwargs):
         """
         Construct the Euler environment.
 
@@ -72,7 +71,7 @@ class AbstractEulerEnv(AbstractPDEEnv):
         if self.analytical:
             if self.grid.ndim > 1:
                 raise NotImplementedError("Analytical solutions for multiple dimensions not yet"
-                 + " implemented.")
+                                          + " implemented.")
             else:
                 self.solution = RiemannSolution(self.grid.nx, self.grid.ng, self.grid.xmin, self.grid.xmax,
                                                 vec_len=3, init_type=kwargs['init_type'],
@@ -80,11 +79,11 @@ class AbstractEulerEnv(AbstractPDEEnv):
         else:
             if self.grid.ndim == 1:
                 self.solution = PreciseWENOSolution(
-                        self.grid, {'init_type':self.grid.init_type,
-                            'boundary':self.grid.boundary},
-                        precise_scale=precise_scale, precise_order=precise_weno_order,
-                        flux_function=self.euler_flux, source=self.source,
-                        nu=nu, eqn_type='euler', vec_len=3)
+                    self.grid, {'init_type': self.grid.init_type,
+                                'boundary': self.grid.boundary},
+                    precise_scale=precise_scale, precise_order=precise_weno_order,
+                    flux_function=self.euler_flux, source=self.source,
+                    nu=nu, eqn_type='euler', vec_len=3)
             # elif self.grid.ndim == 2:
             #     self.solution = PreciseWENOSolution2D(
             #             self.grid, {'init_type':self.grid.init_type,
@@ -94,7 +93,7 @@ class AbstractEulerEnv(AbstractPDEEnv):
             #             nu=nu, eqn_type='euler', vec_len=3)
             else:
                 raise NotImplementedError("{}-dim solution".format(self.grid.ndim)
-                        + " not implemented.")
+                                          + " not implemented.")
 
         if "one-step" in self.reward_mode:
             self.solution = OneStepSolution(self.solution, self.grid, vec_len=3)
@@ -110,7 +109,7 @@ class AbstractEulerEnv(AbstractPDEEnv):
         elif self.precise_weno_order != self.weno_order or self.precise_scale != 1:
             show_separate_weno = True
             self.solution_label = "WENO (order={}, grid_scale={})".format(self.precise_weno_order,
-                    self.precise_scale)
+                                                                          self.precise_scale)
             self.weno_solution_label = "WENO (order={}, grid_scale=1)".format(self.weno_order, self.nx)
         elif isinstance(self.solution, OneStepSolution):
             show_separate_weno = True
@@ -122,11 +121,11 @@ class AbstractEulerEnv(AbstractPDEEnv):
         if show_separate_weno:
             if self.grid.ndim == 1:
                 self.weno_solution = PreciseWENOSolution(
-                        self.grid, {'init_type':self.grid.init_type,
-                            'boundary':self.grid.boundary},
-                        precise_scale=1, precise_order=self.weno_order,
-                        flux_function=self.euler_flux, source=self.source,
-                        nu=nu,  eqn_type='euler', vec_len=3)
+                    self.grid, {'init_type': self.grid.init_type,
+                                'boundary': self.grid.boundary},
+                    precise_scale=1, precise_order=self.weno_order,
+                    flux_function=self.euler_flux, source=self.source,
+                    nu=nu, eqn_type='euler', vec_len=3)
             # elif self.grid.ndim == 2:
             #     self.weno_solution = PreciseWENOSolution2D(
             #             self.grid, {'init_type':self.grid.init_type,
@@ -154,11 +153,13 @@ class AbstractEulerEnv(AbstractPDEEnv):
         flux[2, :] = (E + p) * v
         return flux
 
-    def _finish_step(self, step, dt, prev=None):
+    def _rk_substep(self, action):
+        rhs = super()._rk_substep(action)
         if self.nu > 0.0:
-            R = self.nu * self.grid.laplacian()
-            step += dt * R
+            rhs += self.nu * self.grid.laplacian()
+        return rhs
 
+    def _finish_step(self, step, dt, prev=None):
         state, reward, done = super()._finish_step(step, dt, prev)
 
         if self.follow_solution:
@@ -260,25 +261,104 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
 
         state = self.current_state
 
-        fp_state = state[:, :, 0, :]
-        fm_state = state[:, :, 1, :]
-
-        # TODO state_order != weno_order has never worked well.
-        # Is this why? Should this be state order? Or possibly it should be weno order but we still
-        # need to compensate for a larger state order somehow?
-        fp_stencils = weno_sub_stencils_nd(fp_state, self.weno_order)
-        fm_stencils = weno_sub_stencils_nd(fm_state, self.weno_order)
+        fp_stencils = state[:, :, 0, :]
+        fm_stencils = state[:, :, 1, :]
 
         fp_weights = weights[:, :, 0, :]
         fm_weights = weights[:, :, 1, :]
 
-        fpr = np.sum(fp_weights * fp_stencils, axis=-1)
-        fml = np.sum(fm_weights * fm_stencils, axis=-1)
+        if self.reconstruction == 'componentwise':
+            fp_substencils = weno_sub_stencils_nd(fp_stencils, self.weno_order)
+            fm_substencils = weno_sub_stencils_nd(fm_stencils, self.weno_order)
 
-        flux = fml + fpr
+            fpr = np.sum(fp_weights * fp_substencils, axis=-1)
+            fml = np.sum(fm_weights * fm_substencils, axis=-1)
+            flux = fml + fpr
+
+        elif self.reconstruction == 'characteristicwise':
+            boundary_state = (self.grid.u[:, self.grid.ng-1:-self.grid.ng] +
+                              self.grid.u[:, self.grid.ng:-self.grid.ng+1]) * 0.5
+            # boundary_state = (self.grid.u[:, self.grid.ng-1:-self.grid.ng] +
+            #                   self.grid.u[:, self.grid.ng:-self.grid.ng+1]) * 0.5
+            revecs, levecs = self._evecs_vectorized(boundary_state)
+            # first index - primary variable vector (=3)
+            # second index - stencil size
+            # third index - grid
+            char_fp = np.einsum('jli, jkl-> kli', fp_stencils, levecs)
+            char_fm = np.einsum('jli, jkl-> kli', fm_stencils, levecs)
+
+            fp_substencils = weno_sub_stencils_nd(char_fp, self.weno_order)
+            fm_substencils = weno_sub_stencils_nd(char_fm, self.weno_order)
+
+            fpr = np.sum(fp_weights * fp_substencils, axis=-1)
+            fml = np.sum(fm_weights * fm_substencils, axis=-1)
+            flux = np.einsum('jil, il-> jl', revecs, fpr + fml)
+
+        else:
+            raise NotImplementedError
+
         rhs = (flux[:, :-1] - flux[:, 1:]) / self.grid.dx
 
+        rhs = rhs + super()._rk_substep(weights)
+
         return rhs
+
+    def _evecs_vectorized(self, boundary_state):
+        g = self.grid
+        real_length = g.nx + 1
+        revecs = np.zeros((3, 3, real_length))
+        levecs = np.zeros((3, 3, real_length))
+        rho = boundary_state[0, :]  # np.zeros((real_length))
+        S = boundary_state[1, :]  # np.zeros((real_length))
+        E = boundary_state[2, :]  # np.zeros((real_length))
+        v = S / rho
+        p = (self.eos_gamma - 1) * (E - rho * v ** 2 / 2)
+        cs = np.sqrt(self.eos_gamma * p / rho)
+        b1 = (self.eos_gamma - 1) / cs ** 2
+        b2 = b1 * v ** 2 / 2
+        revecs[0, 0, :] = 1
+        revecs[0, 1, :] = v - cs
+        revecs[0, 2, :] = (E + p) / rho - v * cs
+        revecs[1, 0, :] = 1
+        revecs[1, 1, :] = v
+        revecs[1, 2, :] = v ** 2 / 2
+        revecs[2, 0, :] = 1
+        revecs[2, 1, :] = v + cs
+        revecs[2, 2, :] = (E + p) / rho + v * cs
+        levecs[0, 0, :] = (b2 + v / cs) / 2
+        levecs[0, 1, :] = -(b1 * v + 1 / cs) / 2
+        levecs[0, 2, :] = b1 / 2
+        levecs[1, 0, :] = 1 - b2
+        levecs[1, 1, :] = b1 * v
+        levecs[1, 2, :] = -b1
+        levecs[2, 0, :] = (b2 - v / cs) / 2
+        levecs[2, 1, :] = -(b1 * v - 1 / cs) / 2
+        levecs[2, 2, :] = b1 / 2
+        return revecs, levecs
+
+    def tf_evecs_vectorized(self, boundary_state):
+        data_type = boundary_state.dtype
+        # revecs = tf.zeros((3, 3, boundary_state.shape[-1]), dtype=data_type)
+        # levecs = tf.zeros((3, 3, boundary_state.shape[-1]), dtype=data_type)
+        rho = boundary_state[0, :]  # np.zeros((real_length))
+        S = boundary_state[1, :]  # np.zeros((real_length))
+        E = boundary_state[2, :]  # np.zeros((real_length))
+        v = S / rho
+        eos_gamma = tf.convert_to_tensor(self.eos_gamma, dtype=data_type)
+        p = (eos_gamma - 1) * (E - rho * v ** 2 / 2)
+        cs = tf.sqrt(eos_gamma * p / rho)
+        b1 = (eos_gamma - 1) / cs ** 2
+        b2 = b1 * v ** 2 / 2
+        ones = tf.ones(boundary_state.shape[-1], dtype=data_type)
+        revecs = tf.stack([tf.stack([ones, v - cs, (E + p) / rho - v * cs]),
+                           tf.stack([ones, v, v ** 2 / 2]),
+                           tf.stack([ones, v + cs, (E + p) / rho + v * cs])
+                           ])
+        levecs = tf.stack([tf.stack([(b2 + v / cs) / 2, -(b1 * v + ones / cs) / 2, b1 / 2]),
+                           tf.stack([ones - b2, b1 * v, -b1]),
+                           tf.stack([(b2 - v / cs) / 2, -(b1 * v - ones / cs) / 2, b1 / 2])
+                           ])
+        return revecs, levecs
 
     # @tf.function
     def tf_prep_state(self, state):
@@ -301,99 +381,90 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
         cs = tf.sqrt(self.eos_gamma * p / rho)
         alpha = tf.reduce_max(tf.abs(v) + cs)
 
-        plus_stencils = []
-        minus_stencils = []
-        for i in range(self.grid.space.shape[0]):
-            flux_plus = (flux[i] + alpha * full_state[i]) / 2
-            flux_minus = (flux[i] - alpha * full_state[i]) / 2
+        flux_plus = (flux + alpha * full_state) / 2
+        flux_minus = (flux - alpha * full_state) / 2
 
-            # TODO Could change things to use traditional convolutions instead.
-            # Maybe if this whole thing actually works.
+        plus_indexes = create_stencil_indexes(
+            stencil_size=self.state_order * 2 - 1,
+            num_stencils=self.nx + 1,
+            offset=self.ng - self.state_order)
+        minus_indexes = np.flip(plus_indexes, axis=-1) + 1
 
-            plus_indexes = create_stencil_indexes(
-                stencil_size=self.state_order * 2 - 1,
-                num_stencils=self.nx + 1,
-                offset=self.ng - self.state_order)
-            # plus_indexes = create_stencil_indexes(
-            # stencil_size=(self.weno_order * 2 - 1),
-            # num_stencils=(self.nx + 1),
-            # offset=(self.ng - self.weno_order))
-            minus_indexes = plus_indexes + 1
-            minus_indexes = np.flip(minus_indexes, axis=-1)
-
-            plus_stencils.append(tf.gather(flux_plus, plus_indexes))
-            minus_stencils.append(tf.gather(flux_minus, minus_indexes))
+        plus_stencils = [tf.gather(flux_plus[i], plus_indexes) for i in range(self.grid.space.shape[0])]
+        minus_stencils = [tf.gather(flux_minus[i], minus_indexes) for i in range(self.grid.space.shape[0])]
 
         # Stack together into rl_state.
-        # Stack on dim 2 to keep location dim 1, vec_len dim 0.
+        # Stack on dim 2 to keep location dim 1. (different from Burgers, 0th dim is vec_length)
         rl_state = tf.stack([plus_stencils, minus_stencils], axis=2)
 
-        #return rl_state
-        return (rl_state,) # Singleton because this is 1D.
+        return (rl_state,)  # Singleton because this is 1D.
 
     # @tf.function
     def tf_integrate(self, args):
         real_state, rl_state, rl_action = args
 
-        rl_state = rl_state[0] # Extract 1st (and only) dimension.
+        rl_state = rl_state[0]  # Extract 1st (and only) dimension.
         rl_action = rl_action[0]
 
         # Note that real_state does not contain ghost cells here, but rl_state DOES (and rl_action has
         # weights corresponding to the ghost cells).
-        new_state = []
-        for i in range(self.grid.space.shape[0]):
-            plus_stencils = rl_state[i, :, 0, :]
-            minus_stencils = rl_state[i, :, 1, :]
 
-            # This block corresponds to envs/weno_solution.py#weno_sub_stencils_nd().
-            a_mat = weno_coefficients.a_all[self.weno_order]
-            a_mat = np.flip(a_mat, axis=-1)
-            a_mat = tf.constant(a_mat, dtype=rl_state.dtype)
-            sub_stencil_indexes = create_stencil_indexes(stencil_size=self.weno_order,
-                                                         num_stencils=self.weno_order)
-            # Here axis 0 is location/batch and axis 1 is stencil,
-            # so to index substencils we gather on axis 1.
-            plus_sub_stencils = tf.gather(plus_stencils, sub_stencil_indexes, axis=1)
-            minus_sub_stencils = tf.gather(minus_stencils, sub_stencil_indexes, axis=1)
-            plus_interpolated = tf.reduce_sum(a_mat * plus_sub_stencils, axis=-1)
-            minus_interpolated = tf.reduce_sum(a_mat * minus_sub_stencils, axis=-1)
+        plus_stencils = rl_state[:, :, 0]
+        minus_stencils = rl_state[:, :, 1]
+        plus_action = rl_action[:, :, 0]
+        minus_action = rl_action[:, :, 1]
 
-            plus_action = rl_action[i, :, 0]
-            minus_action = rl_action[i, :, 1]
-
-            fpr = tf.reduce_sum(plus_action * plus_interpolated, axis=-1)
-            fml = tf.reduce_sum(minus_action * minus_interpolated, axis=-1)
-
+        if self.reconstruction == 'componentwise':
+            fpr = tf.reduce_sum(plus_action * tf_weno_sub_stencils(plus_stencils, self.weno_order), axis=-1)
+            fml = tf.reduce_sum(minus_action * tf_weno_sub_stencils(minus_stencils, self.weno_order), axis=-1)
             reconstructed_flux = fpr + fml
 
-            derivative_u_t = (reconstructed_flux[:-1] - reconstructed_flux[1:]) / self.grid.dx
+        elif self.reconstruction == 'characteristicwise':
+            boundary = self.grid.boundary
+            if not type(boundary) is str:
+                boundary = boundary[0]
 
-            # TODO implement RK4?
+            if boundary == "outflow":
+                left_state = tf.repeat(tf.expand_dims(real_state[:, 0], 1), self.ng, axis=1)
+                right_state = tf.repeat(tf.expand_dims(real_state[:, -1], 1), self.ng, axis=1)
+            elif boundary == "periodic":
+                left_state = real_state[:, -self.ng:]
+                right_state = real_state[:, :self.ng]
+            else:
+                raise NotImplementedError()
+            full_state = tf.concat([left_state, real_state, right_state], axis=1)
 
-            step = self.dt * derivative_u_t
+            boundary_state = (full_state[:, self.ng-1:-self.ng] + full_state[:, self.ng:-self.ng+1]) * 0.5
 
-            # if self.nu != 0.0:
-            #     # Compute the Laplacian. This involves the first ghost cell past the boundary.
-            #     central_lap = (real_state[:-2] - 2.0 * real_state[1:-1] + real_state[2:]) / (self.grid.dx ** 2)
-            #     if self.grid.boundary == "outflow":
-            #         left_lap = (-real_state[0] + real_state[1]) / (self.grid.dx ** 2)  # X-2X+Y = -X+Y
-            #         right_lap = (real_state[-2] - real_state[-1]) / (self.grid.dx ** 2)  # X-2Y+Y = X-Y
-            #     elif self.grid.boundary == "periodic":
-            #         left_lap = (real_state[-1] - 2.0 * real_state[0] + real_state[1]) / (self.grid.dx ** 2)
-            #         right_lap = (real_state[-2] - 2.0 * real_state[-1] + real_state[0]) / (self.grid.dx ** 2)
-            #     else:
-            #         raise NotImplementedError()
-            #     lap = tf.concat([[left_lap], central_lap, [right_lap]], axis=0)
-            #
-            #     step += self.dt * self.nu * lap
-            # # TODO implement random source?
-            # if self.source != None:
-            #     raise NotImplementedError("External source has not been implemented"
-            #                               + " in global backprop.")
+            revecs, levecs = self.tf_evecs_vectorized(boundary_state)
+            char_fp = tf.einsum('jli, jkl-> kli', plus_stencils, levecs)
+            char_fm = tf.einsum('jli, jkl-> kli', minus_stencils, levecs)
 
-            new_state.append(real_state[i] + step)
-            # shape broadcasting seems fine here, real_state shape=(1, 125), step shape=(125,), new_state shape=(1, 125)
-        return tf.stack(new_state, axis=0)
+            fpr = tf.reduce_sum(plus_action * tf_weno_sub_stencils(char_fp, self.weno_order), axis=-1)
+            fml = tf.reduce_sum(minus_action * tf_weno_sub_stencils(char_fm, self.weno_order), axis=-1)
+            reconstructed_flux = tf.einsum('jil, il-> jl', revecs, fpr + fml)
+
+        else:
+            raise NotImplementedError
+
+        derivative_u_t = (reconstructed_flux[:, :-1] - reconstructed_flux[:, 1:]) / self.grid.dx
+
+        # TODO implement RK4?
+
+        dt = self.tf_timestep(real_state)
+
+        step = dt * derivative_u_t
+
+        if self.nu != 0.0:
+            step += dt * self.nu * self.grid.tf_laplacian(real_state)
+        # TODO implement random source?
+        if self.source != None:
+            raise NotImplementedError("External source has not been implemented"
+                                      + " in global backprop.")
+
+        new_state = real_state + step
+
+        return new_state
 
     # TODO: modify this so less is in subclass? The reward section could go in the abstract class,
     # but this needs to be here because of how we calculate the WENO step. Not a high priority.
@@ -404,7 +475,7 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
         real_state, rl_state, rl_action, next_real_state = args
         # Note that real_state and next_real_state do not include ghost cells, but rl_state does.
 
-        rl_state = rl_state[0] # Extract 1st (and only) dimension.
+        rl_state = rl_state[0]  # Extract 1st (and only) dimension.
         rl_action = rl_action[0]
 
         # This section corresponds to envs/weno_solution.py#weno_weights_nd().
@@ -413,7 +484,7 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
         sigma_mat = weno_coefficients.sigma_all[self.weno_order]
         sigma_mat = tf.constant(sigma_mat, dtype=real_state.dtype)
 
-        weno_action= []
+        weno_action = []
         for i in range(self.grid.space.shape[0]):
             fp_stencils = rl_state[i, :, 0]
             fm_stencils = rl_state[i, :, 1]
@@ -557,5 +628,5 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
 
         # end adaptation of calculate_reward().
 
-        #return reward
-        return (reward,) # Singleton because this is 1D.
+        # return reward
+        return (reward,)  # Singleton because this is 1D.
