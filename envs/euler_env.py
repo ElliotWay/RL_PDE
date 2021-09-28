@@ -242,8 +242,20 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
         fm_stencils = np.flip(fm_stencils, axis=-1)
         fp_stencils = np.stack(fp_stencils, axis=0)
 
-        # Stack fp and fm on axis -2 so grid position is still axis 0.
-        self.current_state = np.stack([fp_stencils, fm_stencils], axis=-2)
+        if self.reconstruction == 'componentwise':
+            # Stack fp and fm on axis -2 so grid position is still axis 0.
+            self.current_state = np.stack([fp_stencils, fm_stencils], axis=-2)
+
+        elif self.reconstruction == 'characteristicwise':
+            boundary_state = (self.grid.u[:, self.grid.ng-1:-self.grid.ng] +
+                              self.grid.u[:, self.grid.ng:-self.grid.ng+1]) * 0.5
+            levecs = self._levecs_vectorized(boundary_state)
+            # first index - primary variable vector (=3)
+            # second index - stencil size
+            # third index - grid
+            char_fp = np.einsum('jli, jkl-> kli', fp_stencils, levecs)
+            char_fm = np.einsum('jli, jkl-> kli', fm_stencils, levecs)
+            self.current_state = np.stack([char_fp, char_fm], axis=-2)
 
         return self.current_state
 
@@ -267,10 +279,10 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
         fp_weights = weights[:, :, 0, :]
         fm_weights = weights[:, :, 1, :]
 
-        if self.reconstruction == 'componentwise':
-            fp_substencils = weno_sub_stencils_nd(fp_stencils, self.weno_order)
-            fm_substencils = weno_sub_stencils_nd(fm_stencils, self.weno_order)
+        fp_substencils = weno_sub_stencils_nd(fp_stencils, self.weno_order)
+        fm_substencils = weno_sub_stencils_nd(fm_stencils, self.weno_order)
 
+        if self.reconstruction == 'componentwise':
             fpr = np.sum(fp_weights * fp_substencils, axis=-1)
             fml = np.sum(fm_weights * fm_substencils, axis=-1)
             flux = fml + fpr
@@ -278,17 +290,7 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
         elif self.reconstruction == 'characteristicwise':
             boundary_state = (self.grid.u[:, self.grid.ng-1:-self.grid.ng] +
                               self.grid.u[:, self.grid.ng:-self.grid.ng+1]) * 0.5
-            # boundary_state = (self.grid.u[:, self.grid.ng-1:-self.grid.ng] +
-            #                   self.grid.u[:, self.grid.ng:-self.grid.ng+1]) * 0.5
-            revecs, levecs = self._evecs_vectorized(boundary_state)
-            # first index - primary variable vector (=3)
-            # second index - stencil size
-            # third index - grid
-            char_fp = np.einsum('jli, jkl-> kli', fp_stencils, levecs)
-            char_fm = np.einsum('jli, jkl-> kli', fm_stencils, levecs)
-
-            fp_substencils = weno_sub_stencils_nd(char_fp, self.weno_order)
-            fm_substencils = weno_sub_stencils_nd(char_fm, self.weno_order)
+            revecs = self._revecs_vectorized(boundary_state)
 
             fpr = np.sum(fp_weights * fp_substencils, axis=-1)
             fml = np.sum(fm_weights * fm_substencils, axis=-1)
@@ -303,10 +305,9 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
 
         return rhs
 
-    def _evecs_vectorized(self, boundary_state):
+    def _levecs_vectorized(self, boundary_state):
         g = self.grid
         real_length = g.nx + 1
-        revecs = np.zeros((3, 3, real_length))
         levecs = np.zeros((3, 3, real_length))
         rho = boundary_state[0, :]  # np.zeros((real_length))
         S = boundary_state[1, :]  # np.zeros((real_length))
@@ -316,15 +317,6 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
         cs = np.sqrt(self.eos_gamma * p / rho)
         b1 = (self.eos_gamma - 1) / cs ** 2
         b2 = b1 * v ** 2 / 2
-        revecs[0, 0, :] = 1
-        revecs[0, 1, :] = v - cs
-        revecs[0, 2, :] = (E + p) / rho - v * cs
-        revecs[1, 0, :] = 1
-        revecs[1, 1, :] = v
-        revecs[1, 2, :] = v ** 2 / 2
-        revecs[2, 0, :] = 1
-        revecs[2, 1, :] = v + cs
-        revecs[2, 2, :] = (E + p) / rho + v * cs
         levecs[0, 0, :] = (b2 + v / cs) / 2
         levecs[0, 1, :] = -(b1 * v + 1 / cs) / 2
         levecs[0, 2, :] = b1 / 2
@@ -334,7 +326,28 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
         levecs[2, 0, :] = (b2 - v / cs) / 2
         levecs[2, 1, :] = -(b1 * v - 1 / cs) / 2
         levecs[2, 2, :] = b1 / 2
-        return revecs, levecs
+        return levecs
+
+    def _revecs_vectorized(self, boundary_state):
+        g = self.grid
+        real_length = g.nx + 1
+        revecs = np.zeros((3, 3, real_length))
+        rho = boundary_state[0, :]  # np.zeros((real_length))
+        S = boundary_state[1, :]  # np.zeros((real_length))
+        E = boundary_state[2, :]  # np.zeros((real_length))
+        v = S / rho
+        p = (self.eos_gamma - 1) * (E - rho * v ** 2 / 2)
+        cs = np.sqrt(self.eos_gamma * p / rho)
+        revecs[0, 0, :] = 1
+        revecs[0, 1, :] = v - cs
+        revecs[0, 2, :] = (E + p) / rho - v * cs
+        revecs[1, 0, :] = 1
+        revecs[1, 1, :] = v
+        revecs[1, 2, :] = v ** 2 / 2
+        revecs[2, 0, :] = 1
+        revecs[2, 1, :] = v + cs
+        revecs[2, 2, :] = (E + p) / rho + v * cs
+        return revecs
 
     def tf_revecs_vectorized(self, boundary_state):
         data_type = boundary_state.dtype
@@ -400,15 +413,13 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
             offset=self.ng - self.state_order)
         minus_indexes = np.flip(plus_indexes, axis=-1) + 1
 
-        plus_stencils = [tf.gather(flux_plus[i], plus_indexes) for i in range(self.grid.space.shape[0])]
-        minus_stencils = [tf.gather(flux_minus[i], minus_indexes) for i in range(self.grid.space.shape[0])]
+        plus_stencils = tf.stack([tf.gather(flux_plus[i], plus_indexes) for i in range(self.grid.space.shape[0])])
+        minus_stencils = tf.stack([tf.gather(flux_minus[i], minus_indexes) for i in range(self.grid.space.shape[0])])
 
-        # Stack together into rl_state.
-        # Stack on dim 2 to keep location dim 1. (different from Burgers, 0th dim is vec_length)
-        rl_state = tf.stack([plus_stencils, minus_stencils], axis=2)
-
-        if self.reconstruction =='componentwise':
-            return (rl_state,)  # second item not used, but have to return two items for TF graph
+        if self.reconstruction == 'componentwise':
+            # Stack together into rl_state.
+            # Stack on dim 2 to keep location dim 1. (different from Burgers, 0th dim is vec_length)
+            rl_state = tf.stack([plus_stencils, minus_stencils], axis=-2)
 
         if self.reconstruction == 'characteristicwise':
             boundary = self.grid.boundary
@@ -428,10 +439,11 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
             boundary_state = (full_state[:, self.ng - 1:-self.ng] + full_state[:, self.ng:-self.ng + 1]) * 0.5
 
             levecs = self.tf_levecs_vectorized(boundary_state)
-            char_fp = tf.einsum('jli, jkl-> kli', rl_state[:, :, 0], levecs)
-            char_fm = tf.einsum('jli, jkl-> kli', rl_state[:, :, 1], levecs)
-            rl_state = tf.stack([char_fp, char_fm], axis=2)
-            return (rl_state,)
+            char_fp = tf.einsum('jli, jkl-> kli', plus_stencils, levecs)
+            char_fm = tf.einsum('jli, jkl-> kli', minus_stencils, levecs)
+            rl_state = tf.stack([char_fp, char_fm], axis=-2)
+
+        return (rl_state,)
 
     # @tf.function
     def tf_integrate(self, args):
