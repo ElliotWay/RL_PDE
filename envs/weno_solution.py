@@ -236,6 +236,28 @@ def revecs_vectorized(g, boundary_state):
     revecs[2, 2, :] = (E + p) / rho + v * cs
     return revecs
 
+def levecs_vectorized(g, boundary_state):
+    real_length = g.nx + 1
+    levecs = np.zeros((3, 3, real_length))
+    rho = boundary_state[0, :]  # np.zeros((real_length))
+    S = boundary_state[1, :]  # np.zeros((real_length))
+    E = boundary_state[2, :]  # np.zeros((real_length))
+    v = S / rho
+    p = (g.eos_gamma - 1) * (E - rho * v ** 2 / 2)
+    cs = np.sqrt(g.eos_gamma * p / rho)
+    b1 = (g.eos_gamma - 1) / cs ** 2
+    b2 = b1 * v ** 2 / 2
+    levecs[0, 0, :] = (b2 + v / cs) / 2
+    levecs[0, 1, :] = -(b1 * v + 1 / cs) / 2
+    levecs[0, 2, :] = b1 / 2
+    levecs[1, 0, :] = 1 - b2
+    levecs[1, 1, :] = b1 * v
+    levecs[1, 2, :] = -b1
+    levecs[2, 0, :] = (b2 - v / cs) / 2
+    levecs[2, 1, :] = -(b1 * v - 1 / cs) / 2
+    levecs[2, 2, :] = b1 / 2
+    return levecs
+
 
 class WENOSolution(SolutionBase):
     """
@@ -342,13 +364,17 @@ class PreciseWENOSolution2D(WENOSolution):
         # back. (It might be possible, though.)
         left_stencils = (flux_left.transpose()[:, left_stencil_indexes]).transpose([1,0,2])
         right_stencils = (flux_right.transpose()[:, right_stencil_indexes]).transpose([1,0,2])
+        if self.reconstruction == 'characteristicwise':
+            boundary_state = (g.u[:, g.ng - 1:-g.ng] + g.u[:, g.ng:-g.ng + 1]) * 0.5
+            levecs = levecs_vectorized(g, boundary_state)
+            left_stencils = np.einsum('jli, jkl-> kli', left_stencils, levecs)
+            right_stencils = np.einsum('jli, jkl-> kli', right_stencils, levecs)
 
         left_flux_reconstructed, left_weights = weno_reconstruct_nd(order, left_stencils)
         right_flux_reconstructed, right_weights = weno_reconstruct_nd(order, right_stencils)
         if self.reconstruction == 'componentwise':
             horizontal_flux_reconstructed = left_flux_reconstructed + right_flux_reconstructed
         if self.reconstruction == 'characteristicwise':
-            boundary_state = (g.u[:, g.ng - 1:-g.ng] + g.u[:, g.ng:-g.ng + 1]) * 0.5
             revecs = revecs_vectorized(g, boundary_state)
             horizontal_flux_reconstructed = np.einsum('jil, il-> jl',
                                                       revecs, left_flux_reconstructed + right_flux_reconstructed)
@@ -361,13 +387,17 @@ class PreciseWENOSolution2D(WENOSolution):
         down_stencil_indexes = np.flip(up_stencil_indexes, axis=-1) + 1
         up_stencils = flux_up[:, up_stencil_indexes]
         down_stencils = flux_down[:, down_stencil_indexes]
+        if self.reconstruction == 'characteristicwise':
+            boundary_state = (g.u[:, g.ng - 1:-g.ng] + g.u[:, g.ng:-g.ng + 1]) * 0.5
+            levecs = levecs_vectorized(g, boundary_state)
+            up_stencils = np.einsum('jli, jkl-> kli', up_stencils, levecs)
+            down_stencils = np.einsum('jli, jkl-> kli', down_stencils, levecs)
 
         down_flux_reconstructed, down_weights = weno_reconstruct_nd(order, down_stencils)
         up_flux_reconstructed, up_weights = weno_reconstruct_nd(order, up_stencils)
         if self.reconstruction == 'componentwise':
             vertical_flux_reconstructed = up_flux_reconstructed + down_flux_reconstructed
         if self.reconstruction == 'characteristicwise':
-            boundary_state = (g.u[:, g.ng - 1:-g.ng] + g.u[:, g.ng:-g.ng + 1]) * 0.5
             revecs = revecs_vectorized(g, boundary_state)
             vertical_flux_reconstructed = np.einsum('jil, il-> jl',
                                                     revecs, up_flux_reconstructed + down_flux_reconstructed)
@@ -539,13 +569,17 @@ class PreciseWENOSolution(WENOSolution):
         minus_stencil_indexes = np.flip(plus_stencil_indexes, axis=-1) + 1
         plus_stencils = flux_plus[:, plus_stencil_indexes]
         minus_stencils = flux_minus[:, minus_stencil_indexes]
+        if self.reconstruction == 'characteristicwise':
+            boundary_state = (g.u[:, g.ng - 1:-g.ng] + g.u[:, g.ng:-g.ng + 1]) * 0.5
+            levecs = levecs_vectorized(g, boundary_state)
+            plus_stencils = np.einsum('jli, jkl-> kli', plus_stencils, levecs)
+            minus_stencils = np.einsum('jli, jkl-> kli', minus_stencils, levecs)
 
         plus_reconstructed, plus_weights = weno_reconstruct_nd(order, plus_stencils)
         minus_reconstructed, minus_weights = weno_reconstruct_nd(order, minus_stencils)
         if self.reconstruction == 'componentwise':
             flux_reconstructed = minus_reconstructed + plus_reconstructed
         if self.reconstruction == 'characteristicwise':
-            boundary_state = (g.u[:, g.ng - 1:-g.ng] + g.u[:, g.ng:-g.ng + 1]) * 0.5
             revecs = revecs_vectorized(g, boundary_state)
             flux_reconstructed = np.einsum('jil, il-> jl', revecs, minus_reconstructed + plus_reconstructed)
 
