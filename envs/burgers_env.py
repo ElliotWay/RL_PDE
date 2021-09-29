@@ -313,9 +313,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         reconstructed_flux = fpr + fml
 
         derivative_u_t = (reconstructed_flux[:-1] - reconstructed_flux[1:]) / self.grid.dx
-        rhs = deriviative_u_t
-
-        #TODO implement RK4?
+        rhs = derivative_u_t
 
         dt = self.tf_timestep(real_state)
 
@@ -327,6 +325,10 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
                     + " in global backprop.")
 
         step = dt * rhs
+
+        #TODO implement RK4? If we want to do that, it may need to be in the model instead.
+        # This function could be converted to tf_rk_substep, then the model could make multiple
+        # calls to the policy.
 
         new_state = real_state + step
         return new_state
