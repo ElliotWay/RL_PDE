@@ -133,7 +133,6 @@ def weno_weights_nd(stencils_array, order):
     An ndarray of weights:
     [spatial dimensions X num weights (one for each sub-stencil)
     """
-    # Adapted from agents.py#StandardWENOAgent.
 
     C = weno_coefficients.C_all[order]
     sigma = weno_coefficients.sigma_all[order]
@@ -163,6 +162,9 @@ def weno_weights_nd(stencils_array, order):
         #assert False
 
     alpha = C / (epsilon + beta ** 2)
+    # This uses a slightly different version. Why? Is computing WENO for Euler somehow different?
+    # https://github.com/python-hydro/hydro_examples/blob/master/compressible/weno_euler.py#L97
+    # alpha = C / (epsilon + np.abs(beta) ** order)
 
     # Keep the sub-stencil dimension after the sum so numpy broadcasts there
     # instead of on the stencil dimension.
@@ -185,6 +187,7 @@ def tf_weno_weights(stencils_tensor, order):
                 * tf.expand_dims(sub_stencils_flipped, axis=-1))
     beta = tf.reduce_sum(sigma * squared, axis=(-2, -1))
     alpha = C / (epsilon + beta ** 2)
+    # alpha = C / (epsilon + tf.abs(beta) ** order)
     weights = alpha / tf.reduce_sum(alpha, axis=-1, keepdims=True)
     return weights
 
@@ -229,6 +232,7 @@ class PreciseWENOSolution2D(WENOSolution):
                 base_grid.min_value, base_grid.max_value, vec_len, record_state=record_state)
 
         assert (precise_scale % 2 == 1), "Precise scale must be odd for easier downsampling."
+        assert (vec_len == 1), "PreciseWENOSolution2D does not currently support vectors."
 
         self.precise_scale = precise_scale
 
@@ -304,26 +308,6 @@ class PreciseWENOSolution2D(WENOSolution):
         left_stencils = (flux_left.transpose()[:, left_stencil_indexes]).transpose([1,0,2])
         right_stencils = (flux_right.transpose()[:, right_stencil_indexes]).transpose([1,0,2])
 
-        #l_ss = []
-        #l_w = []
-        #r_ss = []
-        #r_w = []
-        #for i in range(left_stencils.shape[1]):
-            #l_s = left_stencils[:, i]
-            #r_s = right_stencils[:, i]
-#
-            #left_r, left_w = self.weno_reconstruct(l_s)
-            #l_ss.append(left_r)
-            #l_w.append(left_w)
-#
-            #right_r, right_w = self.weno_reconstruct(r_s)
-            #r_ss.append(right_r)
-            #r_w.append(right_w)
-        #left_flux_reconstructed = np.stack(l_ss, axis=1)
-        #left_weights = np.stack(l_w, axis=1)
-        #right_flux_reconstructed = np.stack(r_ss, axis=1)
-        #right_weights = np.stack(r_w, axis=1)
-
         left_flux_reconstructed, left_weights = weno_reconstruct_nd(order, left_stencils)
         right_flux_reconstructed, right_weights = weno_reconstruct_nd(order, right_stencils)
         horizontal_flux_reconstructed = left_flux_reconstructed + right_flux_reconstructed
@@ -336,26 +320,6 @@ class PreciseWENOSolution2D(WENOSolution):
         down_stencil_indexes = np.flip(up_stencil_indexes, axis=-1) + 1
         up_stencils = flux_up[:, up_stencil_indexes]
         down_stencils = flux_down[:, down_stencil_indexes]
-
-        #d_ss = []
-        #d_w = []
-        #u_ss = []
-        #u_w = []
-        #for i in range(up_stencils.shape[0]):
-            #u_s = up_stencils[i, :]
-            #d_s = down_stencils[i, :]
-#
-            #up_r, up_w = self.weno_reconstruct(u_s)
-            #u_ss.append(up_r)
-            #u_w.append(up_w)
-#
-            #down_r, down_w = self.weno_reconstruct(d_s)
-            #d_ss.append(down_r)
-            #d_w.append(down_w)
-        #down_flux_reconstructed = np.stack(d_ss, axis=0)
-        #down_weights = np.stack(d_w, axis=0)
-        #up_flux_reconstructed = np.stack(u_ss, axis=0)
-        #up_weights = np.stack(u_w, axis=0)
 
         down_flux_reconstructed, down_weights = weno_reconstruct_nd(order, down_stencils)
         up_flux_reconstructed, up_weights = weno_reconstruct_nd(order, up_stencils)
@@ -504,194 +468,85 @@ class PreciseWENOSolution(WENOSolution):
     def get_action_history(self):
         return self.action_history
 
-    def weno_stencils(self, q):
-        """
-        Compute WENO stencils
-
-        Parameters
-        ----------
-        q : np array
-          Scalar data to reconstruct.
-
-        Returns
-        -------
-        stencils
-
-        """
-        order = self.order
-        a = weno_coefficients.a_all[order]
-        num_points = q.shape[1] - 2 * order  # len(q) changed to q.shape[1] for new 0-th dimension vec state
-        q_stencils_all = []
-        for nv in range(q.shape[0]):
-            q_stencils = np.zeros((order, q.shape[1]))
-            for i in range(order, num_points + order):
-                for k in range(order):
-                    for l in range(order):
-                        q_stencils[k, i] += a[k, l] * q[nv, i + k - l]
-            q_stencils_all.append(q_stencils)
-
-        return np.array(q_stencils_all)
-
-    def weno_weights(self, q):
-        """
-        Compute WENO weights
-
-        Parameters
-        ----------
-        q : np array
-          Scalar data to reconstruct.
-
-        Returns
-        -------
-        stencil weights
-
-        """
-        order = self.order
-        C = weno_coefficients.C_all[order]
-        sigma = weno_coefficients.sigma_all[order]
-
-        beta = np.zeros((order, q.shape[1]))
-        w = np.zeros_like(beta)
-        num_points = q.shape[1] - 2 * order
-        epsilon = 1e-16
-        w_all = []
-        for nv in range(q.shape[0]):
-            for i in range(order, num_points + order):
-                alpha = np.zeros(order)
-                for k in range(order):
-                    for l in range(order):
-                        for m in range(l + 1):
-                            beta[k, i] += sigma[k, l, m] * q[nv, i + k - l] * q[nv, i + k - m]
-                    alpha[k] = C[k] / (epsilon + beta[k, i] ** 2)
-                    # TODO: why the reconstruction is different than below Euler implementation? Double check. -yiwei
-                    # https://github.com/python-hydro/hydro_examples/blob/master/compressible/weno_euler.py#L97
-                w[:, i] = alpha / np.sum(alpha)
-            w_all.append(w)
-
-        return np.array(w_all)
-
-    def weno_new(self, q):
-        """
-        Compute WENO reconstruction
-
-        Parameters
-        ----------
-        q : numpy array
-          Scalar data to reconstruct.
-
-        Returns
-        -------
-        qL: numpy array
-          Reconstructed data.
-
-        """
-
-        weights = self.weno_weights(q)
-        q_stencils = self.weno_stencils(q)
-        qL = np.zeros_like(q)
-        num_points = q.shape[1] - 2 * self.order
-        for nv in range(q.shape[0]):
-            for i in range(self.order, num_points + self.order):
-                qL[nv, i] = np.dot(weights[nv, :, i], q_stencils[nv, :, i])
-        return qL, weights
-
     def rk_substep(self):
 
         # get the solution data
         g = self.precise_grid
         g.update_boundary()
-
+        order = self.order
 
         # compute flux at each point
         f = self.flux_function(g.u)
 
-        # # get maximum velocity
-        # alpha = np.max(abs(g.u))
-        #
-        # # Lax Friedrichs Flux Splitting
-        # fp = (f + alpha * g.u) / 2
-        # fm = (f - alpha * g.u) / 2
-        fm, fp = lf_flux_split_nd(f, g.u)
+        flux_minus, flux_plus = lf_flux_split_nd(f, g.u)
 
-        fpr = g.scratch_array()
-        fml = g.scratch_array()
-        flux = g.scratch_array()
+        plus_stencil_indexes = create_stencil_indexes(stencil_size=order * 2 - 1,
+                                                       num_stencils=g.nx + 1,
+                                                       offset=g.ng - order)
+        minus_stencil_indexes = np.flip(plus_stencil_indexes, axis=-1) + 1
+        plus_stencils = flux_plus[:, plus_stencil_indexes]
+        minus_stencils = flux_minus[:, minus_stencil_indexes]
 
-        # compute fluxes at the cell edges
-        # compute f plus to the right
-        fpr[:, 1:], fp_weights = self.weno_new(fp[:, :-1])  # 0-th dimension is now vec length dim
-        # compute f minus to the left
-        # pass the data in reverse order
-        fml[:, -1::-1], fm_weights = self.weno_new(fm[:, -1::-1])
-        # TODO: use weno_reconstruct_nd(). Currently doesn't seem to work with 1D Env, ask Elliot. -yiwei
+        plus_reconstructed, plus_weights = weno_reconstruct_nd(order, plus_stencils)
+        minus_reconstructed, minus_weights = weno_reconstruct_nd(order, minus_stencils)
+        flux_reconstructed = minus_reconstructed + plus_reconstructed
 
         if self.record_actions is not None:
-            action_weights = []
-            for nv in range(g.space.shape[0]):
-                action_weights_scalar = np.stack((fp_weights[nv, :, self.ng-1:-(self.ng-1)],
-                                                  fm_weights[nv, :, -(self.ng+1):self.ng-2:-1]))
-                # resulting array is (fp, fm) X stencil X location
-                # transpose to location X (fp, fm) X stencil
-                action_weights.append(action_weights_scalar.transpose((2, 0, 1)))
-            action_weights = np.array(action_weights)
+            # Weights have shape vec X location X sub-stencil.
+            # Stack on axis 2 so resulting aray has shape
+            # vec X location X (+,-) X sub-stencil.
+            action_weights = np.stack([plus_weights, minus_weights], axis=2)
 
             if self.record_actions == "weno":
                 self.action_history.append(action_weights)
             elif self.record_actions == "coef":
-                # Same as in Standard WENO agent in agents.py.
                 order = self.order
                 a_mat = weno_coefficients.a_all[order]
                 a_mat = np.flip(a_mat, axis=-1)
-                combined_weights = a_mat[None, None, :, :] * action_weights[:, :, :, None]
 
-                flux_weights = np.zeros((g.real_length() + 1, 2, self.order * 2 - 1))
+                # a_mat is sub-stencil X inner_index.
+                # action_weights is vec X location X (+,-) X sub-stencil.
+                # We want vec X location X (+,-) X inner_index.
+                combined_weights = a_mat[None, None, None, :, :] * action_weights[:, :, :, :, None]
+
+                flux_weights = np.zeros((g.vec_len, g.real_length() + 1, 2, self.order * 2 - 1))
+                # TODO: figure out a way to vectorize this. This is a weird broadcast,
+                # which would be easier if numpy had builtin support for banded matrices.
                 for sub_stencil_index in range(order):
-                    flux_weights[:, :, sub_stencil_index:sub_stencil_index + order] += combined_weights[:, :, sub_stencil_index, :]
+                    i = sub_stencil_index
+                    flux_weights[:, :, :, i:i + order] += combined_weights[:, :, :, i, :]
                 self.action_history.append(flux_weights)
             else:
                 raise Exception("Unrecognized action type: '{}'".format(self.record_actions))
 
-        # compute flux from fpr and fml
-        flux[:, 1:-1] = fpr[:, 1:-1] + fml[:, 1:-1]
-        rhs = g.scratch_array()
+        rhs = (flux_reconstructed[:, :-1] - flux_reconstructed[:, 1:]) / g.dx
 
         if self.nu > 0.0:
-            R = self.nu * self.precise_grid.laplacian()
-            # Hack to make the new version of grid.laplacian (which returns a real sized grid)
-            # work with code that expects the old version (which returned a full sized grid with
-            # ghost cells). The ghost cells will be overwritten anyway.
-            R = np.concatenate([np.zeros((self.precise_grid.vec_len,self.precise_grid.ng)),
-                R, np.zeros((self.precise_grid.vec_len,self.precise_grid.ng))], axis=-1)
-            rhs[:, 1:-1] = 1 / g.dx * (flux[:, 1:-1] - flux[:, 2:]) + R[:, 1:-1]
-        else:
-            rhs[:, 1:-1] = 1 / g.dx * (flux[:, 1:-1] - flux[:, 2:])
-
+            rhs += self.nu * self.precise_grid.laplacian()
         if self.source is not None:
-            rhs[:, 1:-1] += self.source.get_full()[:, 1:-1]
+            rhs += self.source.get_real()
 
         return rhs
 
     def _update(self, dt, time):
+        u_start = np.array(self.precise_grid.get_real())
         if self.use_rk4:
-            u_start = np.array(self.precise_grid.get_full())
-
             k1 = dt * self.rk_substep()
-            self.precise_grid.u = u_start + (k1 / 2)
+            self.precise_grid.set(u_start + (k1 / 2))
 
             k2 = dt * self.rk_substep()
-            self.precise_grid.u = u_start + (k2 / 2)
+            self.precise_grid.set(u_start + (k2 / 2))
 
             k3 = dt * self.rk_substep()
-            self.precise_grid.u = u_start + k3
+            self.precise_grid.set(u_start + k3)
 
             k4 = dt * self.rk_substep()
-            k4_step = (k1 + 2*(k2 + k3) + k4) / 6
-            self.precise_grid.u = u_start + k4_step
+            full_step = (k1 + 2*(k2 + k3) + k4) / 6
 
-        else:
-            euler_step = dt * self.rk_substep()
-            self.precise_grid.u += euler_step
+        else: #Euler
+            full_step = dt * self.rk_substep()
 
+        self.precise_grid.set(u_start + full_step)
         self.precise_grid.update_boundary()
 
     def get_full(self):
@@ -719,6 +574,94 @@ class PreciseWENOSolution(WENOSolution):
         """ Force set the current grid. Will make the state/action history confusing. """
         self.precise_grid.set(real_values)
 
+    # These functions are not used. This was the original method for computing WENO. It corresponds
+    # more directly to the original mathematical formulation, but is slower and not vectorized.
+    # We're keeping these here for reference.
+    def weno_stencils(self, q):
+        """
+        Compute WENO stencils
+
+        Parameters
+        ----------
+        q : np array
+          Scalar data to reconstruct.
+
+        Returns
+        -------
+        stencils
+        """
+        order = self.order
+        a = weno_coefficients.a_all[order]
+        num_points = q.shape[1] - 2 * order  # len(q) changed to q.shape[1] for new 0-th dimension vec state
+        q_stencils_all = []
+        for nv in range(q.shape[0]):
+            q_stencils = np.zeros((order, q.shape[1]))
+            for i in range(order, num_points + order):
+                for k in range(order):
+                    for l in range(order):
+                        q_stencils[k, i] += a[k, l] * q[nv, i + k - l]
+            q_stencils_all.append(q_stencils)
+
+        return np.array(q_stencils_all)
+    def weno_weights(self, q):
+        """
+        Compute WENO weights
+
+        Parameters
+        ----------
+        q : np array
+          Scalar data to reconstruct.
+
+        Returns
+        -------
+        stencil weights
+        """
+        order = self.order
+        C = weno_coefficients.C_all[order]
+        sigma = weno_coefficients.sigma_all[order]
+
+        beta = np.zeros((order, q.shape[1]))
+        w = np.zeros_like(beta)
+        num_points = q.shape[1] - 2 * order
+        epsilon = 1e-16
+        w_all = []
+        for nv in range(q.shape[0]):
+            for i in range(order, num_points + order):
+                alpha = np.zeros(order)
+                for k in range(order):
+                    for l in range(order):
+                        for m in range(l + 1):
+                            beta[k, i] += sigma[k, l, m] * q[nv, i + k - l] * q[nv, i + k - m]
+                    alpha[k] = C[k] / (epsilon + beta[k, i] ** 2)
+                    # TODO: why the reconstruction is different than below Euler implementation? Double check. -yiwei
+                    # https://github.com/python-hydro/hydro_examples/blob/master/compressible/weno_euler.py#L97
+                w[:, i] = alpha / np.sum(alpha)
+            w_all.append(w)
+
+        return np.array(w_all)
+    def weno_new(self, q):
+        """
+        Compute WENO reconstruction
+
+        Parameters
+        ----------
+        q : numpy array
+          Scalar data to reconstruct.
+
+        Returns
+        -------
+        qL: numpy array
+          Reconstructed data.
+
+        """
+        weights = self.weno_weights(q)
+        q_stencils = self.weno_stencils(q)
+        qL = np.zeros_like(q)
+        num_points = q.shape[1] - 2 * self.order
+        for nv in range(q.shape[0]):
+            for i in range(self.order, num_points + self.order):
+                qL[nv, i] = np.dot(weights[nv, :, i], q_stencils[nv, :, i])
+        return qL, weights
 
 if __name__ == "__main__":
     import os
