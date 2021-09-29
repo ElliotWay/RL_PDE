@@ -195,7 +195,7 @@ def main():
     args, rest = arg_manager.parse_known_args()
 
     if args.help_env:
-        env_arg_parser.print_help()
+        env_arg_manager.print_help()
         sys.exit(0)
 
     if len(rest) > 0:
