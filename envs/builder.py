@@ -207,7 +207,8 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
 
     if env_args.time_max is None and env_args.ep_length is None:
         env_args.time_max = 0.1
-    if default_time_max and test and env_args.init_type != "jsz7":
+    if (default_time_max and test and env_args.time_max is not None
+            and env_args.init_type != "jsz7"):
         # Keeping jsz7 always 0.5s, for whatever reason. Not sure why I'm handling this one
         # differently.
         env_args.time_max = 2 * env_args.time_max

@@ -426,7 +426,14 @@ class AbstractPDEEnv(gym.Env):
                         .format(ep_length, time_max, dt)
                         + " length timesteps.")
 
-        approximate_max = 2.0 # Is this a good number?
+        # Is this a good approximate maximum speed?
+        # It's chosen to fit with CFL number 0.1, 128 cells, timesteps 0.0004s long, and
+        # episodes of 0.1s and 250 steps (or 0.2s and 500 steps).
+        approximate_max = 1.953125 
+        # The original value was a flat 2.0. This shifted the number of cells to 125, which turned
+        # out to be a bigger change than expected.
+        #approximate_max = 2.0
+
         if C is None:
             C = 0.1
         if num_cells is None:
