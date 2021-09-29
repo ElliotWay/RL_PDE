@@ -8,7 +8,7 @@ from envs.grid1d import Burgers1DGrid
 from util.misc import create_stencil_indexes
 from util.misc import AxisSlice
 
-def lf_flux_split_nd(flux_array, values_array):
+def lf_flux_split_nd(flux_array, values_array, grid_type='Burgers', *args):
     """
     Apply Lax-Friedrichs flux splitting along each dimension of the input.
 
@@ -21,7 +21,16 @@ def lf_flux_split_nd(flux_array, values_array):
     output = []
     abs_values = np.abs(values_array)
     for axis in range(1, flux_array.ndim): # ndim includes the vector dimension on axis 0.
-        alpha = np.max(abs_values, axis=axis, keepdims=True)
+        if grid_type == 'Burgers':
+            alpha = np.max(abs_values, axis=axis, keepdims=True)
+        elif grid_type == 'Euler':
+            eos_gamma = args[0]
+            rho = values_array[0]
+            v = values_array[1] / rho
+            p = (eos_gamma - 1) * (values_array[2, :] - rho * v ** 2 / 2)
+            cs = np.sqrt(eos_gamma * p / rho)
+            alpha = np.max(np.abs(v) + cs)  # TODO: Euler 2D may require changes
+
         fm = (flux_array - alpha * values_array) / 2
         fp = (flux_array + alpha * values_array) / 2
         output.append((fm, fp))
@@ -292,8 +301,14 @@ class PreciseWENOSolution2D(WENOSolution):
 
         # compute flux at each point
         flux = self.flux_function(g.space)
+        if 'Burgers' in str(g):
+            (flux_left, flux_right), (flux_down, flux_up) = lf_flux_split_nd(flux, g.space, 'Burgers')
+        elif 'Euler' in str(g):
+            (flux_left, flux_right), (flux_down, flux_up) = lf_flux_split_nd(flux, g.space, 'Euler', g.eos_gamma)
+        else:
+            raise NotImplementedError
 
-        (flux_left, flux_right), (flux_down, flux_up) = lf_flux_split_nd(flux, g.space)
+
 
         # Trim vertical ghost cells from horizontally split flux. (Should this be part of flux
         # splitting?)
@@ -477,8 +492,13 @@ class PreciseWENOSolution(WENOSolution):
 
         # compute flux at each point
         f = self.flux_function(g.u)
-
-        flux_minus, flux_plus = lf_flux_split_nd(f, g.u)
+        # grid_type = 'Euler' if 'Euler' in str(g) else 'Burgers'
+        if 'Burgers' in str(g):
+            flux_minus, flux_plus = lf_flux_split_nd(f, g.u, 'Burgers')
+        elif 'Euler' in str(g):
+            flux_minus, flux_plus = lf_flux_split_nd(f, g.u, 'Euler', g.eos_gamma)
+        else:
+            raise NotImplementedError
 
         plus_stencil_indexes = create_stencil_indexes(stencil_size=order * 2 - 1,
                                                        num_stencils=g.nx + 1,
