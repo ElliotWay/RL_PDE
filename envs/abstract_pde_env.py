@@ -785,7 +785,7 @@ class AbstractPDEEnv(gym.Env):
         # Give a penalty and end the episode if we're way off.
         #if np.max(state) > 1e7 or np.isnan(np.max(state)): state possibly made more sense here?
         if np.max(error) > 1e7 or np.isnan(np.max(error)):
-            reward = (reward_part - max_penalty * (self.episode_length - self.steps)
+            reward = tuple(reward_part - max_penalty * (self.episode_length - self.steps)
                         for reward_part in reward)
             done = True
 

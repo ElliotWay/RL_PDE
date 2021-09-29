@@ -465,6 +465,15 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
 
         # end adaptation of calculate_reward().
 
+        # We don't have this block from calculate_reward():
+        #if np.max(error) > 1e7 or np.isnan(np.max(error)):
+            #reward = tuple(reward_part - max_penalty * (self.episode_length - self.steps)
+                        #for reward_part in reward)
+            #done = True
+        # This stops the episode when error is beyond a threshold. How might we implement this in
+        # global backprop? That requires episodes of the same length every time.
+        # I guess we could make all states and rewards 0s after hitting the error threshold?
+
         #return reward
         return (reward,) # Singleton because this is 1D.
 
