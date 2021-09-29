@@ -21,15 +21,15 @@ def lf_flux_split_nd(flux_array, values_array, grid_type='Burgers', *args):
     output = []
     abs_values = np.abs(values_array)
     for axis in range(1, flux_array.ndim): # ndim includes the vector dimension on axis 0.
-        if grid_type == 'Burgers':
-            alpha = np.max(abs_values, axis=axis, keepdims=True)
-        elif grid_type == 'Euler':
+        if grid_type == 'euler':
             eos_gamma = args[0]
             rho = values_array[0]
             v = values_array[1] / rho
             p = (eos_gamma - 1) * (values_array[2, :] - rho * v ** 2 / 2)
             cs = np.sqrt(eos_gamma * p / rho)
             alpha = np.max(np.abs(v) + cs)  # TODO: Euler 2D may require changes
+        else:
+            alpha = np.max(abs_values, axis=axis, keepdims=True)
 
         fm = (flux_array - alpha * values_array) / 2
         fp = (flux_array + alpha * values_array) / 2
@@ -216,6 +216,26 @@ def tf_weno_reconstruct(stencils_tensor, order):
     reconstructed = tf.reduce_sum(weights * sub_stencils, axis=-1)
     return reconstructed, weights
 
+def revecs_vectorized(g, boundary_state):
+    real_length = g.nx + 1
+    revecs = np.zeros((3, 3, real_length))
+    rho = boundary_state[0, :]  # np.zeros((real_length))
+    S = boundary_state[1, :]  # np.zeros((real_length))
+    E = boundary_state[2, :]  # np.zeros((real_length))
+    v = S / rho
+    p = (g.eos_gamma - 1) * (E - rho * v ** 2 / 2)
+    cs = np.sqrt(g.eos_gamma * p / rho)
+    revecs[0, 0, :] = 1
+    revecs[0, 1, :] = v - cs
+    revecs[0, 2, :] = (E + p) / rho - v * cs
+    revecs[1, 0, :] = 1
+    revecs[1, 1, :] = v
+    revecs[1, 2, :] = v ** 2 / 2
+    revecs[2, 0, :] = 1
+    revecs[2, 1, :] = v + cs
+    revecs[2, 2, :] = (E + p) / rho + v * cs
+    return revecs
+
 
 class WENOSolution(SolutionBase):
     """
@@ -235,7 +255,7 @@ class PreciseWENOSolution2D(WENOSolution):
     def __init__(self, base_grid, init_params,
             precise_order, precise_scale,
             flux_function, eqn_type='burgers',
-            vec_len=1, nu=0.0, source=None,
+            vec_len=1, reconstruction='componentwise', nu=0.0, source=None,
             record_state=False, record_actions=None):
         super().__init__(base_grid.num_cells, base_grid.num_ghosts,
                 base_grid.min_value, base_grid.max_value, vec_len, record_state=record_state)
@@ -266,6 +286,8 @@ class PreciseWENOSolution2D(WENOSolution):
         else:
             self.init_type = None
 
+        self.eqn_type = eqn_type
+        self.reconstruction = reconstruction
         self.precise_grid = create_grid(len(self.precise_num_cells),
                 self.precise_num_cells, self.precise_num_ghosts,
                 base_grid.min_value, base_grid.max_value,
@@ -301,14 +323,12 @@ class PreciseWENOSolution2D(WENOSolution):
 
         # compute flux at each point
         flux = self.flux_function(g.space)
-        if 'Burgers' in str(g):
-            (flux_left, flux_right), (flux_down, flux_up) = lf_flux_split_nd(flux, g.space, 'Burgers')
-        elif 'Euler' in str(g):
-            (flux_left, flux_right), (flux_down, flux_up) = lf_flux_split_nd(flux, g.space, 'Euler', g.eos_gamma)
+        if self.eqn_type == 'burgers':
+            (flux_left, flux_right), (flux_down, flux_up) = lf_flux_split_nd(flux, g.space, self.eqn_type)
+        elif self.eqn_type == 'euler':
+            (flux_left, flux_right), (flux_down, flux_up) = lf_flux_split_nd(flux, g.space, self.eqn_type, g.eos_gamma)
         else:
             raise NotImplementedError
-
-
 
         # Trim vertical ghost cells from horizontally split flux. (Should this be part of flux
         # splitting?)
@@ -325,7 +345,13 @@ class PreciseWENOSolution2D(WENOSolution):
 
         left_flux_reconstructed, left_weights = weno_reconstruct_nd(order, left_stencils)
         right_flux_reconstructed, right_weights = weno_reconstruct_nd(order, right_stencils)
-        horizontal_flux_reconstructed = left_flux_reconstructed + right_flux_reconstructed
+        if self.reconstruction == 'componentwise':
+            horizontal_flux_reconstructed = left_flux_reconstructed + right_flux_reconstructed
+        if self.reconstruction == 'characteristicwise':
+            boundary_state = (g.u[:, g.ng - 1:-g.ng] + g.u[:, g.ng:-g.ng + 1]) * 0.5
+            revecs = revecs_vectorized(g, boundary_state)
+            horizontal_flux_reconstructed = np.einsum('jil, il-> jl',
+                                                      revecs, left_flux_reconstructed + right_flux_reconstructed)
 
         flux_down = flux_down[0, ghost_x:-ghost_x, :]
         flux_up = flux_up[0, ghost_x:-ghost_x, :]
@@ -338,7 +364,13 @@ class PreciseWENOSolution2D(WENOSolution):
 
         down_flux_reconstructed, down_weights = weno_reconstruct_nd(order, down_stencils)
         up_flux_reconstructed, up_weights = weno_reconstruct_nd(order, up_stencils)
-        vertical_flux_reconstructed = up_flux_reconstructed + down_flux_reconstructed
+        if self.reconstruction == 'componentwise':
+            vertical_flux_reconstructed = up_flux_reconstructed + down_flux_reconstructed
+        if self.reconstruction == 'characteristicwise':
+            boundary_state = (g.u[:, g.ng - 1:-g.ng] + g.u[:, g.ng:-g.ng + 1]) * 0.5
+            revecs = revecs_vectorized(g, boundary_state)
+            vertical_flux_reconstructed = np.einsum('jil, il-> jl',
+                                                    revecs, up_flux_reconstructed + down_flux_reconstructed)
 
         if self.record_actions is not None:
             if self.record_actions == "weno":
@@ -432,7 +464,7 @@ class PreciseWENOSolution(WENOSolution):
     def __init__(self,
                  base_grid, init_params,
                  precise_order, precise_scale, flux_function, eqn_type='burgers',
-                 vec_len=1, nu=0.0, source=None,
+                 vec_len=1, reconstruction='componentwise', nu=0.0, source=None,
                  record_state=False, record_actions=None):
         super().__init__(base_grid.num_cells, base_grid.num_ghosts,
                 base_grid.min_value, base_grid.max_value, vec_len, record_state=record_state)
@@ -458,10 +490,12 @@ class PreciseWENOSolution(WENOSolution):
         else:
             self.init_type = None
 
+        self.eqn_type = eqn_type
+        self.reconstruction = reconstruction
         self.precise_grid = create_grid(self.ndim,
                 self.precise_nx, self.precise_ng,
                 base_grid.min_value, base_grid.max_value,
-                init_type=self.init_type, boundary=self.boundary, eqn_type=eqn_type)
+                init_type=self.init_type, boundary=self.boundary, eqn_type=self.eqn_type)
 
         self.flux_function = flux_function
         self.nu = nu
@@ -492,11 +526,10 @@ class PreciseWENOSolution(WENOSolution):
 
         # compute flux at each point
         f = self.flux_function(g.u)
-        # grid_type = 'Euler' if 'Euler' in str(g) else 'Burgers'
-        if 'Burgers' in str(g):
-            flux_minus, flux_plus = lf_flux_split_nd(f, g.u, 'Burgers')
-        elif 'Euler' in str(g):
-            flux_minus, flux_plus = lf_flux_split_nd(f, g.u, 'Euler', g.eos_gamma)
+        if self.eqn_type == 'burgers':
+            flux_minus, flux_plus = lf_flux_split_nd(f, g.u, self.eqn_type)
+        elif self.eqn_type == 'euler':
+            flux_minus, flux_plus = lf_flux_split_nd(f, g.u, self.eqn_type, g.eos_gamma)
         else:
             raise NotImplementedError
 
@@ -509,7 +542,12 @@ class PreciseWENOSolution(WENOSolution):
 
         plus_reconstructed, plus_weights = weno_reconstruct_nd(order, plus_stencils)
         minus_reconstructed, minus_weights = weno_reconstruct_nd(order, minus_stencils)
-        flux_reconstructed = minus_reconstructed + plus_reconstructed
+        if self.reconstruction == 'componentwise':
+            flux_reconstructed = minus_reconstructed + plus_reconstructed
+        if self.reconstruction == 'characteristicwise':
+            boundary_state = (g.u[:, g.ng - 1:-g.ng] + g.u[:, g.ng:-g.ng + 1]) * 0.5
+            revecs = revecs_vectorized(g, boundary_state)
+            flux_reconstructed = np.einsum('jil, il-> jl', revecs, minus_reconstructed + plus_reconstructed)
 
         if self.record_actions is not None:
             # Weights have shape vec X location X sub-stencil.

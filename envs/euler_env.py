@@ -67,14 +67,23 @@ class AbstractEulerEnv(AbstractPDEEnv):
 
         self.follow_solution = follow_solution
 
+        if 'eos_gamma' in self.init_params:
+            self.eos_gamma = self.init_params['eos_gamma']
+        else:
+            self.eos_gamma = 1.4  # Gamma law EOS
+        if 'reconstruction' in self.init_params:
+            self.reconstruction = 'characteristicwise' if self.init_params['reconstruction'] else 'componentwise'
+            # 0 for 'componentwise', 1 for 'characterwise'
+        else:
+            self.reconstruction = 'componentwise'
+
         if self.analytical:
             if self.grid.ndim > 1:
                 raise NotImplementedError("Analytical solutions for multiple dimensions not yet"
                                           + " implemented.")
             else:
                 self.solution = RiemannSolution(self.grid.nx, self.grid.ng, self.grid.xmin, self.grid.xmax,
-                                                vec_len=3, init_type=kwargs['init_type'],
-                                                gamma=kwargs['init_params']['eos_gamma'])
+                                                vec_len=3, init_type=kwargs['init_type'], gamma=self.eos_gamma)
         else:
             if self.grid.ndim == 1:
                 self.solution = PreciseWENOSolution(
@@ -82,7 +91,7 @@ class AbstractEulerEnv(AbstractPDEEnv):
                                 'boundary': self.grid.boundary},
                     precise_scale=precise_scale, precise_order=precise_weno_order,
                     flux_function=self.euler_flux, source=self.source,
-                    nu=nu, eqn_type='euler', vec_len=3)
+                    nu=nu, eqn_type='euler', vec_len=3, reconstruction=self.reconstruction)
             # elif self.grid.ndim == 2:
             #     self.solution = PreciseWENOSolution2D(
             #             self.grid, {'init_type':self.grid.init_type,
@@ -124,7 +133,7 @@ class AbstractEulerEnv(AbstractPDEEnv):
                                 'boundary': self.grid.boundary},
                     precise_scale=1, precise_order=self.weno_order,
                     flux_function=self.euler_flux, source=self.source,
-                    nu=nu, eqn_type='euler', vec_len=3)
+                    nu=nu, eqn_type='euler', vec_len=3, reconstruction=self.reconstruction)
             # elif self.grid.ndim == 2:
             #     self.weno_solution = PreciseWENOSolution2D(
             #             self.grid, {'init_type':self.grid.init_type,
@@ -195,16 +204,6 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
         self._action_labels = ["$w^{}_{}$".format(sign, num) for sign in ['+', '-']
                                for num in range(1, self.weno_order + 1)]
 
-        if 'eos_gamma' in self.init_params:
-            self.eos_gamma = self.init_params['eos_gamma']
-        else:
-            self.eos_gamma = 1.4  # Gamma law EOS
-        if 'reconstruction' in self.init_params:
-            self.reconstruction = 'characteristicwise' if self.init_params['reconstruction'] else 'componentwise'
-            # 0 for 'componentwise', 1 for 'characterwise'
-        else:
-            self.reconstruction = 'componentwise'
-
     def _prep_state(self):
         """
         Return state at current time step. Returns fpr and fml vector slices.
@@ -220,7 +219,7 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
         u_values = self.grid.get_full()
         flux = self.euler_flux(u_values)
 
-        fm, fp = lf_flux_split_nd(flux, u_values, 'Euler', self.eos_gamma)
+        fm, fp = lf_flux_split_nd(flux, u_values, 'euler', self.eos_gamma)
 
         fp_stencil_indexes = create_stencil_indexes(stencil_size=self.state_order * 2 - 1,
                                                     num_stencils=self.grid.real_length() + 1,
