@@ -6,7 +6,6 @@ import time
 import argparse
 from argparse import Namespace
 
-from util.param_manager import ArgTreeManager
 from util.misc import float_dict
 from util.git import git_commit_hash, git_is_clean, git_branch_name
 
@@ -216,7 +215,7 @@ def log_finish_time(log_dir, status="finished"):
         meta_file.write(line)
     meta_file.close()
 
-# The original function for loading a meta file. Kept for reference.
+# The original function for loading a meta file. Used by load_to_namespace() below.
 def load_meta_file(meta_filename):
     meta_file = open(meta_filename)
     meta_dict = {}

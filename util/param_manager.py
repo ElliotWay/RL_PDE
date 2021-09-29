@@ -10,7 +10,7 @@ class _ExplicitArgSentinel:
 class ArgTreeManager:
     """
     Makes the following assumptions:
-    - Keys in the namespace are valid identifiers i.e. they do not contain perioids. The argparse
+    - Keys in the namespace are valid identifiers i.e. they do not contain periods. The argparse
       library does not check for this.
     - Identifiers are unique, even across hierarchy levels. So an intended namespace that contains
       both args.foo and args.e.foo is invalid.
@@ -184,6 +184,21 @@ class ArgTreeManager:
         return "\n".join(lines)
 
     def load_from_dict(self, load_dict, parent_args=None):
+        """
+        Load new parameters from a nested dict.
+
+        Any parameters that were already passeded explicitly will not be overridden.
+        Any parameters missing from the dict will keep their current values. Any parameters in the
+        dict that are not in the existing parameters will be ignored.
+
+        Parameters
+        ----------
+        load_dict : dict
+            Nested dictionary of parameters to load.
+        parent_args : Namespace
+            The args namespace of the parent ArgTreeManager. Used internally, but also potentially
+            useful for loading a subtree based on changes to parent parameters.
+        """
         # Reparse in case we're using a conditional parser and parent_args have changed.
         if self._parser_constructor is not None:
             if parent_args is None:
@@ -237,6 +252,57 @@ class ArgTreeManager:
                 args_dict[key] = load_dict[key]
             else:
                 args_dict[ley] = self.children[key].load_from_dict(load_dict[key])
+
+    def init_from_dict(self, load_dict, children_names=None):
+        """
+        Initialize parameters from a dict instead of parsing them.
+
+        All parameters will be marked as not explicit. Unlike load_from_dict(), all parameters in
+        the dict will be used. The parser, if set, will be set to None.
+
+        Parameters
+        ----------
+        load_dict : dict
+            Dict of parameters to load.
+        children_names : list of str
+            Explicit list of children names. If left as None, all nested dicts will be assumed
+            children. If populated, only nested dicts with names in children_names will create
+            children. Use '.'s for nested children, e.g. children_names=['foo', 'foo.bar'].
+
+        Returns
+        -------
+        args : nested Namespace
+            The loaded nested namespace, self.args.
+        """
+        raise Exception("I never actually used or tested this function. It should work, but check"
+                            + " for bugs.")
+        self.argparser = None
+        self._parser_constructor = None
+
+        if children_names is None:
+            grandchildren_names = None
+        else:
+            nested_names = [name for name in children_names if '.' in name]
+            local_names = [name for name in children_names if '.' not in name]
+            grandchildren_names = {name:[] for name in local_names}
+            for nested_name in nested_names:
+                child_name, _, grandchild_name = nested_name.partition('.')
+                grandchildren_names[child_name] = grandchild_name
+            children_names = local_names
+
+        args_dict = {}
+        for name, value in load_dict.items():
+            if type(value) is dict and (children_names is None or name in children_names):
+                child = self.create_child(name)
+                child.init_from_dict(value, children_names=grandchildren_names[name])
+                args_dict[name] = child.args
+            else:
+                args_dict[name] = value
+                self.explicit[name] = False
+ 
+        self.args = Namespace(**args_dict)
+
+        return self.args
 
 
 if __name__ == "__main__":
