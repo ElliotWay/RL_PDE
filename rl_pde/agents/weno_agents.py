@@ -34,7 +34,7 @@ class StandardWENO2DAgent(Policy):
                                                             weights[:, :, sub_stencil_index, :]
             return all_flux_weights, None
 
-        raise Exception("{} action type not implemented.".format(action_type))
+        raise Exception("{} action type not implemented.".format(self.action_type))
 
 class StandardWENOAgent(Policy):
     def __init__(self, order=3, action_type="weno"):
@@ -62,4 +62,4 @@ class StandardWENOAgent(Policy):
 
             return flux_weights, None
 
-        raise Exception("{} action type not implemented.".format(action_type))
+        raise Exception("{} action type not implemented.".format(self.action_type))

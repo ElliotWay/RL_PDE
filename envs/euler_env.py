@@ -2,13 +2,12 @@ import numpy as np
 import tensorflow as tf
 from gym import spaces
 
-import envs.weno_coefficients as weno_coefficients
 from envs.abstract_pde_env import AbstractPDEEnv
 from envs.plottable_env import Plottable1DEnv
 from envs.solutions import MemoizedSolution, OneStepSolution
 from envs.solutions import RiemannSolution
 from envs.weno_solution import WENOSolution, PreciseWENOSolution
-from envs.weno_solution import weno_sub_stencils_nd, tf_weno_sub_stencils, tf_weno_weights
+from envs.weno_solution import weno_sub_stencils_nd, tf_weno_sub_stencils, tf_weno_weights, lf_flux_split_nd
 from util.misc import create_stencil_indexes
 from util.softmax_box import SoftmaxBox
 
@@ -68,14 +67,23 @@ class AbstractEulerEnv(AbstractPDEEnv):
 
         self.follow_solution = follow_solution
 
+        if 'eos_gamma' in self.init_params:
+            self.eos_gamma = self.init_params['eos_gamma']
+        else:
+            self.eos_gamma = 1.4  # Gamma law EOS
+        if 'reconstruction' in self.init_params:
+            self.reconstruction = 'characteristicwise' if self.init_params['reconstruction'] else 'componentwise'
+            # 0 for 'componentwise', 1 for 'characterwise'
+        else:
+            self.reconstruction = 'componentwise'
+
         if self.analytical:
             if self.grid.ndim > 1:
                 raise NotImplementedError("Analytical solutions for multiple dimensions not yet"
                                           + " implemented.")
             else:
                 self.solution = RiemannSolution(self.grid.nx, self.grid.ng, self.grid.xmin, self.grid.xmax,
-                                                vec_len=3, init_type=kwargs['init_type'],
-                                                gamma=kwargs['init_params']['eos_gamma'])
+                                                vec_len=3, init_type=kwargs['init_type'], gamma=self.eos_gamma)
         else:
             if self.grid.ndim == 1:
                 self.solution = PreciseWENOSolution(
@@ -83,7 +91,7 @@ class AbstractEulerEnv(AbstractPDEEnv):
                                 'boundary': self.grid.boundary},
                     precise_scale=precise_scale, precise_order=precise_weno_order,
                     flux_function=self.euler_flux, source=self.source,
-                    nu=nu, eqn_type='euler', vec_len=3)
+                    nu=nu, eqn_type='euler', vec_len=3, reconstruction=self.reconstruction)
             # elif self.grid.ndim == 2:
             #     self.solution = PreciseWENOSolution2D(
             #             self.grid, {'init_type':self.grid.init_type,
@@ -125,7 +133,7 @@ class AbstractEulerEnv(AbstractPDEEnv):
                                 'boundary': self.grid.boundary},
                     precise_scale=1, precise_order=self.weno_order,
                     flux_function=self.euler_flux, source=self.source,
-                    nu=nu, eqn_type='euler', vec_len=3)
+                    nu=nu, eqn_type='euler', vec_len=3, reconstruction=self.reconstruction)
             # elif self.grid.ndim == 2:
             #     self.weno_solution = PreciseWENOSolution2D(
             #             self.grid, {'init_type':self.grid.init_type,
@@ -196,16 +204,6 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
         self._action_labels = ["$w^{}_{}$".format(sign, num) for sign in ['+', '-']
                                for num in range(1, self.weno_order + 1)]
 
-        if 'eos_gamma' in self.init_params:
-            self.eos_gamma = self.init_params['eos_gamma']
-        else:
-            self.eos_gamma = 1.4  # Gamma law EOS
-        if 'reconstruction' in self.init_params:
-            self.reconstruction = 'characteristicwise' if self.init_params['reconstruction'] else 'componentwise'
-            # 0 for 'componentwise', 1 for 'characterwise'
-        else:
-            self.reconstruction = 'componentwise'
-
     def _prep_state(self):
         """
         Return state at current time step. Returns fpr and fml vector slices.
@@ -218,25 +216,18 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
             Example: order = 3, grid = 128
 
         """
-        # get the solution data
-        g = self.grid
+        u_values = self.grid.get_full()
+        flux = self.euler_flux(u_values)
 
-        # compute flux at each point
-        f = self.euler_flux(g.u)
-        # get maximum velocity
-        alpha = self._max_lambda()
-
-        # Lax Friedrichs Flux Splitting
-        fp = (f + alpha * g.u) / 2
-        fm = (f - alpha * g.u) / 2
+        fm, fp = lf_flux_split_nd(flux, u_values, 'euler', self.eos_gamma)
 
         fp_stencil_indexes = create_stencil_indexes(stencil_size=self.state_order * 2 - 1,
-                                                    num_stencils=g.real_length() + 1,
-                                                    offset=g.ng - self.state_order)
+                                                    num_stencils=self.grid.real_length() + 1,
+                                                    offset=self.grid.ng - self.state_order)
         fm_stencil_indexes = fp_stencil_indexes + 1
 
-        fp_stencils = [fp[i][fp_stencil_indexes] for i in range(g.space.shape[0])]
-        fm_stencils = [fm[i][fm_stencil_indexes] for i in range(g.space.shape[0])]
+        fp_stencils = [fp[i][fp_stencil_indexes] for i in range(self.grid.space.shape[0])]
+        fm_stencils = [fm[i][fm_stencil_indexes] for i in range(self.grid.space.shape[0])]
 
         # Flip fm stencils. Not sure how I missed this originally?
         fm_stencils = np.flip(fm_stencils, axis=-1)
@@ -259,15 +250,15 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
 
         return self.current_state
 
-    def _max_lambda(self):
-        # epsilon = 1e-16
-        rho = self.grid.u[0]
-        v = self.grid.u[1] / rho
-        # v = self.grid.u[1] / (rho + epsilon)
-        p = (self.eos_gamma - 1) * (self.grid.u[2, :] - rho * v ** 2 / 2)
-        # cs = np.sqrt(self.eos_gamma * p / (rho + epsilon))
-        cs = np.sqrt(self.eos_gamma * p / rho)
-        return max(np.abs(v) + cs)
+    # def _max_lambda(self):
+    #     # epsilon = 1e-16
+    #     rho = self.grid.u[0]
+    #     v = self.grid.u[1] / rho
+    #     # v = self.grid.u[1] / (rho + epsilon)
+    #     p = (self.eos_gamma - 1) * (self.grid.u[2, :] - rho * v ** 2 / 2)
+    #     # cs = np.sqrt(self.eos_gamma * p / (rho + epsilon))
+    #     cs = np.sqrt(self.eos_gamma * p / rho)
+    #     return max(np.abs(v) + cs)
 
     def _rk_substep(self, weights):
 
