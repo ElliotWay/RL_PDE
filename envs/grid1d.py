@@ -152,7 +152,7 @@ class Burgers1DGrid(GridBase):
 
         elif self.init_type == "gaussian":
             if boundary is None:
-                self.boundary = "periodic"
+                self.boundary = "outflow"
             self.space[0] = 1.0 + np.exp(-60.0 * (self.x - 0.5) ** 2)
 
         elif self.init_type == "random":

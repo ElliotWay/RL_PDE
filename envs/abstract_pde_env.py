@@ -333,6 +333,8 @@ class AbstractPDEEnv(gym.Env):
 
         Returns state, reward, done.
         """
+        self.t += dt
+
         # Update solution before updating the grid, in case it depends on the current grid.
         self.solution.update(dt, self.t)
         if self.weno_solution is not None:
@@ -343,8 +345,6 @@ class AbstractPDEEnv(gym.Env):
         else:
             u_start = prev
         self.grid.set(u_start + step)
-
-        self.t += dt
 
         self.steps += 1
         if self.fixed_timesteps:

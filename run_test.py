@@ -202,6 +202,15 @@ def main():
         print("Unrecognized arguments: " + " ".join(rest))
         sys.exit(0)
 
+    # Convergence plots have different defaults.
+    if args.convergence_plot:
+        args.rk4 = True
+        args.e.fixed_timesteps = False
+        if not arg_manager.check_explicit('e.init_type'):
+            args.e.init_type = 'gaussian'
+            args.e.time_max = 0.05
+            args.e.C = 0.5
+
     env_builder.set_contingent_env_defaults(args, args.e, test=True)
     model_builder.set_contingent_model_defaults(args, args.m, test=True)
 
@@ -245,13 +254,14 @@ def main():
     else:
         env_manager_copy = env_arg_manager.copy()
         env_args = env_manager_copy.args
-        #env_args.analytical = True # Compare to analytical solution (preferred)
-        env_args.analytical = False # Compare to WENO (necessary when WENO isn't accurate either)
+        env_args.analytical = True # Compare to analytical solution (preferred)
+        #env_args.analytical = False # Compare to WENO (necessary when WENO isn't accurate either)
         if env_args.reward_mode is not None and 'one-step' in env_args.reward_mode:
             print("Reward mode switched to 'full' instead of 'one-step' for convergence plots.")
             env_args.reward_mode = env_args.reward_mode.replace('one-step', 'full')
         if dims == 1:
-            CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]#, 1024, 2048, 4096, 8192]
+            CONVERGENCE_PLOT_GRID_RANGE = [64, 81, 108, 128, 144, 192, 256]
+            #CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]#, 1024, 2048, 4096, 8192]
             #CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512, 1024, 2048, 4096, 8192]
             #CONVERGENCE_PLOT_GRID_RANGE = (2**np.linspace(6.0, 8.0, 50)).astype(np.int)
         elif dims == 2:

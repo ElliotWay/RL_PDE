@@ -59,7 +59,7 @@ def rollout(env, policy, num_rollouts=1, rk4=False, deterministic=False, every_s
             else:
                 rk4_substep_state = state
                 for _ in range(4):
-                    action, _ = policy.predict(rk4_substep_state)
+                    action, _ = policy.predict(rk4_substep_state, deterministic=deterministic)
                     # Only the 4th reward and done are recorded.
                     rk4_substep_state, reward, done = env.rk4_step(action)
                 next_state = rk4_substep_state
