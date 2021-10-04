@@ -245,7 +245,7 @@ def main():
 
             metadata.load_to_namespace(meta_file, arg_manager,
                     ignore_list=['log_dir', 'ep_length', 'time_max', 'timestep',
-                                'num_cells', 'min_value', 'max_value'])
+                                'num_cells', 'min_value', 'max_value', 'C', 'fixed_timesteps'])
 
     set_global_seed(args.seed)
 

@@ -4,7 +4,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 #TODO add option for polynomial function as comparison
-def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels=None, title=None):
+def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels=None, kwargs_list=None, title=None):
     """
     Create a convergence plot of grid size vs. L2 error.
 
@@ -30,6 +30,8 @@ def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels
         Name of the file to save into log_dir. 'convergence.png' by default.
     label : list of str
         Labels for each set of errors, if there are more than one.
+    kwargs_list : list of dict
+        Kwargs passed to plot(), e.g. color and linestyle, for each set of errors.
     title : str
         Title to give to the plot. No title by default.
     """
@@ -57,11 +59,16 @@ def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels
                 sizes = grid_sizes[index]
             else:
                 sizes = grid_sizes
+            if kwargs_list is not None:
+                kwargs = kwargs_list[index]
+            else:
+                kwargs = {}
+
             if labels is not None:
                 label = labels[index]
-                plt.plot(sizes, error_list, marker='.', label=label)
+                plt.plot(sizes, error_list, label=label, **kwargs)
             else:
-                plt.plot(sizes, error_list, marker='.')
+                plt.plot(sizes, error_list, **kwargs)
     else:
         plt.plot(grid_sizes, errors, color='k', marker='.')
 
