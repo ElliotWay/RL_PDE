@@ -75,7 +75,7 @@ def do_test(env, agent, args):
 
     start_time = time.time()
     _, _, rewards, _, _ = rollout(env, agent,
-                  rk4=args.rk4, deterministic=True, every_step_hook=every_step)
+                  deterministic=True, every_step_hook=every_step)
     end_time = time.time()
 
     print("step = {} (done)".format(env.steps))
@@ -177,9 +177,6 @@ def main():
                         help="Do several runs with different grid sizes to create a convergence plot."
                         " Overrides the --nx argument with 64, 128, 256, and 512, successively."
                         " Sets the --analytical flag.")
-    parser.add_argument('--rk4', default=False, action='store_true',
-                        help="Use RK4 steps instead of Euler steps. Only available for testing,"
-                        + " since the reward during training doesn't make sense.")
     parser.add_argument('-y', '--y', default=False, action='store_true',
                         help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
     parser.add_argument('-n', '--n', default=False, action='store_true',
@@ -204,7 +201,7 @@ def main():
 
     # Convergence plots have different defaults.
     if args.convergence_plot:
-        args.rk4 = True
+        args.e.rk = 'rk4'
         args.e.fixed_timesteps = False
         if not arg_manager.check_explicit('e.init_type'):
             args.e.init_type = 'gaussian'

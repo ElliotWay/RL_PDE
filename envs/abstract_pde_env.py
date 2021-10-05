@@ -4,7 +4,7 @@ import tensorflow as tf
 
 from envs.grid import create_grid
 from envs.solutions import OneStepSolution
-from envs.weno_solution import WENOSolution
+from envs.weno_solution import WENOSolution, RKMethod
 from envs.source import RandomSource
 from util.misc import create_stencil_indexes
 from util.misc import AxisSlice
@@ -38,7 +38,7 @@ class AbstractPDEEnv(gym.Env):
 
     def __init__(self,
             num_cells=(128, 128), num_ghosts=None, min_value=0.0, max_value=1.0, eqn_type='burgers',
-            boundary=None, init_type="gaussian", schedule=None,
+            boundary=None, init_type="gaussian", schedule=None, rk_method=RKMethod.EULER,
             init_params=None,
             fixed_step=0.0004, C=None, #C=0.5,
             weno_order=3, state_order=None, srca=0.0, episode_length=250, time_max=0.1,
@@ -151,6 +151,8 @@ class AbstractPDEEnv(gym.Env):
         self.time_max = time_max
         self.reward_adjustment = reward_adjustment
 
+        self.rk_method = rk_method
+
         # Useful values for subclasses to create consistent names.
         self._step_precision = int(np.ceil(np.log(1+self.episode_length) / np.log(10)))
         self._cell_index_precision = int(np.ceil(np.log(1+max(self.grid.num_cells)) / np.log(10)))
@@ -160,7 +162,7 @@ class AbstractPDEEnv(gym.Env):
         self.action_history = []
         self.state_history = []
 
-        # These are used by RK4.
+        # These are used by Runge-Kutta functions.
         self.dt = self.timestep()
         self.k1 = self.k2 = self.k3 = self.u_start = None
         self.rk_state = 1
@@ -205,7 +207,11 @@ class AbstractPDEEnv(gym.Env):
 
     def step(self, action):
         """
-        Perform a single time step.
+        Perform a single substep.
+
+        If the passed rk_method was Euler, this will do a full timestep, otherwise multiple
+        consecutive calls are required for a full timestep. You can alternatively call rk4_step
+        etc. directly.
 
         Parameters
         ----------
@@ -228,21 +234,96 @@ class AbstractPDEEnv(gym.Env):
         assert not (np.isnan(action).any() if self.grid.ndim == 1 else \
                 any([np.isnan(a).any() for a in action])), "NaN detected in action."
 
+        if self.rk_method is RKMethod.SSP_RK3:
+            s, r, d = self.rk3_step(action)
+            return s, r, d, {}
+        elif self.rk_method is RKMethod.RK4:
+            s, r, d = self.rk4_step(action)
+            return s, r, d, {}
+
+        assert self.rk_method is RKMethod.EULER
+
         self.action_history.append(action)
 
         dt = self.timestep()
 
         if self.source is not None:
-            self.source.update(dt, self.t + dt) # Why is this t + dt? Why is source based on the
-                                                # time after we integrate forward?
+            self.source.update(dt, self.t + dt)
 
-        step = dt * self._rk_substep(action)
+        new_state = self.grid.get_real() + dt * self._rk_substep(action)
 
-        state, reward, done = self._finish_step(step, dt)
+        state, reward, done = self._finish_step(new_state, dt)
 
         self.state_history.append(self.grid.get_full().copy())
 
         return state, reward, done, {}
+
+    def rk3_step(self, action):
+        """
+        Perform one SSP RK3 substep.
+
+        You should call this function 3 times in succession.
+        The first 2 calls with return the state in each substep, and the last will return the state
+        after the full RK3 step.
+        Regardless of the internal state, the action should always be based on the previously
+        returned state.
+        action and state are only recorded on the 4th call.
+
+        Returns
+        -------
+        state : ndarray
+            Either the state after the substep, or the state after the full step.
+        reward : ndarray
+            0.0 on the first 2 calls, the reward for each location on the last call.
+        done : bool
+            Whether this step ends the episode. Guaranteed to be False on the first 2 calls.
+        """
+        assert self.rk_method is RKMethod.SSP_RK3, "Wrong RK method."
+        assert not (np.isnan(action).any() if self.grid.ndim == 1 else \
+                any([np.isnan(a).any() for a in action])), "NaN detected in action."
+
+        if self.rk_state == 1:
+            self.u_start = np.array(self.grid.get_real())
+            self.dt = self.timestep()
+
+            if self.source is not None:
+                self.source.update(dt, self.t + dt)
+
+            # k1 is not the correct name for this. The reference implementation uses q1 instead.
+            # The difference is that k1 is a step, where q1 is a state.
+            # I think this could be written in a way that uses k1 correctly, but I'm not confident
+            # enough in my math to do that. -Elliot
+            self.k1 = self.u_start + self.dt * self._rk_substep(action)
+            self.grid.set(self.k1)
+            state = self._prep_state()
+
+            self.rk_state = 2
+            return state, np.zeros_like(action), False
+        elif self.rk_state == 2:
+            self.k2 = (3 * self.u_start + self.k1 + self.dt * self._rk_substep(action)) / 4
+            self.grid.set(self.k2)
+            state = self._prep_state()
+
+            self.rk_state = 3
+            return state, np.zeros_like(action), False
+        elif self.rk_state == 3:
+            self.action_history.append(action)
+
+            q3 = (self.u_start + 2 * self.k2 + 2 * self.dt * self._rk_substep(action)) / 3
+            new_state = q3
+
+            self.grid.set(q3)
+            state = self._prep_state()
+
+            self.action_history.append(action)
+
+            state, reward, done = self._finish_step(step, self.dt, prev=self.u_start)
+
+            self.state_history.append(self.grid.get_full().copy())
+
+            self.rk_state = 1
+            self.k1 = self.k2 = self.k3 = self.u_start = self.dt = None
+            return state, reward, done
 
     def rk4_step(self, action):
         """
@@ -251,20 +332,21 @@ class AbstractPDEEnv(gym.Env):
         You should call this function 4 times in succession.
         The 1st, 2nd, and 3rd calls will return the state in each substep.
         The 4th call will return the state after the full RK4 step.
-
-        Regardless of the internal state, the action should always be based on the previously returned state.
-
+        Regardless of the internal state, the action should always be based on the previously
+        returned state.
         action and state are only recorded on the 4th call.
 
         Returns
         -------
-        state: np array
-          depends on which of the 4th calls this is
-        reward: np array
-          0 on first 3 calls, reward for each location on the 4th call
-        done: boolean
-          end of episode, guaranteed to be False on first 3 calls
+        state : ndarray
+            Either the state after the substep, or the state after the full step.
+        reward : ndarray
+            0.0 on the first 3 calls, the reward for each location on the last call.
+        done : bool
+            Whether this step ends the episode. Guaranteed to be False on the first 2 calls.
+
         """
+        assert self.rk_method is RKMethod.RK4, "Wrong RK method."
         assert not (np.isnan(action).any() if self.grid.ndim == 1 else \
                 any([np.isnan(a).any() for a in action])), "NaN detected in action."
 
@@ -303,17 +385,9 @@ class AbstractPDEEnv(gym.Env):
             k4 = self.dt * self._rk_substep(action)
             step = (self.k1 + 2*(self.k2 + self.k3) + k4) / 6
 
-            if isinstance(self.solution, WENOSolution):
-                self.solution.set_rk4(True)
-            if self.weno_solution is not None:
-                self.weno_solution.set_rk4(True)
+            new_state = self.u_start + step
 
-            state, reward, done = self._finish_step(step, self.dt, prev=self.u_start)
-
-            if isinstance(self.solution, WENOSolution):
-                self.solution.set_rk4(False)
-            if self.weno_solution is not None:
-                self.weno_solution.set_rk4(False)
+            state, reward, done = self._finish_step(new_state, self.dt)
 
             self.state_history.append(self.grid.get_full().copy())
 
@@ -321,17 +395,28 @@ class AbstractPDEEnv(gym.Env):
             self.k1 = self.k2 = self.k3 = self.u_start = self.dt = None
             return state, reward, done
 
-    def _finish_step(self, step, dt, prev=None):
+    def _finish_step(self, new_state, dt):
         """
-        Apply a physical step.
+        Complete the step by updating the state, and various things that need to happen after each
+        step. Updates self.t with dt.
 
-        If prev is None, the step is applied to the current grid, otherwise
-        it is applied to prev, then saved to the grid.
+        The calling function should not update the grid directly.
 
-        Override this function if other adjustments should be done to the step before applying it
-        to the grid. (Probably call super()._finish_step() at the END of that method.)
+        Override this function if other adjustments are needed directly before updating the grid.
+        (Call super()._finish_step() at the end of such a function.)
 
-        Returns state, reward, done.
+        Parameters
+        ----------
+        new_state : ndarray
+            The values for the real state at the following timestep.
+        dt : float
+            Length of the timestep used to determine new_state.
+
+        Returns
+        -------
+        state : ndarray
+        reward : ndarray
+        done : bool
         """
         self.t += dt
 
@@ -340,11 +425,7 @@ class AbstractPDEEnv(gym.Env):
         if self.weno_solution is not None:
             self.weno_solution.update(dt, self.t)
 
-        if prev is None:
-            u_start = self.grid.get_real()
-        else:
-            u_start = prev
-        self.grid.set(u_start + step)
+        self.grid.set(new_state)
 
         self.steps += 1
         if self.fixed_timesteps:

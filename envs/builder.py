@@ -7,6 +7,7 @@ from envs.abstract_pde_env import AbstractPDEEnv
 from envs import WENOBurgersEnv, SplitFluxBurgersEnv, FluxBurgersEnv
 from envs.burgers_2d_env import WENOBurgers2DEnv
 from envs.euler_env import WENOEulerEnv
+from envs.weno_solution import RKMethod
 
 
 # Could pass name of env, and only have relevant parameters instead of allowing all of them?
@@ -71,6 +72,8 @@ def get_env_arg_parser():
                         + " init-type, which may vary if using e.g. '--init-type schedule'."
                         + " Set --boundary if you want boundary conditions to be something in"
                         + " particular.")
+    parser.add_argument('--rk', type=str, default='euler',
+                        help="RK method for this environment, e.g. euler, rk4, or ssp_rk3.")
     parser.add_argument('--init-params',  '--init_params', type=float_dict, default=None,
                         help="Some initial conditions accept parameters. For example, smooth_sine"
                         + " accepts A for the amplitude of the wave. Pass these parameters as a"
@@ -285,6 +288,8 @@ def build_env(env_name, env_args, test=False):
 
     if env_args.fixed_timesteps:
         env_args.C = None
+
+    rk_method = RKMethod[env_args.rk.upper()]
 
     # These all apply to AbstractBurgersEnvs, but might not to other envs.
     kwargs = {  'num_cells': env_args.num_cells,

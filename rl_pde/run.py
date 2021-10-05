@@ -14,7 +14,7 @@ from stable_baselines import logger
 # More imports below rollout() to avoid circular dependency.
 # Maybe rollout() should be in a separate file?
 
-def rollout(env, policy, num_rollouts=1, rk4=False, deterministic=False, every_step_hook=None):
+def rollout(env, policy, num_rollouts=1, deterministic=False, every_step_hook=None):
     """
     Collect a rollout.
 
@@ -26,9 +26,8 @@ def rollout(env, policy, num_rollouts=1, rk4=False, deterministic=False, every_s
         Policy to deploy in the environment.
     num_rollouts : int
         Number of rollouts to collect. 1 by default.
-    rk4 : bool
-        Use RK4 steps instead of regular steps. Requires the environment to have the rk4_step()
-        method.
+    rk_steps : int
+        Number of steps for a full timestep. 1 if we're using Euler stepping, 4 for RK4, etc.
     deterministic : bool
         Require a deterministic policy. Passed to policy.predict().
     every_step_hook : func(t)
@@ -53,16 +52,11 @@ def rollout(env, policy, num_rollouts=1, rk4=False, deterministic=False, every_s
             if every_step_hook is not None:
                 every_step_hook(steps)
 
-            if not rk4:
-                action, _ = policy.predict(state, deterministic=deterministic)
+            next_state = state
+            for _ in range(env.rk_method.steps):
+                action, _ = policy.predict(next_state, deterministic=deterministic)
                 next_state, reward, done, _ = env.step(action)
-            else:
-                rk4_substep_state = state
-                for _ in range(4):
-                    action, _ = policy.predict(rk4_substep_state, deterministic=deterministic)
-                    # Only the 4th reward and done are recorded.
-                    rk4_substep_state, reward, done = env.rk4_step(action)
-                next_state = rk4_substep_state
+            # We only keep the state, action, reward after the full step.
 
             state_list.append(state)
             action_list.append(action)

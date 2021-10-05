@@ -1,3 +1,5 @@
+from enum import Enum
+
 import numpy as np
 import tensorflow as tf
 
@@ -258,12 +260,27 @@ def levecs_vectorized(g, boundary_state):
     levecs[2, 2, :] = b1 / 2
     return levecs
 
+class RKMethod(Enum):
+    EULER = 1
+    RK4 = 2
+    RK3 = 3
+    SSP_RK3 = 3
+    @property
+    def steps(self):
+        if self is RKMethod.EULER:
+            return 1
+        elif self is RKMethod.RK4:
+            return 4
+        elif self is RKMethod.SSP_RK3:
+            return 3
+        else:
+            raise Exception()
 
 class WENOSolution(SolutionBase):
     """
     Interface class to define some functions that WENO solutions should have.
     """
-    def use_rk4(self, use_rk4):
+    def set_rk_method(self, method):
         raise NotImplementedError()
     def set_record_actions(self, mode):
         raise NotImplementedError()
@@ -278,7 +295,7 @@ class PreciseWENOSolution2D(WENOSolution):
             precise_order, precise_scale,
             flux_function, eqn_type='burgers',
             vec_len=1, reconstruction='componentwise', nu=0.0, source=None,
-            record_state=False, record_actions=None):
+            record_state=False, record_actions=None, rk_method=RKMethod.EULER):
         super().__init__(base_grid.num_cells, base_grid.num_ghosts,
                 base_grid.min_value, base_grid.max_value, vec_len, record_state=record_state)
 
@@ -319,14 +336,10 @@ class PreciseWENOSolution2D(WENOSolution):
         self.nu = nu
         self.precise_order = precise_order
         self.source = source
+        self.rk_method = rk_method
 
         self.record_actions = record_actions
         self.action_history = []
-
-        self.use_rk4 = False
-
-    def set_rk4(self, use_rk4):
-        self.use_rk4 = use_rk4
 
     def is_recording_actions(self):
         return (self.record_actions is not None)
@@ -440,7 +453,9 @@ class PreciseWENOSolution2D(WENOSolution):
 
     def _update(self, dt, time):
         u_start = np.array(self.precise_grid.get_real())
-        if self.use_rk4:
+        if self.rk_method is RKMethod.EULER:
+            full_step = dt * self.rk_substep()
+        elif self.rk_method is RKMethod.RK4:
             k1 = dt * self.rk_substep()
             self.precise_grid.set(u_start + (k1 / 2))
 
@@ -452,9 +467,18 @@ class PreciseWENOSolution2D(WENOSolution):
 
             k4 = dt * self.rk_substep()
             full_step = (k1 + 2*(k2 + k3) + k4) / 6
+        elif self.rk_method is RKMethod.SSP_RK3:
+            u1 = u_start + dt * self.rk_substep()
+            self.precise_grid.set(u1)
 
-        else: #Euler
-            full_step = dt * self.rk_substep()
+            u2 = (3 * u_start + u1 + dt * self.rk_substep()) / 4
+            self.precise_grid.set(u2)
+
+            u3 = (u_start + 2 * u2 + 2 * dt * self.rk_substep()) / 3
+            self.precise_grid.set(u3)
+        else:
+            raise ValueError(f"{self.rk_method} RK method not recognized.")
+
 
         self.precise_grid.set(u_start + full_step)
         self.precise_grid.update_boundary()
@@ -495,7 +519,7 @@ class PreciseWENOSolution(WENOSolution):
                  base_grid, init_params,
                  precise_order, precise_scale, flux_function, eqn_type='burgers',
                  vec_len=1, reconstruction='componentwise', nu=0.0, source=None,
-                 record_state=False, record_actions=None):
+                 record_state=False, record_actions=None, rk_method=RKMethod.EULER):
         super().__init__(base_grid.num_cells, base_grid.num_ghosts,
                 base_grid.min_value, base_grid.max_value, vec_len, record_state=record_state)
 
@@ -531,14 +555,10 @@ class PreciseWENOSolution(WENOSolution):
         self.nu = nu
         self.order = precise_order
         self.source = source
+        self.rk_method = rk_method
 
         self.record_actions = record_actions
         self.action_history = []
-
-        self.use_rk4 = False
-
-    def set_rk4(self, use_rk4):
-        self.use_rk4 = use_rk4
 
     def is_recording_actions(self):
         return (self.record_actions is not None)
@@ -622,7 +642,9 @@ class PreciseWENOSolution(WENOSolution):
 
     def _update(self, dt, time):
         u_start = np.array(self.precise_grid.get_real())
-        if self.use_rk4:
+        if self.rk_method is RKMethod.EULER:
+            full_step = dt * self.rk_substep()
+        elif self.rk_method is RKMethod.RK4:
             k1 = dt * self.rk_substep()
             self.precise_grid.set(u_start + (k1 / 2))
 
@@ -634,9 +656,17 @@ class PreciseWENOSolution(WENOSolution):
 
             k4 = dt * self.rk_substep()
             full_step = (k1 + 2*(k2 + k3) + k4) / 6
+        elif self.rk_method is RKMethod.SSP_RK3:
+            u1 = u_start + dt * self.rk_substep()
+            self.precise_grid.set(u1)
 
-        else: #Euler
-            full_step = dt * self.rk_substep()
+            u2 = (3 * u_start + u1 + dt * self.rk_substep()) / 4
+            self.precise_grid.set(u2)
+
+            u3 = (u_start + 2 * u2 + 2 * dt * self.rk_substep()) / 3
+            self.precise_grid.set(u3)
+        else:
+            raise ValueError(f"{self.rk_method} RK method not recognized.")
 
         self.precise_grid.set(u_start + full_step)
         self.precise_grid.update_boundary()

@@ -154,8 +154,8 @@ class AbstractBurgersEnv(AbstractPDEEnv):
             rhs += self.nu * self.grid.laplacian()
         return rhs
 
-    def _finish_step(self, step, dt, prev=None):
-        state, reward, done = super()._finish_step(step, dt, prev)
+    def _finish_step(self, new_state, dt):
+        state, reward, done = super()._finish_step(new_state, dt)
 
         if self.follow_solution:
             self.grid.set(self.solution.get_real())
