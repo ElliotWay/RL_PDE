@@ -540,7 +540,7 @@ class Plottable1DEnv(AbstractPDEEnv):
 
         assert (timestep is None or location is None), "Can't plot action at both a timestep and a location."
 
-        action_dimensions = np.prod(list(self.action_space.shape)[1:])
+        action_dimensions = np.prod(list(self.action_space.shape)[2:])
 
         vertical_size = 5.0
         horizontal_size = 0.5 + 3.0 * action_dimensions
@@ -559,7 +559,7 @@ class Plottable1DEnv(AbstractPDEEnv):
         else:
             weno_action_history = None
 
-        new_shape = (action_history.shape[0], action_history.shape[1], action_dimensions)
+        new_shape = (action_history.shape[0], action_history.shape[1], action_history.shape[2], action_dimensions)
         action_history = action_history.reshape(new_shape)
         if weno_action_history is not None:
             weno_action_history = weno_action_history.reshape(new_shape)
@@ -567,9 +567,9 @@ class Plottable1DEnv(AbstractPDEEnv):
         # If plotting actions at a timestep, need to transpose location to the last dimension.
         # If plotting actions at a location, need to transpose time to the last dimension.
         if location is not None:
-            action_history = action_history[:,location,:].transpose()
+            action_history = action_history[:, :, location, :].transpose()
             if weno_action_history is not None:
-                weno_action_history = weno_action_history[:, location, :].transpose()
+                weno_action_history = weno_action_history[:, :, location, :].transpose()
 
             actual_location = self.grid.x[location] - self.grid.dx/2
             if title is None:
@@ -579,9 +579,9 @@ class Plottable1DEnv(AbstractPDEEnv):
         else:
             if timestep is None:
                 timestep = len(action_history) - 1
-            action_history = action_history[timestep, :, :].transpose()
+            action_history = action_history[timestep, :, :, :].transpose()
             if weno_action_history is not None:
-                weno_action_history = weno_action_history[timestep, :, :].transpose()
+                weno_action_history = weno_action_history[timestep, :, :, :].transpose()
 
             if title is None:
                 if self.C is None:
