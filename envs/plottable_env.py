@@ -278,7 +278,7 @@ class Plottable1DEnv(AbstractPDEEnv):
             agent_label = "|error|"
         for i in range(vec_len):
             ax[i].plot(x_values, state_history[i], ls='-', color=self.agent_color, label=agent_label)
-            ax[i].legend(loc="upper right")
+            # ax[i].legend(loc="upper right")
             if no_borders:
                 ax[i].set_xmargin(0.0)
             ax[i].set_xlabel('x')
@@ -540,13 +540,25 @@ class Plottable1DEnv(AbstractPDEEnv):
 
         assert (timestep is None or location is None), "Can't plot action at both a timestep and a location."
 
-        action_dimensions = np.prod(list(self.action_space.shape)[2:])
-
-        vertical_size = 5.0
-        horizontal_size = 0.5 + 3.0 * action_dimensions
-        fig, axes = plt.subplots(1, action_dimensions, sharex=True, sharey=True, figsize=(horizontal_size, vertical_size))
-
         action_history = np.array(self.action_history)
+
+        if 'Euler' in str(self):
+            action_dimensions = np.prod(list(self.action_space.shape)[2:])
+            vector_dimensions = self.action_space.shape[0]
+        else:  # Burgers
+            action_dimensions = np.prod(list(self.action_space.shape)[1:])
+            vector_dimensions = 1
+            action_history = np.expand_dims(action_history, 1)
+
+        vertical_size = 5 * vector_dimensions
+        horizontal_size = 4 * action_dimensions
+        fig, axes = plt.subplots(vector_dimensions, action_dimensions, sharex=True, sharey=True,
+                                 figsize=(horizontal_size, vertical_size))
+
+        try:
+            len(axes[0])
+        except TypeError:
+            axes = np.expand_dims(axes, 0)  # a hacky way to make subplots work with only one subplot
 
         if self.solution.is_recording_actions():
             weno_action_history = np.array(self.solution.get_action_history())
@@ -595,28 +607,35 @@ class Plottable1DEnv(AbstractPDEEnv):
 
         real_x = self.grid.inter_x[self.ng:-self.ng]
 
-        for dim in range(action_dimensions):
-            ax = axes[dim]
+        for i in range(vector_dimensions):
+            for j in range(action_dimensions):
+                ax = axes[i][j]
 
-            if weno_action_history is not None:
-                ax.plot(real_x, weno_action_history[dim, :], c=weno_color, linestyle='-', label="WENO")
-            ax.plot(real_x, action_history[dim, :], c=self.agent_color, linestyle='-', label="RL")
+                if weno_action_history is not None:
+                    ax.plot(real_x, weno_action_history[j, :, i], c=weno_color, linestyle='-', label="WENO")
+                ax.plot(real_x, action_history[j, :, i], c=self.agent_color, linestyle='-', label="RL")
 
-            if no_borders:
-                ax.set_xmargin(0.0)
+                if no_borders:
+                    ax.set_xmargin(0.0)
 
-            if fixed_axes:
-               if self._action_axes is None:
-                   self._action_axes = (ax.get_xlim(), ax.get_ylim())
-               else:
-                   xlim, ylim = self._action_axes
-                   ax.set_xlim(xlim)
-                   ax.set_ylim(ylim)
+                if fixed_axes:
+                   if self._action_axes is None:
+                       self._action_axes = (ax.get_xlim(), ax.get_ylim())
+                   else:
+                       xlim, ylim = self._action_axes
+                       ax.set_xlim(xlim)
+                       ax.set_ylim(ylim)
 
-            if self._action_labels is not None:
-                ax.set_title(self._action_labels[dim])
+                ax.legend()
 
-        plt.legend()
+        if self._action_labels is not None:
+            for id, ax in enumerate(axes[0, :]):
+                ax.set_title(self._action_labels[id])
+
+        for id, ax in enumerate(axes[:, 0]):
+            ax.set_ylabel(f'Action Dimension {id}')
+
+        fig.tight_layout()
 
         log_dir = logger.get_dir()
         if suffix is None:
