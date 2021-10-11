@@ -1,3 +1,9 @@
+V47, b598a6b, 10/05/21
+--------------------------------
+The syntax for using RK4 has changed. Now use --rk rk4 instead of --rk4. This comes with allowing --rk rk3 as well.
+Training currently ignores this parameter.
+The defaults for convergence plots have changed to reflect the comparable plot in Introduction to Computational Astrophysical Hydrodynamics.
+
 V46, f58eb7b, 06/18/21
 ---------------------------------
 It's been some time since I updated this file - it was just me working on the repo for a long time,
