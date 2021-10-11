@@ -278,7 +278,7 @@ class Plottable1DEnv(AbstractPDEEnv):
             agent_label = "|error|"
         for i in range(vec_len):
             ax[i].plot(x_values, state_history[i], ls='-', color=self.agent_color, label=agent_label)
-            # ax[i].legend(loc="upper right")
+            ax[i].legend()
             if no_borders:
                 ax[i].set_xmargin(0.0)
             ax[i].set_xlabel('x')
@@ -643,7 +643,7 @@ class Plottable1DEnv(AbstractPDEEnv):
                 suffix = ("_step{:0" + str(self._cell_index_precision) + "}").format(location)
             else:
                 suffix = ("_step{:0" + str(self._step_precision) + "}").format(timestep)
-        filename = 'burgers_action' + suffix + '.png'
+        filename = 'action' + suffix + '.png'
 
         filename = os.path.join(log_dir, filename)
         plt.savefig(filename)

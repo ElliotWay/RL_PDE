@@ -553,6 +553,75 @@ class Euler1DGrid(GridBase):
             self.space[1, :] = S[:]
             self.space[2, :] = E[:]
 
+        elif self.init_type == "sod2":
+            if boundary is None:
+                self.boundary = "outflow"
+            if 'eos_gamma' in self.init_params:
+                eos_gamma = self.init_params['eos_gamma']
+            else:
+                eos_gamma = 1.4  # Gamma law EOS
+            rho_l = 1
+            rho_r = 0.01
+            v_l = 0
+            v_r = 0
+            p_l = 1
+            p_r = 0.01
+            S_l = rho_l * v_l
+            S_r = rho_r * v_r
+            e_l = p_l / rho_l / (eos_gamma - 1)
+            e_r = p_r / rho_r / (eos_gamma - 1)
+            E_l = rho_l * (e_l + v_l ** 2 / 2)
+            E_r = rho_r * (e_r + v_r ** 2 / 2)
+            self.space[0] = np.where(self.x < 0, rho_l * np.ones_like(self.x), rho_r * np.ones_like(self.x))
+            self.space[1] = np.where(self.x < 0, S_l * np.ones_like(self.x), S_r * np.ones_like(self.x))
+            self.space[2] = np.where(self.x < 0, E_l * np.ones_like(self.x), E_r * np.ones_like(self.x))
+
+        elif self.init_type == "sonic_rarefaction":
+            if boundary is None:
+                self.boundary = "outflow"
+            if 'eos_gamma' in self.init_params:
+                eos_gamma = self.init_params['eos_gamma']
+            else:
+                eos_gamma = 1.4  # Gamma law EOS
+            rho_l = 3.857
+            rho_r = 1
+            v_l = 0.90
+            v_r = 3.55
+            p_l = 10.333
+            p_r = 1
+            S_l = rho_l * v_l
+            S_r = rho_r * v_r
+            e_l = p_l / rho_l / (eos_gamma - 1)
+            e_r = p_r / rho_r / (eos_gamma - 1)
+            E_l = rho_l * (e_l + v_l ** 2 / 2)
+            E_r = rho_r * (e_r + v_r ** 2 / 2)
+            self.space[0] = np.where(self.x < 0, rho_l * np.ones_like(self.x), rho_r * np.ones_like(self.x))
+            self.space[1] = np.where(self.x < 0, S_l * np.ones_like(self.x), S_r * np.ones_like(self.x))
+            self.space[2] = np.where(self.x < 0, E_l * np.ones_like(self.x), E_r * np.ones_like(self.x))
+
+        elif self.init_type == "slow_moving_shock":
+            if boundary is None:
+                self.boundary = "outflow"
+            if 'eos_gamma' in self.init_params:
+                eos_gamma = self.init_params['eos_gamma']
+            else:
+                eos_gamma = 1.4  # Gamma law EOS
+            rho_l = 3.86
+            rho_r = 1
+            v_l = -0.81
+            v_r = -3.44
+            p_l = 10.33
+            p_r = 1
+            S_l = rho_l * v_l
+            S_r = rho_r * v_r
+            e_l = p_l / rho_l / (eos_gamma - 1)
+            e_r = p_r / rho_r / (eos_gamma - 1)
+            E_l = rho_l * (e_l + v_l ** 2 / 2)
+            E_r = rho_r * (e_r + v_r ** 2 / 2)
+            self.space[0] = np.where(self.x < 0, rho_l * np.ones_like(self.x), rho_r * np.ones_like(self.x))
+            self.space[1] = np.where(self.x < 0, S_l * np.ones_like(self.x), S_r * np.ones_like(self.x))
+            self.space[2] = np.where(self.x < 0, E_l * np.ones_like(self.x), E_r * np.ones_like(self.x))
+
         else:
             raise Exception("Initial condition type \"" + str(self.init_type) + "\" not recognized.")
 
