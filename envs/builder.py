@@ -74,6 +74,9 @@ def get_env_arg_parser():
                         + " particular.")
     parser.add_argument('--rk', type=str, default='euler',
                         help="RK method for this environment, e.g. euler, rk4, or ssp_rk3.")
+    parser.add_argument('--solution-rk', type=str, default=None,
+                        help="RK method for the solution. By default use the same RK method as"
+                        + " the environment.")
     parser.add_argument('--init-params',  '--init_params', type=float_dict, default=None,
                         help="Some initial conditions accept parameters. For example, smooth_sine"
                         + " accepts A for the amplitude of the wave. Pass these parameters as a"
@@ -290,6 +293,10 @@ def build_env(env_name, env_args, test=False):
         env_args.C = None
 
     rk_method = RKMethod[env_args.rk.upper()]
+    if env_args.solution_rk is not None:
+        solution_rk_method = RKMethod[env_args.solution_rk.upper()]
+    else:
+        solution_rk_method = rk_method
 
     # These all apply to AbstractBurgersEnvs, but might not to other envs.
     kwargs = {  'num_cells': env_args.num_cells,
@@ -297,6 +304,8 @@ def build_env(env_name, env_args, test=False):
                 'max_value': env_args.max_value,
                 'init_type': env_args.init_type,
                 'schedule': env_args.schedule,
+                'rk_method': rk_method,
+                'solution_rk_method': solution_rk_method,
                 'init_params': env_args.init_params,
                 'boundary': env_args.boundary,
                 'C': env_args.C,
