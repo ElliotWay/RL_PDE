@@ -300,6 +300,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
 
     def tf_rk_substep(self, args):
         real_state, rl_state, rl_action = args
+        assert type(rl_state) is tuple and type(rl_action) is tuple
 
         rl_state = rl_state[0] # Extract 1st (and only) dimension.
         rl_action = rl_action[0]
@@ -332,6 +333,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
     #@tf.function
     def tf_integrate(self, args):
         real_state, rl_state, rl_action = args
+        assert type(rl_state) is tuple and type(rl_action) is tuple
 
         rhs = self.tf_rk_substep(args)
         dt = self.tf_timestep(real_state)
@@ -349,6 +351,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
     #@tf.function
     def tf_calculate_reward(self, args):
         real_state, rl_state, rl_action, next_real_state = args
+        assert type(rl_state) is tuple and type(rl_action) is tuple
         # Note that real_state and next_real_state do not include ghost cells, but rl_state does.
 
         rl_state = rl_state[0] # Extract 1st (and only) dimension.
@@ -393,7 +396,6 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
                     next_rl_state = next_rl_state[0]
         else:
             raise Exception(f"{rk_method} not implemented.")
-        print("weno next state shape:", weno_next_real_state.shape)
 
         # This section is adapted from AbstactPDEEnv.calculate_reward()
         if "wenodiff" in self.reward_mode:
