@@ -360,19 +360,27 @@ class GridBase(AbstractGrid):
         Unlike grid.laplacian(), this takes a state portioned as the REAL state and computes ghost
         cells on the fly. (The Laplacian only needs the first cell past the boundary.)
         """
+        boundary = self.boundary
+        if type(boundary) is str:
+            boundary = (boundary,) * len(self.num_cells)
+        elif len(boundary) != len(self.num_cells):
+            raise ValueError("GridBase: Size of boundary must match size of num_cells"
+                    + " ({} vs {}).".format(len(boundary), len(self.num_cells)))
+
         partial_2nd_derivatives = []
-        for axis, dx in enumerate(self.cell_size):
+        for axis, (dx, bound) in enumerate(zip(self.cell_size, boundary)):
+            axis = axis + 1 # Axis 0 is the vector axis.
             axis_slice = TensorAxisSlice(real_state, axis)
             central_lap = (axis_slice[:-2] - 2.0*axis_slice[1:-1] + axis_slice[2:]) / (dx**2)
-            if self.grid.boundary == "outflow":
+            if bound == "outflow":
                 left_lap = (-axis_slice[0] + axis_slice[1]) / (dx**2) # X-2X+Y = -X+Y
                 right_lap = (axis_slice[-2] - axis_slice[-1]) / (dx**2) # X-2Y+Y = X-Y
-            elif self.grid.boundary == "periodic":
+            elif bound == "periodic":
                 left_lap = (axis_slice[-1] - 2.0*axis_slice[0] + axis_slice[1]) / (dx**2)
                 right_lap = (axis_slice[-2] - 2.0*axis_slice[-1] + axis_slice[0]) / (dx**2)
             else:
                 raise NotImplementedError()
-            d2fdx2 = tf.concat([[left_lap], central_lap, [right_lap]], axis=0)
+            d2fdx2 = tf.concat([[left_lap], central_lap, [right_lap]], axis=axis)
             partial_2nd_derivatives.append(d2fdx2)
 
         return tf.reduce_sum(partial_2nd_derivatives, axis=0)

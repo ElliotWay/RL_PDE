@@ -298,7 +298,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         #return rl_state
         return (rl_state,) # Singleton because this is 1D.
 
-    def tf_rk_rubstep(self, args):
+    def tf_rk_substep(self, args):
         real_state, rl_state, rl_action = args
 
         rl_state = rl_state[0] # Extract 1st (and only) dimension.
@@ -319,7 +319,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         reconstructed_flux = fpr + fml
 
         derivative_u_t = (reconstructed_flux[:-1] - reconstructed_flux[1:]) / self.grid.dx
-        rhs = derivative_u_t
+        rhs = tf.expand_dims(derivative_u_t, axis=0) # Insert the vector dimension.
 
         if self.nu != 0.0:
             rhs += self.nu * self.grid.tf_laplacian(real_state)
@@ -365,14 +365,15 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         elif rk_method == RKMethod.RK4:
             next_rl_state = rl_state
             weno_substeps = []
+            dt = self.tf_timestep(real_state)
             for stage in range(4):
                 fp_stencils = next_rl_state[:, 0]
                 fm_stencils = next_rl_state[:, 1]
                 fp_weights = tf_weno_weights(fp_stencils, self.weno_order)
                 fm_weights = tf_weno_weights(fm_stencils, self.weno_order)
                 weno_action = tf.stack([fp_weights, fm_weights], axis=1)
-                rhs = self.tf_rk_substep((real_state, (rl_state), (weno_action,)))
-                step = self.tf_timestep() * rhs
+                rhs = self.tf_rk_substep((real_state, (rl_state,), (weno_action,)))
+                step = dt * rhs
                 weno_substeps.append(step)
 
                 if stage == 0:
@@ -386,11 +387,13 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
                                                         + 2*weno_substeps[1]
                                                         + 2*weno_substeps[2]
                                                         + weno_substeps[3]) / 6
+
                 if stage < 3:
                     next_rl_state = self.tf_prep_state(weno_next_real_state)
                     next_rl_state = next_rl_state[0]
         else:
             raise Exception(f"{rk_method} not implemented.")
+        print("weno next state shape:", weno_next_real_state.shape)
 
         # This section is adapted from AbstactPDEEnv.calculate_reward()
         if "wenodiff" in self.reward_mode:

@@ -42,10 +42,6 @@ def lf_flux_split_nd(flux_array, values_array, grid_type='Burgers', *args):
     else:
         return output
 
-# Actually important that this is NOT a tf.function.
-# Something about the way it handles tuples causes problems when TF tries to optimize it.
-# Not sure what the ramifications of this are.
-#@tf.function
 def tf_lf_flux_split(flux_tensor, values_tensor):
     output = []
     abs_values = tf.abs(values_tensor)

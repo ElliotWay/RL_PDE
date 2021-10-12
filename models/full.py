@@ -700,6 +700,12 @@ class RK4IntegrateCell(Layer):
 
         rk_substeps = []
         rl_state_0 = None
+
+        dt = tf.map_fn(self.timestep_fn, real_state, dtype=real_state.dtype, name='map_timestep')
+        # Make dt broadcast over batch dimension.
+        for _ in range(all_dims - 1):
+            dt = tf.expand_dims(dt, axis=-1)
+
         for stage in range(STAGES):
 
             # Use tf.map_fn to apply function across every element in the batch.
@@ -738,11 +744,8 @@ class RK4IntegrateCell(Layer):
                 rl_action.append(rl_action_part)
             rl_action = tuple(rl_action)
 
-
             rhs = tf.map_fn(self.rk_substep_fn, (current_real_state, rl_state, rl_action),
                     dtype=current_real_state.dtype, name='map_rk_substep')
-            dt = tf.map_fn(self.tf_timestep, current_real_state,
-                    dtype=current_real_state.dtype, name='map_timestep')
             step = dt * rhs
             rk_substeps.append(step)
 
@@ -759,11 +762,6 @@ class RK4IntegrateCell(Layer):
                                                     + rk_substeps[3]) / 6
             
             current_real_state = next_real_state
-
-        # The reward function should make use of RK4 WENO instead of Euler WENO.
-        # Does that make sense, though? Is it impossible to learn a scheme of weights that doesn't
-        # need this iterative process? We could have just the reward function use RK4 while the
-        # agent does not?
 
         rl_state = rl_state_0
         rl_reward = tf.map_fn(self.reward_fn, (real_state, rl_state, rl_action, next_real_state),
