@@ -409,7 +409,7 @@ class Euler1DGrid(GridBase):
         self.deterministic_init = deterministic_init
         self._init_schedule_index = 0
         if schedule is None:
-            self._init_schedule = ["sod", "double_rarefaction", "slow_shock"]
+            self._init_schedule = ["sod", "sonic_rarefaction"]  # sod2 leads to NaNs during training
         else:
             self._init_schedule = schedule
         self._init_sample_types = self._init_schedule
