@@ -6,7 +6,7 @@ from tensorflow.keras.layers import Layer
 
 from models import GlobalModel
 from models.builder import get_optimizer
-from models.net import PolicyNet, FunctionWrapper
+from models.net import PolicyNet, NoisyPolicyNet, FunctionWrapper
 import envs.weno_coefficients as weno_coefficients
 from envs.weno_solution import RKMethod
 from util.misc import create_stencil_indexes
@@ -203,8 +203,14 @@ class GlobalBackpropModel(GlobalModel):
             # Note: passing a name to the constructor of a Keras Layer has the effect
             # of putting everything in that layer in the scope of that name.
             # tf.variable_scope does not play well with Keras.
-            self.policy = PolicyNet(layers=self.args.m.layers, action_shape=action_shape,
-                    activation_fn=tf.nn.relu, name="policy", dtype=self.dtype)
+            if self.args.m.action_noise == 0.0:
+                self.policy = PolicyNet(layers=self.args.m.layers, action_shape=action_shape,
+                        activation_fn=tf.nn.relu, name="policy", dtype=self.dtype)
+            else:
+                self.policy = NoisyPolicyNet(layers=self.args.m.layers, action_shape=action_shape,
+                        activation_fn=tf.nn.relu, name="policy", dtype=self.dtype,
+                        noise_size=action_noise)
+
 
             # Direct policy input and output used in predict() method during testing.
             self.policy_input_ph = tf.placeholder(dtype=self.dtype,

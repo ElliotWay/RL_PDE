@@ -61,6 +61,10 @@ def get_model_arg_parser(model_type=None):
                 help="Gradient Descent algorithm to use for training. SAC ignores this parameter"
                 + " and always uses Adam.")
 
+    if model_type in [None, 'full']:
+        parser.add_argument('--action-noise', '--action_noise', type=nonnegative_float, default=0.0,
+                help="Add noise to the action during training. This scales an N(0,1) distribution.")
+
     if model_type in [None, 'pg']:
         parser.add_argument('--return-style', '--return_style', type=str, default=None,
                 help="(PG) Style of returns for estimating Q(s,a). Default depends on Model."

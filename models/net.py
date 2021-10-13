@@ -96,7 +96,7 @@ class PolicyNet(Layer):
         # Sub-layers should build automatically when they are called for the first time.
         super().build(input_shape)
 
-    def call(self, state):
+    def call(self, state, training=None):
         # The state shape should be [None, something, something, etc.] so using np.prod on
         # state.shape[1:] works here.
         flattened_state_size = np.prod(state.shape[1:])
@@ -110,6 +110,20 @@ class PolicyNet(Layer):
 
         action = tf.reshape(flat_action, (-1,) + self.action_shape)
 
+        return action
+
+class NoisyPolicyNet(PolicyNet):
+    def __init__(self, noise_size, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.noise_size = noise_size
+
+    def call(self, state, training=None):
+        action = super().call(state, training=training)
+
+        if training:
+            action = action + self.noise_size * tf.random.normal(shape=tf.shape(action),
+                                                                    dtype=action.dtype)
         return action
 
 class FunctionWrapper(Layer):
