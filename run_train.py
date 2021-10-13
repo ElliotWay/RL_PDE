@@ -182,6 +182,8 @@ def main():
         raise Exception("eval env type \"{}\" not recognized.".format(args.eval_env))
 
     # Fill in defaults that are contingent on other arguments.
+    if args.log_freq > args.total_episodes:
+        args.log_freq = args.total_episodes
     if args.model == 'sac' and args.m.replay_style == 'marl':
         if args.emi != 'marl':
             args.emi = 'marl'

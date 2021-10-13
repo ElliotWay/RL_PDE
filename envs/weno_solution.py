@@ -451,6 +451,7 @@ class PreciseWENOSolution2D(WENOSolution):
         u_start = np.array(self.precise_grid.get_real())
         if self.rk_method is RKMethod.EULER:
             full_step = dt * self.rk_substep()
+            self.precise_grid.set(u_start + full_step)
         elif self.rk_method is RKMethod.RK4:
             k1 = dt * self.rk_substep()
             self.precise_grid.set(u_start + (k1 / 2))
@@ -463,6 +464,7 @@ class PreciseWENOSolution2D(WENOSolution):
 
             k4 = dt * self.rk_substep()
             full_step = (k1 + 2*(k2 + k3) + k4) / 6
+            self.precise_grid.set(u_start + full_step)
         elif self.rk_method is RKMethod.SSP_RK3:
             u1 = u_start + dt * self.rk_substep()
             self.precise_grid.set(u1)
@@ -475,8 +477,6 @@ class PreciseWENOSolution2D(WENOSolution):
         else:
             raise ValueError(f"{self.rk_method} RK method not recognized.")
 
-
-        self.precise_grid.set(u_start + full_step)
         self.precise_grid.update_boundary()
 
     def get_full(self):
@@ -640,6 +640,7 @@ class PreciseWENOSolution(WENOSolution):
         u_start = np.array(self.precise_grid.get_real())
         if self.rk_method is RKMethod.EULER:
             full_step = dt * self.rk_substep()
+            self.precise_grid.set(u_start + full_step)
         elif self.rk_method is RKMethod.RK4:
             k1 = dt * self.rk_substep()
             self.precise_grid.set(u_start + (k1 / 2))
@@ -652,6 +653,7 @@ class PreciseWENOSolution(WENOSolution):
 
             k4 = dt * self.rk_substep()
             full_step = (k1 + 2*(k2 + k3) + k4) / 6
+            self.precise_grid.set(u_start + full_step)
         elif self.rk_method is RKMethod.SSP_RK3:
             u1 = u_start + dt * self.rk_substep()
             self.precise_grid.set(u1)
@@ -664,7 +666,6 @@ class PreciseWENOSolution(WENOSolution):
         else:
             raise ValueError(f"{self.rk_method} RK method not recognized.")
 
-        self.precise_grid.set(u_start + full_step)
         self.precise_grid.update_boundary()
 
     def get_full(self):
