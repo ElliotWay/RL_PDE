@@ -64,11 +64,17 @@ def do_test(env, agent, args):
             if step == next_update:
                 print("step = {}".format(step))
 
-            env.plot_state(**render_args)
+            if 'plot' in args.output_mode:
+                env.plot_state(**render_args)
+            if 'csv' in args.output_mode:
+                env.save_state()
+
             if args.plot_error:
-                env.plot_state(plot_error=True, **render_args)
+                if 'plot' in args.output_mode:
+                    env.plot_state(plot_error=True, **render_args)
         if (args.animate or step == next_update + 1) and args.plot_actions:
-            env.plot_action(**render_args)
+            if 'plot' in args.output_mode:
+                env.plot_action(**render_args)
         if step == next_update + 1:
             update_count += 1
             next_update = int(args.e.ep_length * (update_count / NUM_UPDATES))
@@ -80,11 +86,14 @@ def do_test(env, agent, args):
 
     print("step = {} (done)".format(env.steps))
 
-    env.plot_state(**render_args)
-    if args.plot_error:
-        env.plot_state(plot_error=True, **render_args)
-    if args.plot_actions:
-        env.plot_action(**render_args)
+    if 'plot' in args.output_mode:
+        env.plot_state(**render_args)
+        if args.plot_error:
+            env.plot_state(plot_error=True, **render_args)
+        if args.plot_actions:
+            env.plot_action(**render_args)
+    if 'csv' in args.output_mode:
+        env.save_state()
     print("Test finished in {}.".format(human_readable_time_delta(time.time() - start_time)))
  
     if env.dimensions == 1:
@@ -122,14 +131,17 @@ def do_test(env, agent, args):
     print("Final error with solution was {}.".format(error))
 
     if args.evolution_plot:
-        if isinstance(env, Plottable1DEnv):
-            env.plot_state_evolution(num_states=10, full_true=False, no_true=False, plot_weno=False)
-            if args.plot_error:
-                env.plot_state_evolution(num_states=10, plot_error=True)
-        elif isinstance(env, Plottable2DEnv):
-            env.plot_state_evolution(num_frames=20)
-        else:
-            raise Exception()
+        if 'plot' in args.output_mode:
+            if isinstance(env, Plottable1DEnv):
+                env.plot_state_evolution(num_states=10, full_true=False, no_true=False, plot_weno=False)
+                if args.plot_error:
+                    env.plot_state_evolution(num_states=10, plot_error=True)
+            elif isinstance(env, Plottable2DEnv):
+                env.plot_state_evolution(num_frames=20)
+            else:
+                raise Exception()
+        if 'csv' in args.output_mode:
+            print("CSV format for evolution is not implemented.")
 
     return error
 
@@ -177,6 +189,11 @@ def main():
                         help="Do several runs with different grid sizes to create a convergence plot."
                         " Overrides the --nx argument with 64, 128, 256, and 512, successively."
                         " Sets the --analytical flag.")
+    parser.add_argument('--output-mode', '--output_mode', default=['plot'], nargs='+',
+                        help="Type of output from the test. Default 'plot' creates the usual plot"
+                        + " files. 'csv' puts the data that would be used for a plot in a csv"
+                        + " file. CURRENTLY 'csv' IS NOT IMPLEMENTED FOR ALL OUTPUTS."
+                        + " Multiple modes can be used at once, e.g. --output-mode plot csv.")
     parser.add_argument('-y', '--y', default=False, action='store_true',
                         help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
     parser.add_argument('-n', '--n', default=False, action='store_true',
@@ -198,6 +215,10 @@ def main():
     if len(rest) > 0:
         print("Unrecognized arguments: " + " ".join(rest))
         sys.exit(0)
+
+    for mode in args.output_mode:
+        if mode not in ['plot', 'csv']:
+            raise Exception(f"{mode} output mode not recognized.")
 
     # Convergence plots have different defaults.
     if args.convergence_plot:
@@ -401,7 +422,8 @@ def main():
                 outer_logger.dumpkvs()
 
             if dims == 1:
-                plots.error_plot(x_vals, error_vals, CONVERGENCE_PLOT_GRID_RANGE, args.log_dir)
+                plots.error_plot(x_vals, error_vals, CONVERGENCE_PLOT_GRID_RANGE, args.log_dir,
+                        name="convergence_over_x.png")
             print("Convergence plot created in {}.".format(
                     human_readable_time_delta(time.time() - convergence_start_time)))
     except KeyboardInterrupt:

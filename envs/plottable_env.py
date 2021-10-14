@@ -74,6 +74,108 @@ class Plottable1DEnv(AbstractPDEEnv):
         original_state[2] = (self.eos_gamma - 1) * (state[2] - original_state[0] * original_state[1] ** 2 / 2)
         return original_state
 
+    def save_state(self,
+            timestep=None, location=None,
+            suffix=None,
+            show_ghost=False,
+            state_history=None, history_includes_ghost=True):
+        """
+        Save the environment state to a csv file. Only the main RL state is saved, not the solution
+        state.
+
+        Parameters
+        ----------
+        timestep : int
+            Timestep of the state to save. By default, use the most recent timestep.
+        location : int
+            Index of location of the state to save
+        suffix : string
+            The plot will be saved to burgers_state_{suffix}.png (or burgers_error_{suffix}.png).
+            By default, the timestep/location is used for the suffix.
+        show_ghost : bool
+            Save the ghost cells in addition to the 'real' cells.
+        state_history : ndarray
+            Override the current state histories with different states.
+        history_includes_ghost : bool
+            Whether the overriding state history includes ghost cells. history_includes_ghost=False
+            overrides show_ghost to False.
+        """
+        assert (timestep is None or location is None), "Can't save state at both a timestep and a location."
+
+        if 'Euler' in str(self):
+            eqn_type = 'euler'
+            ylabels = ['rho', 'u', 'p', 'e']
+        else:
+            eqn_type = 'burgers'
+            ylabels = ['u']
+
+        override_history = (state_history is not None)
+
+        if location is None and timestep is None:
+            if not override_history:
+                state_history = self.grid.get_full().copy()
+                num_steps = self.steps
+            else:
+                num_steps = len(state_history[0])
+            if suffix is None:
+                suffix = ("_step{:0" + str(self._step_precision) + "}").format(num_steps)
+        else:
+            if not override_history:
+                state_history = np.array(self.state_history)
+
+            if location is not None:
+                if not override_history or history_includes_ghost:
+                    location = self.ng + location
+                state_history = state_history[:, :, location]
+                actual_location = self.grid.x[location]
+                if suffix is None:
+                    suffix = ("_step{:0" + str(self._cell_index_precision) + "}").format(location)
+            else:
+                state_history = state_history[:, timestep, :]
+                if suffix is None:
+                    suffix = ("_step{:0" + str(self._step_precision) + "}").format(timestep)
+
+        if eqn_type == 'euler':
+            state_history = self.euler_state_conversion(state_history)
+
+        if timestep is None:
+            if show_ghost:
+                x_values = self.grid.x
+            else:
+                x_values = self.grid.real_x
+        else:
+            if self.C is None:
+                x_values = self.fixed_step * np.arange(len(state_history))
+            else:
+                # Need to record time values with variable timesteps.
+                x_values = np.arange(len(state_history))
+
+        log_dir = logger.get_dir()
+        filename = "{}_state{}.csv".format(eqn_type, suffix)
+        filename = os.path.join(log_dir, filename)
+        csv_file = open(filename, 'w')
+
+        # Write column headers.
+        if timestep is None:
+            csv_file.write('x')
+        elif self.C is None:
+            csv_file.write('t')
+        else:
+            csv_file.write('timestep')
+        for component in ylabels:
+            csv_file.write(f",{component}")
+        csv_file.write('\n')
+
+        # Write data.
+        for x_index, x in enumerate(x_values):
+            csv_file.write(str(x))
+            for component_index in range(len(state_history)):
+                csv_file.write(f",{state_history[component_index, x_index]}")
+            csv_file.write('\n')
+        csv_file.close()
+        print('Saved data to ' + filename + '.')
+        return filename
+
     def plot_state(self,
             timestep=None, location=None,
             plot_error=False,
@@ -95,7 +197,7 @@ class Plottable1DEnv(AbstractPDEEnv):
         timestep : int
             Timestep at which to plot state. By default, use the most recent timestep.
         location : int
-            Index of location at which to plot actions.
+            Index of location at which to plot the state.
         plot_error : bool
             Plot the error of the state with the solution state instead.
         suffix : string
@@ -489,7 +591,6 @@ class Plottable1DEnv(AbstractPDEEnv):
                 plots.append(weno[0])
                 labels.append(self.weno_solution_label)
 
-
         if title is not None:
             ax[0].set_title(title)
 
@@ -802,6 +903,10 @@ class Plottable2DEnv(AbstractPDEEnv):
         """
 
         #return fig
+
+    def save_state(self, *args, **kwargs):
+        print("2D CSV save function not yet implemented.")
+        return "ERROR_NOT_SAVED"
 
     def plot_state(self,
             timestep=None,
