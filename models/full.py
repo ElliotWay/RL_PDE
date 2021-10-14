@@ -209,13 +209,14 @@ class GlobalBackpropModel(GlobalModel):
             else:
                 self.policy = NoisyPolicyNet(layers=self.args.m.layers, action_shape=action_shape,
                         activation_fn=tf.nn.relu, name="policy", dtype=self.dtype,
-                        noise_size=action_noise)
+                        noise_size=self.args.m.action_noise)
 
 
             # Direct policy input and output used in predict() method during testing.
             self.policy_input_ph = tf.placeholder(dtype=self.dtype,
                     shape=(None,) + self.env.observation_space.shape[1:], name="policy_input")
-            self.policy_output = self.policy(self.policy_input_ph)
+            self.policy_output = self.policy(self.policy_input_ph, training=True)
+            self.policy_output_deterministic = self.policy(self.policy_input_ph, training=False)
             # See note in setup_training for why we do not apply normalizing functions here.
 
             self.policy_params = self.policy.weights
@@ -419,6 +420,10 @@ class GlobalBackpropModel(GlobalModel):
         if not self._policy_ready or (not self._training_ready and not self.preloaded):
             raise Exception("No policy to predict with yet!")
 
+        if deterministic:
+            policy_op = self.policy_output_deterministic
+        else:
+            policy_op = self.policy_output
         if not deterministic:
             print("Note: this model is strictly deterministic so using deterministic=False will"
             " have no effect.")
@@ -430,14 +435,14 @@ class GlobalBackpropModel(GlobalModel):
             # Single local state.
             assert state.shape == self.env.observation_space.shape[1:]
             state = state[None]
-            action = self.session.run(self.policy_output, feed_dict={self.policy_input_ph:state})
+            action = self.session.run(policy_op, feed_dict={self.policy_input_ph:state})
             action = action[0]
 
         elif input_rank == single_obs_rank + 1:
             # Batch of local states 
             # OR single global state.
             assert state.shape[1:] == self.env.observation_space.shape[1:]
-            action = self.session.run(self.policy_output, feed_dict={self.policy_input_ph:state})
+            action = self.session.run(policy_op, feed_dict={self.policy_input_ph:state})
 
         elif input_rank == single_obs_rank + 2:
             # Batch of global states.
@@ -445,7 +450,7 @@ class GlobalBackpropModel(GlobalModel):
             batch_length = state.shape[0]
             spatial_length = state.shape[1]
             flattened_state = state.reshape((batch_length * spatial_length,) + state.shape[2:])
-            flattened_action = self.session.run(self.policy_output,
+            flattened_action = self.session.run(policy_op,
                     feed_dict={self.policy_input_ph:flattened_state})
             action = flattened_action.reshape((batch_length, spatial_length,) + action.shape[1:])
 
