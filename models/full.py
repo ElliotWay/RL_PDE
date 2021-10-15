@@ -424,9 +424,6 @@ class GlobalBackpropModel(GlobalModel):
             policy_op = self.policy_output_deterministic
         else:
             policy_op = self.policy_output
-        if not deterministic:
-            print("Note: this model is strictly deterministic so using deterministic=False will"
-            " have no effect.")
 
         single_obs_rank = len(self.env.observation_space.shape) - 1
         input_rank = len(state.shape)
