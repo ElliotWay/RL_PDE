@@ -264,8 +264,8 @@ def main():
                                 .format(colors.WARNING, colors.ENDC))
 
 
-                        return_code, current_id = get_git_commit_id()
-                        dirty_repo = not is_clean_git_repo()
+                        return_code, current_id = git_commit_hash()
+                        dirty_repo = not git_is_clean()
 
                         if return_code == 0 and current_id == original_id and not dirty_repo:
                             print("{}git repo fixed!{}".format(colors.OKGREEN, colors.ENDC))
