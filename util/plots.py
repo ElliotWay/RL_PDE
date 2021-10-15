@@ -90,12 +90,12 @@ def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels
     plt.close()
 
 
-def error_plot(x_vals, error_vals, labels, log_dir, name="convergence_over_x.png", title=None):
+def error_plot(x_vals, error_vals, labels, log_dir, name="error_over_x.png", title=None):
     """
     Create a plot of x location vs error.
 
     Intended to compare between the error of many configurations, e.g. the different sizes in a
-    convergence plot.
+    convergence plot, or using different agents.
 
     The data must be 1 dimensional, though it may be useful to plot slices of higher dimensional
     data.
@@ -107,21 +107,29 @@ def error_plot(x_vals, error_vals, labels, log_dir, name="convergence_over_x.png
 
     Parameters
     ----------
-    x_vals : list of float
-        The x coordinate of each point.
-    error_vals : list of list of float
+    x_vals : [float] or [[float]]
+        The x location for the errors in every list of errors, or a list of x locations
+        corresponding to each list of errors.
+    error_vals : [[float]]
         The error at each point for each configuration.
         Each sub-list contains the error at each point.
-    labels : list
+    labels : [str] or [number]
         The label to apply to each configuration. Must be numerical for >10 configurations;
         otherwise strings can be used.
     log_dir : str
         Path of the directory to save the convergence plot to.
     name : str
-        Name of the file to save into log_dir. 'convergence_over_x.png' by default.
+        Name of the file to save into log_dir. 'error_over_x.png' by default.
     title : str
         Title to give to the plot. No title by default.
     """
+
+    try:
+        iterator = iter(x_vals[0])
+    except TypeError:
+        # broadcast_to creates a view that looks like the array repeated multiple times,
+        # but uses the same space as the original array.
+        x_vals = np.broadcast_to(x_vals, (len(error_vals), len(x_vals)))
 
     vec_len = error_vals[0].shape[0]
     fig, ax = plt.subplots(nrows=vec_len, ncols=1, figsize=[6.4, 4.8 * vec_len], dpi=100,
