@@ -8,6 +8,7 @@ from envs.plottable_env import Plottable1DEnv
 from envs.weno_solution import WENOSolution, PreciseWENOSolution, PreciseWENOSolution2D
 from envs.weno_solution import lf_flux_split_nd, weno_sub_stencils_nd
 from envs.weno_solution import tf_lf_flux_split, tf_weno_sub_stencils, tf_weno_weights
+from envs.weno_solution import RKMethod
 from envs.solutions import AnalyticalSolution
 from envs.solutions import MemoizedSolution, OneStepSolution
 import envs.weno_coefficients as weno_coefficients
@@ -33,6 +34,7 @@ class AbstractBurgersEnv(AbstractPDEEnv):
             analytical=False, memoize=False,
             precise_weno_order=None, precise_scale=1,
             follow_solution=False,
+            solution_rk_method=None,
             *args, **kwargs):
         """
         Construct the Burgers environment.
@@ -52,6 +54,9 @@ class AbstractBurgersEnv(AbstractPDEEnv):
         follow_solution : bool
             Keep the state identical to the solution state, while calculating rewards as if we had
             followed the RL action. Possibly useful for debugging.
+        solution_rk_method : RKMethod
+            They RK method used by the solution. By default, the same method as used in the
+            environment.
         *args, **kwargs
             The remaining arguments are passed to AbstractPDEEnv.
         """
@@ -77,20 +82,22 @@ class AbstractBurgersEnv(AbstractPDEEnv):
                 self.solution = AnalyticalSolution(self.grid.nx, self.grid.ng,
                         self.grid.xmin, self.grid.xmax, vec_len=1, init_type=self.grid.init_type)
         else:
+            if solution_rk_method is None:
+                solution_rk_method = self.rk_method
             if self.grid.ndim == 1:
                 self.solution = PreciseWENOSolution(
                         self.grid, {'init_type':self.grid.init_type,
                             'boundary':self.grid.boundary},
                         precise_scale=precise_scale, precise_order=precise_weno_order,
                         flux_function=self.burgers_flux, source=self.source,
-                        nu=nu, vec_len=1)
+                        nu=nu, vec_len=1, rk_method=solution_rk_method)
             elif self.grid.ndim == 2:
                 self.solution = PreciseWENOSolution2D(
                         self.grid, {'init_type':self.grid.init_type,
                             'boundary':self.grid.boundary},
                         precise_scale=precise_scale, precise_order=precise_weno_order,
                         flux_function=self.burgers_flux, source=self.source,
-                        nu=nu, vec_len=1)
+                        nu=nu, vec_len=1, rk_method=solution_rk_method)
             else:
                 raise NotImplementedError("{}-dim solution".format(self.grid.ndim)
                         + " not implemented.")
@@ -291,9 +298,9 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         #return rl_state
         return (rl_state,) # Singleton because this is 1D.
 
-    #@tf.function
-    def tf_integrate(self, args):
+    def tf_rk_substep(self, args):
         real_state, rl_state, rl_action = args
+        assert type(rl_state) is tuple and type(rl_action) is tuple
 
         rl_state = rl_state[0] # Extract 1st (and only) dimension.
         rl_action = rl_action[0]
@@ -313,22 +320,24 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         reconstructed_flux = fpr + fml
 
         derivative_u_t = (reconstructed_flux[:-1] - reconstructed_flux[1:]) / self.grid.dx
-        rhs = derivative_u_t
-
-        dt = self.tf_timestep(real_state)
+        rhs = tf.expand_dims(derivative_u_t, axis=0) # Insert the vector dimension.
 
         if self.nu != 0.0:
             rhs += self.nu * self.grid.tf_laplacian(real_state)
-        #TODO implement random source?
         if self.source != None:
             raise NotImplementedError("External source has not been implemented"
                     + " in global backprop.")
 
-        step = dt * rhs
+        return rhs
 
-        #TODO implement RK4? If we want to do that, it may need to be in the model instead.
-        # This function could be converted to tf_rk_substep, then the model could make multiple
-        # calls to the policy.
+    #@tf.function
+    def tf_integrate(self, args):
+        real_state, rl_state, rl_action = args
+        assert type(rl_state) is tuple and type(rl_action) is tuple
+
+        rhs = self.tf_rk_substep(args)
+        dt = self.tf_timestep(real_state)
+        step = dt * rhs
 
         new_state = real_state + step
         return new_state
@@ -342,18 +351,51 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
     #@tf.function
     def tf_calculate_reward(self, args):
         real_state, rl_state, rl_action, next_real_state = args
+        assert type(rl_state) is tuple and type(rl_action) is tuple
         # Note that real_state and next_real_state do not include ghost cells, but rl_state does.
 
         rl_state = rl_state[0] # Extract 1st (and only) dimension.
         rl_action = rl_action[0]
 
-        fp_stencils = rl_state[:, 0]
-        fm_stencils = rl_state[:, 1]
+        rk_method = self.solution.rk_method
+        if rk_method == RKMethod.EULER:
+            fp_stencils = rl_state[:, 0]
+            fm_stencils = rl_state[:, 1]
+            fp_weights = tf_weno_weights(fp_stencils, self.weno_order)
+            fm_weights = tf_weno_weights(fm_stencils, self.weno_order)
+            weno_action = tf.stack([fp_weights, fm_weights], axis=1)
+            weno_next_real_state = self.tf_integrate((real_state, (rl_state,), (weno_action,)))
+        elif rk_method == RKMethod.RK4:
+            next_rl_state = rl_state
+            weno_substeps = []
+            dt = self.tf_timestep(real_state)
+            for stage in range(4):
+                fp_stencils = next_rl_state[:, 0]
+                fm_stencils = next_rl_state[:, 1]
+                fp_weights = tf_weno_weights(fp_stencils, self.weno_order)
+                fm_weights = tf_weno_weights(fm_stencils, self.weno_order)
+                weno_action = tf.stack([fp_weights, fm_weights], axis=1)
+                rhs = self.tf_rk_substep((real_state, (rl_state,), (weno_action,)))
+                step = dt * rhs
+                weno_substeps.append(step)
 
-        fp_weights = tf_weno_weights(fp_stencils, self.weno_order)
-        fm_weights = tf_weno_weights(fm_stencils, self.weno_order)
-        weno_action = tf.stack([fp_weights, fm_weights], axis=1)
-        weno_next_real_state = self.tf_integrate((real_state, (rl_state,), (weno_action,)))
+                if stage == 0:
+                    weno_next_real_state = real_state + step/2
+                elif stage == 1:
+                    weno_next_real_state = real_state + step/2
+                elif stage == 2:
+                    weno_next_real_state = real_state + step
+                elif stage == 3:
+                    weno_next_real_state = real_state + (weno_substeps[0]
+                                                        + 2*weno_substeps[1]
+                                                        + 2*weno_substeps[2]
+                                                        + weno_substeps[3]) / 6
+
+                if stage < 3:
+                    next_rl_state = self.tf_prep_state(weno_next_real_state)
+                    next_rl_state = next_rl_state[0]
+        else:
+            raise Exception(f"{rk_method} not implemented.")
 
         # This section is adapted from AbstactPDEEnv.calculate_reward()
         if "wenodiff" in self.reward_mode:

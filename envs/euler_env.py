@@ -31,6 +31,7 @@ class AbstractEulerEnv(AbstractPDEEnv):
                  analytical=False, memoize=False,
                  precise_weno_order=None, precise_scale=1,
                  follow_solution=False,
+                 solution_rk_method=None,
                  *args, **kwargs):
         """
         Construct the Euler environment.
@@ -50,6 +51,9 @@ class AbstractEulerEnv(AbstractPDEEnv):
         follow_solution : bool
             Keep the state identical to the solution state, while calculating rewards as if we had
             followed the RL action. Possibly useful for debugging.
+        solution_rk_method : RKMethod
+            They RK method used by the solution. By default, the same method as used in the
+            environment.
         *args, **kwargs
             The remaining arguments are passed to AbstractPDEEnv.
         """
@@ -85,20 +89,24 @@ class AbstractEulerEnv(AbstractPDEEnv):
                 self.solution = RiemannSolution(self.grid.nx, self.grid.ng, self.grid.xmin, self.grid.xmax,
                                                 vec_len=3, init_type=kwargs['init_type'], gamma=self.eos_gamma)
         else:
+            if solution_rk_method is None:
+                solution_rk_method = self.rk_method
             if self.grid.ndim == 1:
                 self.solution = PreciseWENOSolution(
                     self.grid, {'init_type': self.grid.init_type,
                                 'boundary': self.grid.boundary},
                     precise_scale=precise_scale, precise_order=precise_weno_order,
                     flux_function=self.euler_flux, source=self.source,
-                    nu=nu, eqn_type='euler', vec_len=3, reconstruction=self.reconstruction)
+                    nu=nu, eqn_type='euler', vec_len=3, reconstruction=self.reconstruction,
+                    rk_method=solution_rk_method)
             # elif self.grid.ndim == 2:
             #     self.solution = PreciseWENOSolution2D(
             #             self.grid, {'init_type':self.grid.init_type,
             #                 'boundary':self.grid.boundary},
             #             precise_scale=precise_scale, precise_order=precise_weno_order,
             #             flux_function=self.burgers_flux, source=self.source,
-            #             nu=nu, eqn_type='euler', vec_len=3)
+            #             nu=nu, eqn_type='euler', vec_len=3, reconstruction=self.reconstruction,
+            #             rk_method=solution_rk_method)
             else:
                 raise NotImplementedError("{}-dim solution".format(self.grid.ndim)
                                           + " not implemented.")
