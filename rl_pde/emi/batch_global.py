@@ -35,6 +35,7 @@ class BatchGlobalEMI(EMI, OneDimensionalStencil):
         self.args = args # Not ideal. This EMI has too much visibility if it keeps the whole args.
 
         self.weno_solution_env = None
+        self.weno_solution_env_final_state = None
 
     # Declare this lazily so it doesn't need to be declared during testing.
     def _declare_solution_env(self):
@@ -57,6 +58,27 @@ class BatchGlobalEMI(EMI, OneDimensionalStencil):
 
             self.weno_solution_env = build_env(self.args.env, env_args_copy)
 
+    # Declare this lazily so it doesn't need to be declared during testing.
+    def _generate_solution_env_states(self, all_init_params, last_only=True):
+        solution_states = []
+        if self.weno_solution_env_final_state is None:
+            for init_params in all_init_params:
+                # Using init_params instead of copying the state directly allows the solution to use
+                # memoization.
+                self.weno_solution_env.init_params = init_params
+                self.weno_solution_env.reset()
+
+                # env.evolve() evolves the state using the internal solution (WENO in this case).
+                self.weno_solution_env.evolve()
+
+                if last_only:
+                    solution_states.append(self.weno_solution_env.state_history[-1]
+                                           [self.weno_solution_env.grid.real_slice])
+                else:
+                    solution_states.append([item[self.weno_solution_env.grid.real_slice]
+                                            for item in self.weno_solution_env.state_history])
+        return np.array(solution_states)
+
     def training_episode(self, env):
         self._declare_solution_env()
 
@@ -72,7 +94,8 @@ class BatchGlobalEMI(EMI, OneDimensionalStencil):
             init_params.append(env.grid.init_params) # This is starting to smell.
         initial_conditions = np.array(initial_conditions)
 
-        extra_info = self._model.train(initial_conditions, init_params)
+        solution_states = self._generate_solution_env_states(init_params)
+        extra_info = self._model.train(initial_conditions, init_params, solution_states)
 
         states = extra_info['states']
         del extra_info['states']

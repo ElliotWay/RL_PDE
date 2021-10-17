@@ -91,6 +91,7 @@ class GlobalBackpropModel(GlobalModel):
             # possible, incurs an intractable cost.
             # Instead we separate each batch into a 'sub-batch' for each boundary condition.
             self.init_state_ph_dict = {}
+            self.final_analytical_state_ph_dict = {}
             self.state_dict = {}
             self.action_dict = {}
             self.reward_dict = {}
@@ -127,11 +128,19 @@ class GlobalBackpropModel(GlobalModel):
                         shape=(None, self.env.grid.vec_len) + self.env.grid.num_cells,
                         name="init_real_state_{}".format(boundary_name))
                 self.init_state_ph_dict[boundary] = initial_state_ph
+                final_analytical_state_ph = tf.placeholder(dtype=self.dtype,
+                                                           shape=(None, self.env.grid.vec_len) + self.env.grid.num_cells,
+                                                           name="final_analytical_state_{}".format(boundary_name))
+                self.final_analytical_state_ph_dict[boundary] = final_analytical_state_ph
 
                 # Could restrict steps to something smaller.
                 # This loses some of the benefits of RL long-term planning, but may be necessary in
                 # high dimensional environments.
                 state, action, reward = rnn(initial_state_ph, num_steps=self.args.e.ep_length)
+
+                final_analytical_error = tf.reduce_sum(state[-1] - final_analytical_state_ph, axis=0)
+                final_analytical_reward = tf.reduce_mean(tf.atan(-tf.abs(final_analytical_error)))
+
                 self.state_dict[boundary] = state
                 self.action_dict[boundary] = action
                 self.reward_dict[boundary] = reward
@@ -145,7 +154,7 @@ class GlobalBackpropModel(GlobalModel):
                 # then average over the batch and each location and the batch (axes 1 and the rest).
                 # Also average over each reward part (e.g. each dimension).
                 loss = -tf.reduce_mean([tf.reduce_mean(tf.reduce_sum(reward_part, axis=0)) for
-                                                reward_part in reward])
+                                                reward_part in reward]) - final_analytical_reward
                 self.loss_dict[boundary] = loss
 
                 gradients = tf.gradients(loss, self.policy_params)
@@ -221,7 +230,7 @@ class GlobalBackpropModel(GlobalModel):
             self._loading_ready = True
 
 
-    def train(self, initial_state, init_params):
+    def train(self, initial_state, init_params, solution_states):
         if not self._training_ready:
             self.setup_training()
 
@@ -244,6 +253,7 @@ class GlobalBackpropModel(GlobalModel):
                 included_boundaries.append(boundary)
                 index_dict[boundary] = indexes
                 feed_dict[self.init_state_ph_dict[boundary]] = initial_state[indexes]
+                feed_dict[self.final_analytical_state_ph_dict[boundary]] = solution_states[indexes]
                 #print("{} has initial state with shape {}".format(boundary,
                     #feed_dict[self.init_state_ph_dict[boundary]].shape))
                 #print("indexes are {}".format(indexes))
@@ -365,7 +375,7 @@ class GlobalBackpropModel(GlobalModel):
             action_nan = reward_nan = state_nan = False
             if any(np.isnan(action_part).any() for action_part in actions):
                 print("NaN in actions during training")
-                print("action shape", tuple(action_part.shape for actionpart in actions))
+                print("action shape", tuple(action_part.shape for action_part in actions))
                 # These won't work in ND.
                 #print("timesteps with NaN:", np.isnan(actions).any(axis=(1,2,3,4)))
                 #print("episodes with NaN:", np.isnan(actions).any(axis=(0,2,3,4)))
