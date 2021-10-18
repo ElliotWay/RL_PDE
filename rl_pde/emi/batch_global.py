@@ -35,7 +35,8 @@ class BatchGlobalEMI(EMI, OneDimensionalStencil):
         self.args = args # Not ideal. This EMI has too much visibility if it keeps the whole args.
 
         self.weno_solution_env = None
-        self.weno_solution_env_final_state = None
+        self.analytical_solution_env = None
+        self.solution_env_states = None
 
     # Declare this lazily so it doesn't need to be declared during testing.
     def _declare_solution_env(self):
@@ -58,26 +59,64 @@ class BatchGlobalEMI(EMI, OneDimensionalStencil):
 
             self.weno_solution_env = build_env(self.args.env, env_args_copy)
 
+        if self.analytical_solution_env is None:
+            env_args_copy = Namespace(**vars(self.args.e))
+            if env_args_copy.reward_mode is not None:
+                env_args_copy.reward_mode = env_args_copy.reward_mode.replace('one-step', 'full')
+            env_args_copy.analytical = True
+            self.analytical_solution_env = build_env(self.args.env, env_args_copy)
+
     # Declare this lazily so it doesn't need to be declared during testing.
-    def _generate_solution_env_states(self, all_init_params, last_only=True):
-        solution_states = []
-        if self.weno_solution_env_final_state is None:
-            for init_params in all_init_params:
-                # Using init_params instead of copying the state directly allows the solution to use
-                # memoization.
-                self.weno_solution_env.init_params = init_params
-                self.weno_solution_env.reset()
+    def _generate_solution_env_states(self, all_init_params, analytical=True, last_only=True):
+        """
+        Generate solution env states for calculating rewards during training.
 
-                # env.evolve() evolves the state using the internal solution (WENO in this case).
-                self.weno_solution_env.evolve()
+        Parameters
+        ---------
+        analytical: bool
+            If true, use true analytical solution, else use full WENO solution.
+        last_only: bool
+            If true, generate only last solution state for calculating rewards, else generate all steps.
+        """
 
-                if last_only:
-                    solution_states.append(self.weno_solution_env.state_history[-1]
-                                           [self.weno_solution_env.grid.real_slice])
-                else:
-                    solution_states.append([item[self.weno_solution_env.grid.real_slice]
-                                            for item in self.weno_solution_env.state_history])
-        return np.array(solution_states)
+        if self.solution_env_states is None:
+            solution_env_states = []
+            if analytical:
+                for init_params in all_init_params:
+                    # Using init_params instead of copying the state directly allows the solution to use
+                    # memoization.
+                    self.analytical_solution_env.init_params = init_params
+                    self.analytical_solution_env.reset()
+
+                    # env.evolve() evolves the state using the internal solution (WENO in this case).
+                    self.analytical_solution_env.evolve()
+
+                    if last_only:
+                        solution_env_states.append(self.analytical_solution_env.state_history[-1]
+                                                   [self.analytical_solution_env.grid.real_slice])
+                    else:
+                        solution_env_states.append([item[self.analytical_solution_env.grid.real_slice]
+                                                    for item in self.analytical_solution_env.state_history])
+
+            else:
+                for init_params in all_init_params:
+                    # Using init_params instead of copying the state directly allows the solution to use
+                    # memoization.
+                    self.weno_solution_env.init_params = init_params
+                    self.weno_solution_env.reset()
+
+                    # env.evolve() evolves the state using the internal solution (WENO in this case).
+                    self.weno_solution_env.evolve()
+
+                    if last_only:
+                        solution_env_states.append(self.weno_solution_env.state_history[-1]
+                                                   [self.weno_solution_env.grid.real_slice])
+                    else:
+                        solution_env_states.append([item[self.weno_solution_env.grid.real_slice]
+                                                    for item in self.weno_solution_env.state_history])
+
+        self.solution_env_states = np.array(solution_env_states)
+        return self.solution_env_states
 
     def training_episode(self, env):
         self._declare_solution_env()

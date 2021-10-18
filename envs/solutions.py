@@ -293,13 +293,6 @@ class RiemannSolution(SolutionBase):
 
         self.grid = Euler1DGrid(nx=nx, ng=ng, xmin=xmin, xmax=xmax, init_type=init_type)
         self.gamma = gamma
-        self.grid.reset({'init_type': init_type, 'gamma': gamma})
-        self.left = self.euler_state_conversion(self.grid.space[:, 0])
-        self.right = self.euler_state_conversion(self.grid.space[:, -1])
-
-        self.ustar = None
-        self.pstar = None
-        self.find_star_state()
 
     def euler_state_conversion(self, state):
         rho = state[0]
@@ -483,6 +476,12 @@ class RiemannSolution(SolutionBase):
 
     def _reset(self, params):
         self.grid.reset(params)
+        self.left = self.euler_state_conversion(self.grid.space[:, 0])
+        self.right = self.euler_state_conversion(self.grid.space[:, -1])
+
+        self.ustar = None
+        self.pstar = None
+        self.find_star_state()
 
     def get_full(self):
         return self.grid.get_full()
