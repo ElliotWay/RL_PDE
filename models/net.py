@@ -118,14 +118,14 @@ class NoisyPolicyNet(PolicyNet):
 
         self.noise_size = noise_size
 
-    def call(self, state, training=None):
+    def call(self, state, training):
         action = super().call(state, training=training)
 
         if training:
-            #action = action + self.noise_size * tf.random.normal(shape=tf.shape(action),
-                                                                    #dtype=action.dtype)
-            action = action + self.noise_size * tf.random.uniform(shape=tf.shape(action),
-                                                minval=-1.0, maxval=1.0, dtype=action.dtype)
+            action = action + self.noise_size * tf.random.normal(shape=tf.shape(action),
+            #action = action + self.noise_size * tf.random.uniform(shape=tf.shape(action),
+                                                                #minval=-1.0, maxval=1.0,
+                                                                dtype=action.dtype)
         return action
 
 class FunctionWrapper(Layer):

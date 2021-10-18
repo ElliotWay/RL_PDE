@@ -641,7 +641,7 @@ class IntegrateCell(Layer):
             # that.)
             # This loop is equivalent to ExtendAgent2D.
 
-            shaped_action = self.policy_net(reshaped_state)
+            shaped_action = self.policy_net(reshaped_state, training=True)
 
             shaped_action_shape = shaped_action.shape.as_list()
             # Can't use rl_state_shape[:outer_dims] because rl_state_shape[0] is None; we need -1.
@@ -743,7 +743,7 @@ class RK4IntegrateCell(Layer):
                 # that.)
                 # This loop is equivalent to ExtendAgent2D.
 
-                shaped_action = self.policy_net(reshaped_state)
+                shaped_action = self.policy_net(reshaped_state, training=True)
 
                 shaped_action_shape = shaped_action.shape.as_list()
                 # Can't use rl_state_shape[:outer_dims] because rl_state_shape[0] is None; we need -1.
