@@ -115,7 +115,7 @@ class BatchGlobalEMI(EMI, OneDimensionalStencil):
                         solution_env_states.append([item[self.weno_solution_env.grid.real_slice]
                                                     for item in self.weno_solution_env.state_history])
 
-        self.solution_env_states = np.array(solution_env_states)
+            self.solution_env_states = np.array(solution_env_states)
         return self.solution_env_states
 
     def training_episode(self, env):
