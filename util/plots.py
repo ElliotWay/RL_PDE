@@ -90,7 +90,8 @@ def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels
     plt.close()
 
 
-def error_plot(x_vals, error_vals, labels, log_dir, name="error_over_x.png", title=None):
+def error_plot(x_vals, error_vals, labels, log_dir, name="error_over_x.png", title=None,
+        vector_parts=None):
     """
     Create a plot of x location vs error.
 
@@ -110,9 +111,9 @@ def error_plot(x_vals, error_vals, labels, log_dir, name="error_over_x.png", tit
     x_vals : [float] or [[float]]
         The x location for the errors in every list of errors, or a list of x locations
         corresponding to each list of errors.
-    error_vals : [[float]]
-        The error at each point for each configuration.
-        Each sub-list contains the error at each point.
+    error_vals : [[[float]]]
+        The error(s) at each point for each configuration.
+        Axes are [configuration, vector, location].
     labels : [str] or [number]
         The label to apply to each configuration. Must be numerical for >10 configurations;
         otherwise strings can be used.
@@ -122,6 +123,8 @@ def error_plot(x_vals, error_vals, labels, log_dir, name="error_over_x.png", tit
         Name of the file to save into log_dir. 'error_over_x.png' by default.
     title : str
         Title to give to the plot. No title by default.
+    vector_parts : str
+        Name of each part of the vector. [u1, u2, ...] by default.
     """
 
     try:
@@ -131,7 +134,7 @@ def error_plot(x_vals, error_vals, labels, log_dir, name="error_over_x.png", tit
         # but uses the same space as the original array.
         x_vals = np.broadcast_to(x_vals, (len(error_vals), len(x_vals)))
 
-    vec_len = error_vals[0].shape[0]
+    vec_len = len(error_vals[0])
     fig, ax = plt.subplots(nrows=vec_len, ncols=1, figsize=[6.4, 4.8 * vec_len], dpi=100,
             squeeze=False)
 
@@ -151,8 +154,12 @@ def error_plot(x_vals, error_vals, labels, log_dir, name="error_over_x.png", tit
 
 
     for i in range(vec_len):
-        ax[i][0].set_xlabel("x")
-        ax[i][0].set_ylabel(f"u{i} |error|")
+        ax[i][0].set_xlabel("$x$")
+        if vector_parts is None:
+            ax[i][0].set_ylabel(f"u{i} |error|")
+        else:
+            # The $s render e.g. rho correctly.
+            ax[i][0].set_ylabel(f"${vector_parts[i]}$ |error|")
 
         ax[i][0].set_yscale('log')
         ax[i][0].set_ymargin(0.0)

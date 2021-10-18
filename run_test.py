@@ -72,6 +72,8 @@ def do_test(env, agent, args):
             if args.plot_error:
                 if 'plot' in args.output_mode:
                     env.plot_state(plot_error=True, **render_args)
+                if 'csv' in args.output_mode:
+                    env.save_state(use_error=True)
         if (args.animate or step == next_update + 1) and args.plot_actions:
             if 'plot' in args.output_mode:
                 env.plot_action(**render_args)
@@ -94,6 +96,8 @@ def do_test(env, agent, args):
             env.plot_action(**render_args)
     if 'csv' in args.output_mode:
         env.save_state()
+        if args.plot_error:
+            env.save_state(use_error=True)
     print("Test finished in {}.".format(human_readable_time_delta(time.time() - start_time)))
  
     if env.dimensions == 1:
@@ -263,7 +267,8 @@ def main():
 
             metadata.load_to_namespace(meta_file, arg_manager,
                     ignore_list=['log_dir', 'ep_length', 'time_max', 'timestep',
-                                'num_cells', 'min_value', 'max_value', 'C', 'fixed_timesteps'])
+                                'num_cells', 'min_value', 'max_value', 'C', 'fixed_timesteps',
+                                'reward_mode'])
 
     set_global_seed(args.seed)
 
@@ -278,7 +283,8 @@ def main():
             print("Reward mode switched to 'full' instead of 'one-step' for convergence plots.")
             env_args.reward_mode = env_args.reward_mode.replace('one-step', 'full')
         if dims == 1:
-            CONVERGENCE_PLOT_GRID_RANGE = [64, 81, 108, 128, 144, 192, 256]
+            CONVERGENCE_PLOT_GRID_RANGE = [32, 64, 128]
+            #CONVERGENCE_PLOT_GRID_RANGE = [64, 81, 108, 128, 144, 192, 256]
             #CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]#, 1024, 2048, 4096, 8192]
             #CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512, 1024, 2048, 4096, 8192]
             #CONVERGENCE_PLOT_GRID_RANGE = (2**np.linspace(6.0, 8.0, 50)).astype(np.int)
