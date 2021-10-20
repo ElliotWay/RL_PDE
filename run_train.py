@@ -168,6 +168,18 @@ def main():
             env_builder.set_contingent_env_defaults(args, eval_env_args, test=True)
             eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
 
+        elif args.env == "weno_euler":
+            eval_envs = []
+            eval_env_args.boundary = None
+            eval_env_args.ep_length = args.e.ep_length * 2
+            eval_env_args.time_max = args.e.time_max * 2
+
+            eval_env_args.init_type = "sod"
+            eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
+
+            eval_env_args.init_type = "sonic_rarefaction"
+            eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
+
         else:
             print(f"No standard evaluation environments declared for {args.env};"
                     + " evaluation environment will be identical to training environment.")
