@@ -62,7 +62,7 @@ def do_test(env, agent, args):
         #if args.animate or step == next_update:
         if step == next_update:
             if step == next_update:
-                print("step = {}".format(step))
+                print(f"step = {env.steps}, t = {env.t:.4f}")
 
             if 'plot' in args.output_mode:
                 env.plot_state(**render_args)
@@ -86,7 +86,7 @@ def do_test(env, agent, args):
                   deterministic=True, every_step_hook=every_step)
     end_time = time.time()
 
-    print("step = {} (done)".format(env.steps))
+    print(f"step = {env.steps}, t = {env.t:.4f} (done)")
 
     if 'plot' in args.output_mode:
         env.plot_state(**render_args)
@@ -198,6 +198,10 @@ def main():
                         + " files. 'csv' puts the data that would be used for a plot in a csv"
                         + " file. CURRENTLY 'csv' IS NOT IMPLEMENTED FOR ALL OUTPUTS."
                         + " Multiple modes can be used at once, e.g. --output-mode plot csv.")
+    parser.add_argument('--repeat', type=str, default=None,
+                        help="Load all of the parameters from a previous test's meta file to run a"
+                        + " similar or identical test. Explicitly passed parameters override"
+                        + " loaded paramters.")
     parser.add_argument('-y', '--y', default=False, action='store_true',
                         help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
     parser.add_argument('-n', '--n', default=False, action='store_true',
@@ -219,6 +223,19 @@ def main():
     if len(rest) > 0:
         print("Unrecognized arguments: " + " ".join(rest))
         sys.exit(0)
+
+    if args.repeat is not None:
+        _, extension = os.path.splitext(args.repeat)
+
+        if extension == '.yaml':
+            open_file = open(args.repeat, 'r')
+            args_dict = yaml.safe_load(open_file)
+            open_file.close()
+            arg_manager.load_from_dict(args_dict)
+            args = arg_manager.args
+        else:
+            # Original meta.txt format.
+            metadata.load_to_namespace(args.repeat, arg_manager)
 
     for mode in args.output_mode:
         if mode not in ['plot', 'csv']:

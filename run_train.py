@@ -110,8 +110,11 @@ def main():
         _, extension = os.path.splitext(args.repeat)
 
         if extension == '.yaml':
-            args_dict = yaml.safe_load(args.repeat)
+            open_file = open(args.repeat, 'r')
+            args_dict = yaml.safe_load(open_file)
+            open_file.close()
             arg_manager.load_from_dict(args_dict)
+            args = arg_manager.args
         else:
             # Original meta.txt format.
             metadata.load_to_namespace(args.repeat, arg_manager)
