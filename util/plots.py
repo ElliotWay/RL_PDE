@@ -2,9 +2,43 @@ import os
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import numpy as np
 
-#TODO add option for polynomial function as comparison
-def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels=None, kwargs_list=None, title=None):
+def generate_polynomial(order, grid_sizes, comparison_error):
+    """
+    Generate a curve to represent the order of error approximation in e.g. a convergence plot.
+
+    Parameters
+    ---------
+    order : int
+        The order of approximation.
+    grid_sizes : [int]
+        The x values on which to plot the polynomial curve.
+    comparison_error : [float]
+        The error values for a real error plot. The polynomial curve will be scaled and
+        adjusted to be near the real error. comparison_error should have the same size as
+        grid_sizes.
+
+    Returns
+    -------
+    polynomial_values : [float]
+        Values for the polynomial plot.
+    label : str
+        Standard O-notation label for this order of approximation.
+    """         
+    values = (1.0 / grid_sizes) ** order
+
+    # Scale so it intersects around the middle of the comparison error.
+    midpoint_error = np.sqrt((max(comparison_error) * min(comparison_error)))
+    midpoint_size = np.sqrt((max(grid_sizes) * min(grid_sizes)))
+    values = midpoint_error * (midpoint_size ** order) * values
+
+    label = r"$\mathcal{{O}}(\Delta x^{{{}}})$".format(order)
+
+    return values, label
+ 
+def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels=None,
+        kwargs_list=None, title=None, polynomials=None):
     """
     Create a convergence plot of grid size vs. L2 error.
 
@@ -18,19 +52,20 @@ def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels
 
     Parameters
     ----------
-    grid_sizes : list of int OR list of list of int
+    grid_sizes : [int] or [[int]]
         The sizes of grids for which the L2 error was computed. A single list will be applied to
         each list of errors (if there are more than one); multiple lists can be used if different
         lists of errors have different grid sizes.
-    errors : list of float OR list of list of float
+    errors : [float] or [[float]]
         The L2 error for each grid size. Can plot one or more set of errors.
     log_dir : str
         Path of the directory to save the convergence plot to.
     name : str
         Name of the file to save into log_dir. 'convergence.png' by default.
-    label : list of str
+    label : [str]
         Labels for each set of errors, if there are more than one.
-    kwargs_list : list of dict
+        the index of the error plot that the polynomial will be based on.
+    kwargs_list : [dict]
         Kwargs passed to plot(), e.g. color and linestyle, for each set of errors.
     title : str
         Title to give to the plot. No title by default.
@@ -69,6 +104,7 @@ def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels
                 plt.plot(sizes, error_list, label=label, **kwargs)
             else:
                 plt.plot(sizes, error_list, **kwargs)
+                
     else:
         plt.plot(grid_sizes, errors, color='k', marker='.')
 
