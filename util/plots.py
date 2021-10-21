@@ -2,9 +2,43 @@ import os
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import numpy as np
 
-#TODO add option for polynomial function as comparison
-def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels=None, kwargs_list=None, title=None):
+def generate_polynomial(order, grid_sizes, comparison_error):
+    """
+    Generate a curve to represent the order of error approximation in e.g. a convergence plot.
+
+    Parameters
+    ---------
+    order : int
+        The order of approximation.
+    grid_sizes : [int]
+        The x values on which to plot the polynomial curve.
+    comparison_error : [float]
+        The error values for a real error plot. The polynomial curve will be scaled and
+        adjusted to be near the real error. comparison_error should have the same size as
+        grid_sizes.
+
+    Returns
+    -------
+    polynomial_values : [float]
+        Values for the polynomial plot.
+    label : str
+        Standard O-notation label for this order of approximation.
+    """         
+    values = (1.0 / grid_sizes) ** order
+
+    # Scale so it intersects around the middle of the comparison error.
+    midpoint_error = np.sqrt((max(comparison_error) * min(comparison_error)))
+    midpoint_size = np.sqrt((max(grid_sizes) * min(grid_sizes)))
+    values = midpoint_error * (midpoint_size ** order) * values
+
+    label = r"$\mathcal{{O}}(\Delta x^{{{}}})$".format(order)
+
+    return values, label
+ 
+def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels=None,
+        kwargs_list=None, title=None, polynomials=None):
     """
     Create a convergence plot of grid size vs. L2 error.
 
@@ -18,19 +52,20 @@ def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels
 
     Parameters
     ----------
-    grid_sizes : list of int OR list of list of int
+    grid_sizes : [int] or [[int]]
         The sizes of grids for which the L2 error was computed. A single list will be applied to
         each list of errors (if there are more than one); multiple lists can be used if different
         lists of errors have different grid sizes.
-    errors : list of float OR list of list of float
+    errors : [float] or [[float]]
         The L2 error for each grid size. Can plot one or more set of errors.
     log_dir : str
         Path of the directory to save the convergence plot to.
     name : str
         Name of the file to save into log_dir. 'convergence.png' by default.
-    label : list of str
+    label : [str]
         Labels for each set of errors, if there are more than one.
-    kwargs_list : list of dict
+        the index of the error plot that the polynomial will be based on.
+    kwargs_list : [dict]
         Kwargs passed to plot(), e.g. color and linestyle, for each set of errors.
     title : str
         Title to give to the plot. No title by default.
@@ -69,6 +104,7 @@ def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels
                 plt.plot(sizes, error_list, label=label, **kwargs)
             else:
                 plt.plot(sizes, error_list, **kwargs)
+                
     else:
         plt.plot(grid_sizes, errors, color='k', marker='.')
 
@@ -90,12 +126,13 @@ def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels
     plt.close()
 
 
-def error_plot(x_vals, error_vals, labels, log_dir, name="convergence_over_x.png", title=None):
+def error_plot(x_vals, error_vals, labels, log_dir, name="error_over_x.png", title=None,
+        vector_parts=None):
     """
     Create a plot of x location vs error.
 
     Intended to compare between the error of many configurations, e.g. the different sizes in a
-    convergence plot.
+    convergence plot, or using different agents.
 
     The data must be 1 dimensional, though it may be useful to plot slices of higher dimensional
     data.
@@ -107,23 +144,33 @@ def error_plot(x_vals, error_vals, labels, log_dir, name="convergence_over_x.png
 
     Parameters
     ----------
-    x_vals : list of float
-        The x coordinate of each point.
-    error_vals : list of list of float
-        The error at each point for each configuration.
-        Each sub-list contains the error at each point.
-    labels : list
+    x_vals : [float] or [[float]]
+        The x location for the errors in every list of errors, or a list of x locations
+        corresponding to each list of errors.
+    error_vals : [[[float]]]
+        The error(s) at each point for each configuration.
+        Axes are [configuration, vector, location].
+    labels : [str] or [number]
         The label to apply to each configuration. Must be numerical for >10 configurations;
         otherwise strings can be used.
     log_dir : str
         Path of the directory to save the convergence plot to.
     name : str
-        Name of the file to save into log_dir. 'convergence_over_x.png' by default.
+        Name of the file to save into log_dir. 'error_over_x.png' by default.
     title : str
         Title to give to the plot. No title by default.
+    vector_parts : str
+        Name of each part of the vector. [u1, u2, ...] by default.
     """
 
-    vec_len = error_vals[0].shape[0]
+    try:
+        iterator = iter(x_vals[0])
+    except TypeError:
+        # broadcast_to creates a view that looks like the array repeated multiple times,
+        # but uses the same space as the original array.
+        x_vals = np.broadcast_to(x_vals, (len(error_vals), len(x_vals)))
+
+    vec_len = len(error_vals[0])
     fig, ax = plt.subplots(nrows=vec_len, ncols=1, figsize=[6.4, 4.8 * vec_len], dpi=100,
             squeeze=False)
 
@@ -143,8 +190,12 @@ def error_plot(x_vals, error_vals, labels, log_dir, name="convergence_over_x.png
 
 
     for i in range(vec_len):
-        ax[i][0].set_xlabel("x")
-        ax[i][0].set_ylabel(f"u{i} |error|")
+        ax[i][0].set_xlabel("$x$")
+        if vector_parts is None:
+            ax[i][0].set_ylabel(f"u{i} |error|")
+        else:
+            # The $s render e.g. rho correctly.
+            ax[i][0].set_ylabel(f"${vector_parts[i]}$ |error|")
 
         ax[i][0].set_yscale('log')
         ax[i][0].set_ymargin(0.0)

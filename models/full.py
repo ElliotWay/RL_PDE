@@ -8,6 +8,7 @@ from models import GlobalModel
 from models.builder import get_optimizer
 from models.net import PolicyNet, FunctionWrapper
 import envs.weno_coefficients as weno_coefficients
+from envs.weno_solution import RKMethod
 from util.misc import create_stencil_indexes
 from util.serialize import save_to_zip, load_from_zip
 from util.function_dict import tensorflow_fn
@@ -113,12 +114,24 @@ class GlobalBackpropModel(GlobalModel):
                 self.env.reset(params)
                 boundary_name = '_'.join(boundary)
 
-                cell = IntegrateCell(
-                        prep_state_fn=self.env.tf_prep_state,
-                        policy_net=self.wrapped_policy,
-                        integrate_fn=self.env.tf_integrate,
-                        reward_fn=self.env.tf_calculate_reward,
-                        )
+                rk_method = self.env.rk_method
+                if rk_method == RKMethod.EULER:
+                    cell = IntegrateCell(
+                            prep_state_fn=self.env.tf_prep_state,
+                            policy_net=self.wrapped_policy,
+                            integrate_fn=self.env.tf_integrate,
+                            reward_fn=self.env.tf_calculate_reward,
+                            )
+                elif rk_method == RKMethod.RK4:
+                    cell = RK4IntegrateCell(
+                            prep_state_fn=self.env.tf_prep_state,
+                            policy_net=self.wrapped_policy,
+                            rk_substep_fn=self.env.tf_rk_substep,
+                            timestep_fn=self.env.tf_timestep,
+                            reward_fn=self.env.tf_calculate_reward,
+                            )
+                else:
+                    raise Exception(f"{rk_method} not implemented.")
                 rnn = IntegrateRNN(cell, name="rnn_".format(boundary_name))
 
                 # initial_state_ph is the REAL physical initial state
@@ -661,3 +674,110 @@ class IntegrateCell(Layer):
                 name='map_reward')
 
         return rl_action, rl_reward, next_real_state
+
+class RK4IntegrateCell(Layer):
+    def __init__(self, prep_state_fn, policy_net, rk_substep_fn, timestep_fn, reward_fn):
+        super().__init__()
+
+        self.prep_state_fn = prep_state_fn
+        self.policy_net = policy_net
+        self.rk_substep_fn = rk_substep_fn
+        self.timestep_fn = timestep_fn
+        self.reward_fn = reward_fn
+
+    def build(self, input_size):
+        super().build(input_size)
+
+    def call(self, state):
+        # state has shape [batch, vector, location, ...]
+        # (Batch shape may be unknown, other axes should be known.)
+
+        real_state = state
+
+        all_dims = real_state.get_shape().ndims
+        # - 2 for the batch and vector dims.
+        spatial_dims = all_dims - 2
+        # outer_dims squeezes the vector dimension.
+        if real_state.get_shape()[1] == 1:
+            outer_dims = all_dims - 1
+        else:
+            outer_dims = all_dims
+
+        STAGES = 4
+
+        initial_real_state = real_state
+        current_real_state = real_state
+
+        rk_substeps = []
+        rl_state_0 = None
+
+        dt = tf.map_fn(self.timestep_fn, real_state, dtype=real_state.dtype, name='map_timestep')
+        # Make dt broadcast over batch dimension.
+        for _ in range(all_dims - 1):
+            dt = tf.expand_dims(dt, axis=-1)
+
+        for stage in range(STAGES):
+
+            # Use tf.map_fn to apply function across every element in the batch.
+            tuple_type = (current_real_state.dtype,) * spatial_dims
+            rl_state = tf.map_fn(self.prep_state_fn, current_real_state, dtype=tuple_type,
+                                    name='map_prep_state')
+            if stage == 0:
+                rl_state_0 = rl_state
+
+            rl_action = []
+            for rl_state_part in rl_state:
+                # The policy expects a batch so we don't need to use tf.map_fn;
+                # however, it expects batches of INDIVIDUAL states, not every location at once, so we need
+                # to combine the batch, vector, and location axes first (and then reshape the actions back).
+                rl_state_shape = rl_state_part.shape.as_list()
+                new_state_shape = [-1,] + rl_state_shape[outer_dims:]
+                reshaped_state = tf.reshape(rl_state_part, new_state_shape)
+
+                #print("original shape:", rl_state_shape)
+                #print("new shape:", new_state_shape)
+
+                # Future note: this works to apply a 1D agent along each dimension.
+                # However, if we want an agent that makes use of a 2D stencil, or an agent that makes
+                # use of multiple components of the vector at once, we'll need a different
+                # implementation of IntegrateCell that somehow combines multiple stencils at each
+                # location. (Or rather, something that can handle a prep_state function that does
+                # that.)
+                # This loop is equivalent to ExtendAgent2D.
+
+                shaped_action = self.policy_net(reshaped_state)
+
+                shaped_action_shape = shaped_action.shape.as_list()
+                # Can't use rl_state_shape[:outer_dims] because rl_state_shape[0] is None; we need -1.
+                rl_action_shape = [-1,] + rl_state_shape[1:outer_dims] + shaped_action_shape[1:]
+                rl_action_part = tf.reshape(shaped_action, rl_action_shape)
+                rl_action.append(rl_action_part)
+            rl_action = tuple(rl_action)
+
+            rhs = tf.map_fn(self.rk_substep_fn, (current_real_state, rl_state, rl_action),
+                    dtype=current_real_state.dtype, name='map_rk_substep')
+            step = dt * rhs
+            rk_substeps.append(step)
+
+            if stage == 0:
+                next_real_state = initial_real_state + (step / 2)
+            elif stage == 1:
+                next_real_state = initial_real_state + (step / 2)
+            elif stage == 2:
+                next_real_state = initial_real_state + step
+            elif stage == 3:
+                next_real_state = initial_real_state + (rk_substeps[0]
+                                                    + 2 * rk_substeps[1]
+                                                    + 2 * rk_substeps[2]
+                                                    + rk_substeps[3]) / 6
+            
+            current_real_state = next_real_state
+
+        rl_state = rl_state_0
+        rl_reward = tf.map_fn(self.reward_fn, (real_state, rl_state, rl_action, next_real_state),
+                dtype=tuple_type,
+                name='map_reward')
+
+        return rl_action, rl_reward, next_real_state
+
+

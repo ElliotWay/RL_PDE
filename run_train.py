@@ -31,8 +31,7 @@ from util.param_manager import ArgTreeManager
 from util.function_dict import numpy_fn
 from util.lookup import get_model_class, get_emi_class, get_model_dims
 from util.misc import rescale, set_global_seed
-
-ON_POSIX = 'posix' in sys.builtin_module_names
+from util.misc import soft_link_directories
 
 def main():
     arg_manager = ArgTreeManager()
@@ -110,8 +109,11 @@ def main():
         _, extension = os.path.splitext(args.repeat)
 
         if extension == '.yaml':
-            args_dict = yaml.safe_load(args.repeat)
+            open_file = open(args.repeat, 'r')
+            args_dict = yaml.safe_load(open_file)
+            open_file.close()
             arg_manager.load_from_dict(args_dict)
+            args = arg_manager.args
         else:
             # Original meta.txt format.
             metadata.load_to_namespace(args.repeat, arg_manager)
@@ -168,6 +170,18 @@ def main():
             env_builder.set_contingent_env_defaults(args, eval_env_args, test=True)
             eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
 
+        elif args.env == "weno_euler":
+            eval_envs = []
+            eval_env_args.boundary = None
+            eval_env_args.ep_length = args.e.ep_length * 2
+            eval_env_args.time_max = args.e.time_max * 2
+
+            eval_env_args.init_type = "sod"
+            eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
+
+            eval_env_args.init_type = "sonic_rarefaction"
+            eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
+
         else:
             print(f"No standard evaluation environments declared for {args.env};"
                     + " evaluation environment will be identical to training environment.")
@@ -182,6 +196,8 @@ def main():
         raise Exception("eval env type \"{}\" not recognized.".format(args.eval_env))
 
     # Fill in defaults that are contingent on other arguments.
+    if args.log_freq > args.total_episodes:
+        args.log_freq = args.total_episodes
     if args.model == 'sac' and args.m.replay_style == 'marl':
         if args.emi != 'marl':
             args.emi = 'marl'
@@ -278,24 +294,9 @@ def main():
 
     # Create symlink for convenience.
     log_link_name = "last"
-    if ON_POSIX:
-        try:
-            if os.path.islink(log_link_name):
-                os.unlink(log_link_name)
-            os.symlink(args.log_dir, log_link_name, target_is_directory=True)
-        except OSError:
-            print("Failed to create \"last\" symlink. Continuing without it.")
-    else:
-        # On Windows, creating a symlink requires admin priveleges, but creating
-        # a "junction" does not, even though a junction is just a symlink on directories.
-        # I think there may be some support in Python3.8 for this,
-        # but we need Python3.7 for Tensorflow 1.15.
-        try:
-            if os.path.isdir(log_link_name):
-                os.rmdir(log_link_name)
-            subprocess.run("mklink /J {} {}".format(log_link_name, args.log_dir), shell=True)
-        except OSError:
-            print("Failed to create \"last\" symlink. Continuing without it.")
+    error = soft_link_directories(args.log_dir, log_link_name)
+    if error:
+        print("Failed to create \"last\" symlink. Continuing without it.")
 
     meta_file = MetaFile(args.log_dir, arg_manager)
     meta_file.write_new()

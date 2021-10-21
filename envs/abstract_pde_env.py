@@ -64,6 +64,10 @@ class AbstractPDEEnv(gym.Env):
             Type of boundary condition (periodic/outflow).
         init_type : string
             Type of initial condition (various, see envs.grid).
+        schedule : [string]
+            Override the default schedule, used with init_type='schedule'.
+        rk_method : RKMethod
+            The rk method to use to integrate. (Euler, RK4, etc.)
         init_params : dict
             Parameters dict to send to grid.reset, overriding initial defaults.
             Useful for specifying minor parameters like equation constants.
@@ -312,17 +316,12 @@ class AbstractPDEEnv(gym.Env):
             q3 = (self.u_start + 2 * self.k2 + 2 * self.dt * self._rk_substep(action)) / 3
             new_state = q3
 
-            self.grid.set(q3)
-            state = self._prep_state()
-
-            self.action_history.append(action)
-
-            state, reward, done = self._finish_step(step, self.dt, prev=self.u_start)
+            state, reward, done = self._finish_step(new_state, self.dt)
 
             self.state_history.append(self.grid.get_full().copy())
 
             self.rk_state = 1
-            self.k1 = self.k2 = self.k3 = self.u_start = self.dt = None
+            self.k1 = self.k2 = self.u_start = self.dt = None
             return state, reward, done
 
     def rk4_step(self, action):
@@ -544,16 +543,22 @@ class AbstractPDEEnv(gym.Env):
         else:
             min_cell_size = min(self.grid.cell_size)
             if 'Burgers' in str(self):
-                return self.C * min_cell_size / max(0.01, np.max(np.abs(self.grid.get_real())))
+                step = self.C * min_cell_size / max(0.01, np.max(np.abs(self.grid.get_real())))
             elif 'Euler' in str(self):
                 rho = self.grid.u[0]
                 v = self.grid.u[1] / rho
                 p = (self.grid.eos_gamma - 1) * (self.grid.u[2, :] - rho * v ** 2 / 2)
                 cs = np.sqrt(self.grid.eos_gamma * p / rho)
                 alpha = np.max(np.abs(v) + cs)
-                return self.C * min_cell_size / max(0.01, alpha)
+                step = self.C * min_cell_size / max(0.01, alpha)
             else:
                 raise NotImplementedError
+
+        if self.t + step > self.time_max:
+            return self.time_max - self.t
+        else:
+            return step
+
 
     # Need a separate tf version for tf.reduce_max.
     def tf_timestep(self, real_state):

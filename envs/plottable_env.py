@@ -74,6 +74,135 @@ class Plottable1DEnv(AbstractPDEEnv):
         original_state[2] = (self.eos_gamma - 1) * (state[2] - original_state[0] * original_state[1] ** 2 / 2)
         return original_state
 
+    def save_state(self,
+            timestep=None, location=None,
+            use_error=False,
+            suffix=None,
+            show_ghost=False,
+            state_history=None, solution_state_history=None,
+            history_includes_ghost=True):
+        """
+        Save the environment state to a csv file. Only the main RL state is saved, not the solution
+        state.
+
+        Parameters
+        ----------
+        timestep : int
+            Timestep of the state to save. By default, use the most recent timestep.
+        location : int
+            Index of location of the state to save
+        use_error : bool
+            Save the error between the state and the solution state instead.
+        suffix : string
+            The plot will be saved to burgers_state_{suffix}.png (or burgers_error_{suffix}.png).
+            By default, the timestep/location is used for the suffix.
+        show_ghost : bool
+            Save the ghost cells in addition to the 'real' cells.
+        state_history [, solution_state_history] : ndarray
+            Override the current state histories with different states.
+        history_includes_ghost : bool
+            Whether the overriding state history includes ghost cells. history_includes_ghost=False
+            overrides show_ghost to False.
+        """
+        assert (timestep is None or location is None), "Can't save state at both a timestep and a location."
+
+        if 'Euler' in str(self):
+            eqn_type = 'euler'
+            ylabels = ['rho', 'u', 'p', 'e']
+        else:
+            eqn_type = 'burgers'
+            ylabels = ['u']
+
+        override_history = (state_history is not None)
+
+        error_or_state = "error" if use_error else "state"
+
+        if location is None and timestep is None:
+            if not override_history:
+                state_history = self.grid.get_full().copy()
+                if use_error:
+                    solution_state_history = self.solution.get_full().copy()
+                num_steps = self.steps
+            else:
+                num_steps = len(state_history[0])
+            if suffix is None:
+                suffix = ("_step{:0" + str(self._step_precision) + "}").format(num_steps)
+        else:
+            if use_error and not override_history and not self.solution.is_recording_state():
+                raise Exception("Can't save error if solution is not recording state.")
+
+            if not override_history:
+                state_history = np.array(self.state_history)
+                if use_error:
+                    solution_state_history = np.array(self.solution.get_state_history())
+
+            if location is not None:
+                if not override_history or history_includes_ghost:
+                    location = self.ng + location
+                state_history = state_history[:, :, location]
+                if use_error:
+                    solution_state_history = solution_state_history[:, :, location]
+                actual_location = self.grid.x[location]
+                if suffix is None:
+                    suffix = ("_step{:0" + str(self._cell_index_precision) + "}").format(location)
+            else:
+                state_history = state_history[:, timestep, :]
+                if use_error:
+                    solution_state_history = solution_state_history[:, timestep, :]
+                if suffix is None:
+                    suffix = ("_step{:0" + str(self._step_precision) + "}").format(timestep)
+
+        if eqn_type == 'euler':
+            state_history = self.euler_state_conversion(state_history)
+            if use_error:
+                solution_state_history = self.euler_state_conversion(solution_state_history)
+
+        if use_error:
+            state_history = np.abs(solution_state_history - state_history)
+
+        if location is None:
+            if show_ghost:
+                x_values = self.grid.x
+            else:
+                x_values = self.grid.real_x
+                if not override_history or history_includes_ghost:
+                    state_history = state_history[:, self.ng:-self.ng]
+        else:
+            if self.C is None:
+                x_values = self.fixed_step * np.arange(len(state_history))
+            else:
+                # Need to record time values with variable timesteps.
+                x_values = np.arange(len(state_history))
+
+        log_dir = logger.get_dir()
+        filename = "{}_{}{}.csv".format(eqn_type, error_or_state, suffix)
+        filename = os.path.join(log_dir, filename)
+        csv_file = open(filename, 'w')
+
+        # Write column headers.
+        if timestep is None:
+            csv_file.write('x')
+        elif self.C is None:
+            csv_file.write('t')
+        else:
+            csv_file.write('timestep')
+        for component in ylabels:
+            if use_error:
+                csv_file.write(f",error_{component}")
+            else:
+                csv_file.write(f",{component}")
+        csv_file.write('\n')
+
+        # Write data.
+        for x_index, x in enumerate(x_values):
+            csv_file.write(str(x))
+            for component_index in range(len(state_history)):
+                csv_file.write(f",{state_history[component_index, x_index]}")
+            csv_file.write('\n')
+        csv_file.close()
+        print('Saved data to ' + filename + '.')
+        return filename
+
     def plot_state(self,
             timestep=None, location=None,
             plot_error=False,
@@ -95,7 +224,7 @@ class Plottable1DEnv(AbstractPDEEnv):
         timestep : int
             Timestep at which to plot state. By default, use the most recent timestep.
         location : int
-            Index of location at which to plot actions.
+            Index of location at which to plot the state.
         plot_error : bool
             Plot the error of the state with the solution state instead.
         suffix : string
@@ -217,10 +346,7 @@ class Plottable1DEnv(AbstractPDEEnv):
         except TypeError:
             ax = [ax]  # a hacky way to make subplots work with only one subplot
 
-        # I haven't done enough testing with timestep != None or location != None. Is this a bug?
-        # Ghosts should be fine with past steps; it's with a location over time where it doesn't
-        # make sense. Should this be if location is None?
-        if timestep is None:
+        if location is None:
             if show_ghost and (not override_history or history_includes_ghost):
                 # The ghost arrays slice off one real point so the line connects to the real points.
                 num_ghost_points = self.ng + 1
@@ -252,9 +378,7 @@ class Plottable1DEnv(AbstractPDEEnv):
             if weno_state_history is not None:
                 weno_state_history = weno_state_history[:, self.ng:-self.ng]
 
-        # Similarly here. With a specific timestep we still want physical x values. Should this
-        # also be if location is None?
-        if timestep is None:
+        if location is None:
             x_values = self.grid.x[self.ng:-self.ng]
         else:
             if self.C is None:
@@ -488,7 +612,6 @@ class Plottable1DEnv(AbstractPDEEnv):
             if weno is not None:
                 plots.append(weno[0])
                 labels.append(self.weno_solution_label)
-
 
         if title is not None:
             ax[0].set_title(title)
@@ -802,6 +925,10 @@ class Plottable2DEnv(AbstractPDEEnv):
         """
 
         #return fig
+
+    def save_state(self, *args, **kwargs):
+        print("2D CSV save function not yet implemented.")
+        return "ERROR_NOT_SAVED"
 
     def plot_state(self,
             timestep=None,

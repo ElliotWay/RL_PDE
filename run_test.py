@@ -32,8 +32,7 @@ from util.function_dict import numpy_fn
 from util.lookup import get_model_class, get_emi_class, get_model_dims
 from util.misc import set_global_seed
 from util.misc import human_readable_time_delta
-
-ON_POSIX = 'posix' in sys.builtin_module_names
+from util.misc import soft_link_directories
 
 def do_test(env, agent, args):
     if args.animate:
@@ -62,13 +61,21 @@ def do_test(env, agent, args):
         #if args.animate or step == next_update:
         if step == next_update:
             if step == next_update:
-                print("step = {}".format(step))
+                print(f"step = {env.steps}, t = {env.t:.4f}")
 
-            env.plot_state(**render_args)
+            if 'plot' in args.output_mode:
+                env.plot_state(**render_args)
+            if 'csv' in args.output_mode:
+                env.save_state()
+
             if args.plot_error:
-                env.plot_state(plot_error=True, **render_args)
+                if 'plot' in args.output_mode:
+                    env.plot_state(plot_error=True, **render_args)
+                if 'csv' in args.output_mode:
+                    env.save_state(use_error=True)
         if (args.animate or step == next_update + 1) and args.plot_actions:
-            env.plot_action(**render_args)
+            if 'plot' in args.output_mode:
+                env.plot_action(**render_args)
         if step == next_update + 1:
             update_count += 1
             next_update = int(args.e.ep_length * (update_count / NUM_UPDATES))
@@ -78,13 +85,18 @@ def do_test(env, agent, args):
                   deterministic=True, every_step_hook=every_step)
     end_time = time.time()
 
-    print("step = {} (done)".format(env.steps))
+    print(f"step = {env.steps}, t = {env.t:.4f} (done)")
 
-    env.plot_state(**render_args)
-    if args.plot_error:
-        env.plot_state(plot_error=True, **render_args)
-    if args.plot_actions:
-        env.plot_action(**render_args)
+    if 'plot' in args.output_mode:
+        env.plot_state(**render_args)
+        if args.plot_error:
+            env.plot_state(plot_error=True, **render_args)
+        if args.plot_actions:
+            env.plot_action(**render_args)
+    if 'csv' in args.output_mode:
+        env.save_state()
+        if args.plot_error:
+            env.save_state(use_error=True)
     print("Test finished in {}.".format(human_readable_time_delta(time.time() - start_time)))
  
     if env.dimensions == 1:
@@ -122,14 +134,17 @@ def do_test(env, agent, args):
     print("Final error with solution was {}.".format(error))
 
     if args.evolution_plot:
-        if isinstance(env, Plottable1DEnv):
-            env.plot_state_evolution(num_states=10, full_true=False, no_true=False, plot_weno=False)
-            if args.plot_error:
-                env.plot_state_evolution(num_states=10, plot_error=True)
-        elif isinstance(env, Plottable2DEnv):
-            env.plot_state_evolution(num_frames=20)
-        else:
-            raise Exception()
+        if 'plot' in args.output_mode:
+            if isinstance(env, Plottable1DEnv):
+                env.plot_state_evolution(num_states=10, full_true=False, no_true=False, plot_weno=False)
+                if args.plot_error:
+                    env.plot_state_evolution(num_states=10, plot_error=True)
+            elif isinstance(env, Plottable2DEnv):
+                env.plot_state_evolution(num_frames=20)
+            else:
+                raise Exception()
+        if 'csv' in args.output_mode:
+            print("CSV format for evolution is not implemented.")
 
     return error
 
@@ -177,6 +192,15 @@ def main():
                         help="Do several runs with different grid sizes to create a convergence plot."
                         " Overrides the --nx argument with 64, 128, 256, and 512, successively."
                         " Sets the --analytical flag.")
+    parser.add_argument('--output-mode', '--output_mode', default=['plot'], nargs='+',
+                        help="Type of output from the test. Default 'plot' creates the usual plot"
+                        + " files. 'csv' puts the data that would be used for a plot in a csv"
+                        + " file. CURRENTLY 'csv' IS NOT IMPLEMENTED FOR ALL OUTPUTS."
+                        + " Multiple modes can be used at once, e.g. --output-mode plot csv.")
+    parser.add_argument('--repeat', type=str, default=None,
+                        help="Load all of the parameters from a previous test's meta file to run a"
+                        + " similar or identical test. Explicitly passed parameters override"
+                        + " loaded paramters.")
     parser.add_argument('-y', '--y', default=False, action='store_true',
                         help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
     parser.add_argument('-n', '--n', default=False, action='store_true',
@@ -198,6 +222,23 @@ def main():
     if len(rest) > 0:
         print("Unrecognized arguments: " + " ".join(rest))
         sys.exit(0)
+
+    if args.repeat is not None:
+        _, extension = os.path.splitext(args.repeat)
+
+        if extension == '.yaml':
+            open_file = open(args.repeat, 'r')
+            args_dict = yaml.safe_load(open_file)
+            open_file.close()
+            arg_manager.load_from_dict(args_dict)
+            args = arg_manager.args
+        else:
+            # Original meta.txt format.
+            metadata.load_to_namespace(args.repeat, arg_manager)
+
+    for mode in args.output_mode:
+        if mode not in ['plot', 'csv']:
+            raise Exception(f"{mode} output mode not recognized.")
 
     # Convergence plots have different defaults.
     if args.convergence_plot:
@@ -242,7 +283,8 @@ def main():
 
             metadata.load_to_namespace(meta_file, arg_manager,
                     ignore_list=['log_dir', 'ep_length', 'time_max', 'timestep',
-                                'num_cells', 'min_value', 'max_value', 'C', 'fixed_timesteps'])
+                                'num_cells', 'min_value', 'max_value', 'C', 'fixed_timesteps',
+                                'reward_mode'])
 
     set_global_seed(args.seed)
 
@@ -257,7 +299,8 @@ def main():
             print("Reward mode switched to 'full' instead of 'one-step' for convergence plots.")
             env_args.reward_mode = env_args.reward_mode.replace('one-step', 'full')
         if dims == 1:
-            CONVERGENCE_PLOT_GRID_RANGE = [64, 81, 108, 128, 144, 192, 256]
+            CONVERGENCE_PLOT_GRID_RANGE = [32, 64, 128]
+            #CONVERGENCE_PLOT_GRID_RANGE = [64, 81, 108, 128, 144, 192, 256]
             #CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]#, 1024, 2048, 4096, 8192]
             #CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512, 1024, 2048, 4096, 8192]
             #CONVERGENCE_PLOT_GRID_RANGE = (2**np.linspace(6.0, 8.0, 50)).astype(np.int)
@@ -336,24 +379,9 @@ def main():
 
     # Create symlink for convenience. (Do this after loading the agent in case we are loading from last.)
     log_link_name = "last"
-    if ON_POSIX:
-        try:
-            if os.path.islink(log_link_name):
-                os.unlink(log_link_name)
-            os.symlink(args.log_dir, log_link_name, target_is_directory=True)
-        except OSError:
-            print("Failed to create \"last\" symlink. Continuing without it.")
-    else:
-        # On Windows, creating a symlink requires admin priveleges, but creating
-        # a "junction" does not, even though a junction is just a symlink on directories.
-        # I think there may be some support in Python3.8 for this,
-        # but we need Python3.7 for Tensorflow 1.15.
-        try:
-            if os.path.isdir(log_link_name):
-                os.rmdir(log_link_name)
-            subprocess.run("mklink /J {} {}".format(log_link_name, args.log_dir), shell=True)
-        except OSError:
-            print("Failed to create \"last\" symlink. Continuing without it.")
+    error = soft_link_directories(args.log_dir, log_link_name)
+    if error:
+        print("Failed to create \"last\" symlink. Continuing without it.")
 
     # Run test.
     signal.signal(signal.SIGINT, signal.default_int_handler)
@@ -401,7 +429,8 @@ def main():
                 outer_logger.dumpkvs()
 
             if dims == 1:
-                plots.error_plot(x_vals, error_vals, CONVERGENCE_PLOT_GRID_RANGE, args.log_dir)
+                plots.error_plot(x_vals, error_vals, CONVERGENCE_PLOT_GRID_RANGE, args.log_dir,
+                        name="convergence_over_x.png")
             print("Convergence plot created in {}.".format(
                     human_readable_time_delta(time.time() - convergence_start_time)))
     except KeyboardInterrupt:
