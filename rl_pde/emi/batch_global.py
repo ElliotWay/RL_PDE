@@ -67,7 +67,7 @@ class BatchGlobalEMI(EMI, OneDimensionalStencil):
             self.analytical_solution_env = build_env(self.args.env, env_args_copy)
 
     # Declare this lazily so it doesn't need to be declared during testing.
-    def _generate_solution_env_states(self, all_init_params, analytical=True, last_only=True):
+    def _generate_solution_env_states(self, all_init_params, analytical=True, last_only=False):
         """
         Generate solution env states for calculating rewards during training.
 
@@ -94,9 +94,11 @@ class BatchGlobalEMI(EMI, OneDimensionalStencil):
                     if last_only:
                         solution_env_states.append(self.analytical_solution_env.state_history[-1]
                                                    [self.analytical_solution_env.grid.real_slice])
+                        self.solution_env_states = np.array(solution_env_states)
                     else:
                         solution_env_states.append([item[self.analytical_solution_env.grid.real_slice]
                                                     for item in self.analytical_solution_env.state_history])
+                        self.solution_env_states = np.swapaxes(np.array(solution_env_states), 0, 1)
 
             else:
                 for init_params in all_init_params:
@@ -111,11 +113,12 @@ class BatchGlobalEMI(EMI, OneDimensionalStencil):
                     if last_only:
                         solution_env_states.append(self.weno_solution_env.state_history[-1]
                                                    [self.weno_solution_env.grid.real_slice])
+                        self.solution_env_states = np.array(solution_env_states)
                     else:
                         solution_env_states.append([item[self.weno_solution_env.grid.real_slice]
                                                     for item in self.weno_solution_env.state_history])
+                        self.solution_env_states = np.swapaxes(np.array(solution_env_states), 0, 1)
 
-            self.solution_env_states = np.array(solution_env_states)
         return self.solution_env_states
 
     def training_episode(self, env):

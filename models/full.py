@@ -129,7 +129,7 @@ class GlobalBackpropModel(GlobalModel):
                         name="init_real_state_{}".format(boundary_name))
                 self.init_state_ph_dict[boundary] = initial_state_ph
                 final_analytical_state_ph = tf.placeholder(dtype=self.dtype,
-                                                           shape=(None, self.env.grid.vec_len) + self.env.grid.num_cells,
+                                                           shape=(None, None, self.env.grid.vec_len) + self.env.grid.num_cells,
                                                            name="final_analytical_state_{}".format(boundary_name))
                 self.final_analytical_state_ph_dict[boundary] = final_analytical_state_ph
 
@@ -138,7 +138,7 @@ class GlobalBackpropModel(GlobalModel):
                 # high dimensional environments.
                 state, action, reward = rnn(initial_state_ph, num_steps=self.args.e.ep_length)
 
-                final_analytical_error = tf.reduce_sum(state[-1] - final_analytical_state_ph, axis=0)
+                final_analytical_error = tf.reduce_sum(state - final_analytical_state_ph, axis=-3)
                 final_analytical_reward = tf.reduce_mean(tf.atan(-tf.abs(final_analytical_error)))
 
                 self.state_dict[boundary] = state
@@ -153,8 +153,8 @@ class GlobalBackpropModel(GlobalModel):
                 # Sum over the timesteps in the trajectory (axis 0),
                 # then average over the batch and each location and the batch (axes 1 and the rest).
                 # Also average over each reward part (e.g. each dimension).
-                loss = -tf.reduce_mean([tf.reduce_mean(tf.reduce_sum(reward_part, axis=0)) for
-                                                reward_part in reward]) - final_analytical_reward
+                loss = -tf.reduce_mean([tf.reduce_mean(tf.reduce_sum(reward_part, axis=0)) for reward_part in reward]) \
+                       - final_analytical_reward
                 self.loss_dict[boundary] = loss
 
                 gradients = tf.gradients(loss, self.policy_params)
