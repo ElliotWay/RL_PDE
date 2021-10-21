@@ -5,6 +5,7 @@ import random
 import re
 import numpy as np
 import tensorflow as tf
+import subprocess
 
 
 # I've started using indexes instead of indices because it bothers me when people use "indice" as the singular.
