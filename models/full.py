@@ -151,7 +151,7 @@ class GlobalBackpropModel(GlobalModel):
                 # high dimensional environments.
                 state, action, reward = rnn(initial_state_ph, num_steps=self.args.e.ep_length)
 
-                final_analytical_error = tf.reduce_sum(state - final_analytical_state_ph, axis=-3)
+                final_analytical_error = tf.reduce_sum(tf.abs(state - final_analytical_state_ph), axis=-2)
                 final_analytical_reward = tf.reduce_mean(tf.atan(-tf.abs(final_analytical_error)))
 
                 self.state_dict[boundary] = state
