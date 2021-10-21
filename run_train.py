@@ -31,8 +31,7 @@ from util.param_manager import ArgTreeManager
 from util.function_dict import numpy_fn
 from util.lookup import get_model_class, get_emi_class, get_model_dims
 from util.misc import rescale, set_global_seed
-
-ON_POSIX = 'posix' in sys.builtin_module_names
+from util.misc import soft_link_directories
 
 def main():
     arg_manager = ArgTreeManager()
@@ -295,24 +294,9 @@ def main():
 
     # Create symlink for convenience.
     log_link_name = "last"
-    if ON_POSIX:
-        try:
-            if os.path.islink(log_link_name):
-                os.unlink(log_link_name)
-            os.symlink(args.log_dir, log_link_name, target_is_directory=True)
-        except OSError:
-            print("Failed to create \"last\" symlink. Continuing without it.")
-    else:
-        # On Windows, creating a symlink requires admin priveleges, but creating
-        # a "junction" does not, even though a junction is just a symlink on directories.
-        # I think there may be some support in Python3.8 for this,
-        # but we need Python3.7 for Tensorflow 1.15.
-        try:
-            if os.path.isdir(log_link_name):
-                os.rmdir(log_link_name)
-            subprocess.run("mklink /J {} {}".format(log_link_name, args.log_dir), shell=True)
-        except OSError:
-            print("Failed to create \"last\" symlink. Continuing without it.")
+    error = soft_link_directories(args.log_dir, log_link_name)
+    if error:
+        print("Failed to create \"last\" symlink. Continuing without it.")
 
     meta_file = MetaFile(args.log_dir, arg_manager)
     meta_file.write_new()

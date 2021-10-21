@@ -5,6 +5,7 @@ import re
 import pandas as pd
 
 from util import plots
+from util.misc import soft_link_directories
 
 def main():
     parser = argparse.ArgumentParser(
@@ -103,6 +104,13 @@ def main():
         file_name = "convergence.png"
     plots.convergence_plot(grid_sizes, errors, log_dir=dir_name, name=file_name, labels=labels,
             kwargs_list=kwargs_list)
+
+    # Create symlink for convenience.
+    log_link_name = "last"
+    error = soft_link_directories(dir_name, log_link_name)
+    if error:
+        print("Note: Failed to create \"last\" symlink.")
+
 
 if __name__ == "__main__":
     main()

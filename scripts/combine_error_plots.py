@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 from util import plots
+from util.misc import soft_link_directories
 
 def main():
     parser = argparse.ArgumentParser(
@@ -20,6 +21,8 @@ def main():
             + " with --diff FILEA1 FILEB1 --diff FILEA2 FILEB2.")
     parser.add_argument("--labels", type=str, nargs='+', default=None,
             help="Labels for each error. By default, no labels are used.")
+    parser.add_argument("--title", type=str, default=None,
+            help="Title to add to the plot. By default, no title is added.")
     parser.add_argument("--output", "-o", type=str, required=True,
             help="Path to save the combined plot to. If an existing directory is passed,"
             + " the plot will be saved to 'errors.png' in that directory.")
@@ -86,7 +89,15 @@ def main():
     if file_name == "":
         file_name = "errors.png"
     plots.error_plot(x_locations, errors, labels=args.labels, log_dir=dir_name, name=file_name,
-            vector_parts=column_names)
+            vector_parts=column_names, title=args.title)
+
+    # Create symlink for convenience.
+    log_link_name = "last"
+    error = soft_link_directories(dir_name, log_link_name)
+    if error:
+        print("Note: Failed to create \"last\" symlink.")
+
+
 
 if __name__ == "__main__":
     main()

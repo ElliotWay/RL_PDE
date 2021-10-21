@@ -1,3 +1,5 @@
+import sys
+import os
 import argparse
 import random
 import re
@@ -205,3 +207,60 @@ def TensorAxisSlice(tensor, axis):
     """
     tensor.ndim = tensor.shape.ndims
     return AxisSlice(tensor, axis)
+
+ON_POSIX = 'posix' in sys.builtin_module_names
+
+def soft_link_directories(dir_name, link_name, safe=False):
+    """
+    Create a symlink between 2 directories.
+
+    If the link already exists, it will be unlinked and deleted before being linked to the new
+    directory.
+    Works on both Windows and Posix. The requirement that this link only directories, not files, is
+    part of a restriction from Windows.
+
+    Parameters
+    ----------
+    dir_name : str
+        Name of existing directory.
+    link_name : str
+        Path to link to dir_name.
+    safe : bool
+        safe=False will raise an Exception if the link cannot be created.
+        safe=True will return the error code instead.
+
+    Returns
+    -------
+    errno : int
+        0 if the links were created succesfully, otherwise the error code.
+        (Always 0 if safe=False.)
+    """
+    assert os.path.isdir(dir_name)
+
+    if ON_POSIX:
+        try:
+            if os.path.islink(link_name):
+                os.unlink(link_name)
+            os.symlink(dir_name, link_name, target_is_directory=True)
+        except OSError as e:
+            if not safe:
+                raise
+            else:
+                return e.errno
+    else:
+        # On Windows, creating a symlink requires admin priveleges, but creating
+        # a "junction" does not, even though a junction is just a symlink on directories.
+        # I think there may be some support in Python3.8 for this,
+        # but we need Python3.7 for Tensorflow 1.15.
+        try:
+            if os.path.isdir(link_name):
+                os.rmdir(link_name)
+            subprocess.run("mklink /J {} {}".format(link_name, dir_name), shell=True)
+        except OSError as e:
+            if not safe:
+                raise
+            else:
+                return e.errno
+
+    return 0
+
