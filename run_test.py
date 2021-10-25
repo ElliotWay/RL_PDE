@@ -76,6 +76,8 @@ def do_test(env, agent, args):
         if (args.animate or step == next_update + 1) and args.plot_actions:
             if 'plot' in args.output_mode:
                 env.plot_action(**render_args)
+            if 'csv' in args.output_mode:
+                env.save_action()
         if step == next_update + 1:
             update_count += 1
             next_update = int(args.e.ep_length * (update_count / NUM_UPDATES))
@@ -97,6 +99,9 @@ def do_test(env, agent, args):
         env.save_state()
         if args.plot_error:
             env.save_state(use_error=True)
+        if args.plot_actions:
+            env.save_action()
+
     print("Test finished in {}.".format(human_readable_time_delta(time.time() - start_time)))
  
     if env.dimensions == 1:

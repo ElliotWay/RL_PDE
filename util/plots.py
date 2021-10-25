@@ -125,6 +125,9 @@ def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels
     print('Saved plot to ' + filename + '.')
     plt.close()
 
+def action_plot(x_vals, action_vals, labels, log_dir, name="actions.png", title=None,
+        vector_parts=None):
+    pass
 
 def error_plot(x_vals, error_vals, labels, log_dir, name="error_over_x.png", title=None,
         vector_parts=None):
@@ -133,6 +136,8 @@ def error_plot(x_vals, error_vals, labels, log_dir, name="error_over_x.png", tit
 
     Intended to compare between the error of many configurations, e.g. the different sizes in a
     convergence plot, or using different agents.
+
+    The y axis (the error) will use log scaling.
 
     The data must be 1 dimensional, though it may be useful to plot slices of higher dimensional
     data.
@@ -187,7 +192,6 @@ def error_plot(x_vals, error_vals, labels, log_dir, name="error_over_x.png", tit
                 ax[i][0].plot(x, y[i], ls='-', color=color_map(normalize(label)))
         scalar_mappable = matplotlib.cm.ScalarMappable(norm=normalize, cmap=color_map)
         scalar_mappable.set_array(labels)
-
 
     for i in range(vec_len):
         ax[i][0].set_xlabel("$x$")
