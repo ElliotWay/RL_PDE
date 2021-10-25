@@ -546,7 +546,7 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
             return -error
 
         error = weno_next_real_state - next_real_state
-        error = tf.reduce_sum(error, axis=0)
+        error = tf.reduce_sum(tf.abs(error), axis=0)
 
         if "one-step" in self.reward_mode:
             pass
@@ -569,7 +569,6 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
 
         # Average of error in two adjacent cells.
         if "adjacent" in self.reward_mode and "avg" in self.reward_mode:
-            error = tf.abs(error)
             combined_error = (error[:-1] + error[1:]) / 2
             if boundary == "outflow":
                 # Error beyond boundaries will be identical to error at edge, so average error
