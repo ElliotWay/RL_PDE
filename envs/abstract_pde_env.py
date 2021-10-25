@@ -543,16 +543,22 @@ class AbstractPDEEnv(gym.Env):
         else:
             min_cell_size = min(self.grid.cell_size)
             if 'Burgers' in str(self):
-                return self.C * min_cell_size / max(0.01, np.max(np.abs(self.grid.get_real())))
+                step = self.C * min_cell_size / max(0.01, np.max(np.abs(self.grid.get_real())))
             elif 'Euler' in str(self):
                 rho = self.grid.u[0]
                 v = self.grid.u[1] / rho
                 p = (self.grid.eos_gamma - 1) * (self.grid.u[2, :] - rho * v ** 2 / 2)
                 cs = np.sqrt(self.grid.eos_gamma * p / rho)
                 alpha = np.max(np.abs(v) + cs)
-                return self.C * min_cell_size / max(0.01, alpha)
+                step = self.C * min_cell_size / max(0.01, alpha)
             else:
                 raise NotImplementedError
+
+        if self.t + step > self.time_max:
+            return self.time_max - self.t
+        else:
+            return step
+
 
     # Need a separate tf version for tf.reduce_max.
     def tf_timestep(self, real_state):

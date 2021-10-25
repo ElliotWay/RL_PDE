@@ -2,9 +2,11 @@ import os
 import argparse
 import re
 
+import numpy as np
 import pandas as pd
 
 from util import plots
+from util.misc import soft_link_directories
 
 def main():
     parser = argparse.ArgumentParser(
@@ -73,9 +75,35 @@ def main():
     for order in sorted(files.keys()):
         sub_dict = files[order]
 
+        poly_added = False
+
         for sol_name in ['rl', 'weno']:
             if not sol_name in sub_dict:
                 continue
+
+            file_name = sub_dict[sol_name]
+            csv_df = pd.read_csv(file_name, comment='#')
+
+            if 'nx' in csv_df:
+                sizes = np.array(csv_df['nx'])
+            elif 'num_cells' in csv_df:
+                sizes = np.array(csv_df['num_cells'])
+            else:
+                raise Exception()
+            error_list = np.array(csv_df['l2_error'])
+
+            # Add polynomial order curve. It goes first for this order.
+            if not poly_added:
+                comparison_error = error_list
+                poly_order = order * 2 - 1
+                poly_values, poly_label = plots.generate_polynomial(poly_order, sizes, error_list)
+
+                grid_sizes.append(sizes)
+                errors.append(poly_values)
+                labels.append(poly_label)
+                kwargs_list.append({'color': colors[order], 'linestyle': ':'})
+
+                poly_added = True
 
             if sol_name == 'rl':
                 labels.append(f"RL, r={order}")
@@ -84,18 +112,7 @@ def main():
                 labels.append(f"WENO, r={order}")
                 kwargs_list.append({'color': colors[order], 'linestyle': '--'})
 
-            file_name = sub_dict[sol_name]
-            csv_df = pd.read_csv(file_name, comment='#')
-
-            if 'nx' in csv_df:
-                sizes = csv_df['nx']
-            elif 'num_cells' in csv_df:
-                sizes = csv_df['num_cells']
-            else:
-                raise Exception()
             grid_sizes.append(sizes)
-
-            error_list = csv_df['l2_error']
             errors.append(error_list)
 
     dir_name, file_name = os.path.split(args.output)
@@ -103,6 +120,14 @@ def main():
         file_name = "convergence.png"
     plots.convergence_plot(grid_sizes, errors, log_dir=dir_name, name=file_name, labels=labels,
             kwargs_list=kwargs_list)
+
+    # Create symlink for convenience.
+    if len(dir_name) > 0:
+        log_link_name = "last"
+        error = soft_link_directories(dir_name, log_link_name)
+        if error:
+            print("Note: Failed to create \"last\" symlink.")
+
 
 if __name__ == "__main__":
     main()

@@ -76,9 +76,11 @@ class Plottable1DEnv(AbstractPDEEnv):
 
     def save_state(self,
             timestep=None, location=None,
+            use_error=False,
             suffix=None,
             show_ghost=False,
-            state_history=None, history_includes_ghost=True):
+            state_history=None, solution_state_history=None,
+            history_includes_ghost=True):
         """
         Save the environment state to a csv file. Only the main RL state is saved, not the solution
         state.
@@ -89,12 +91,14 @@ class Plottable1DEnv(AbstractPDEEnv):
             Timestep of the state to save. By default, use the most recent timestep.
         location : int
             Index of location of the state to save
+        use_error : bool
+            Save the error between the state and the solution state instead.
         suffix : string
             The plot will be saved to burgers_state_{suffix}.png (or burgers_error_{suffix}.png).
             By default, the timestep/location is used for the suffix.
         show_ghost : bool
             Save the ghost cells in addition to the 'real' cells.
-        state_history : ndarray
+        state_history [, solution_state_history] : ndarray
             Override the current state histories with different states.
         history_includes_ghost : bool
             Whether the overriding state history includes ghost cells. history_includes_ghost=False
@@ -111,38 +115,58 @@ class Plottable1DEnv(AbstractPDEEnv):
 
         override_history = (state_history is not None)
 
+        error_or_state = "error" if use_error else "state"
+
         if location is None and timestep is None:
             if not override_history:
                 state_history = self.grid.get_full().copy()
+                if use_error:
+                    solution_state_history = self.solution.get_full().copy()
                 num_steps = self.steps
             else:
                 num_steps = len(state_history[0])
             if suffix is None:
                 suffix = ("_step{:0" + str(self._step_precision) + "}").format(num_steps)
         else:
+            if use_error and not override_history and not self.solution.is_recording_state():
+                raise Exception("Can't save error if solution is not recording state.")
+
             if not override_history:
                 state_history = np.array(self.state_history)
+                if use_error:
+                    solution_state_history = np.array(self.solution.get_state_history())
 
             if location is not None:
                 if not override_history or history_includes_ghost:
                     location = self.ng + location
                 state_history = state_history[:, :, location]
+                if use_error:
+                    solution_state_history = solution_state_history[:, :, location]
                 actual_location = self.grid.x[location]
                 if suffix is None:
                     suffix = ("_step{:0" + str(self._cell_index_precision) + "}").format(location)
             else:
                 state_history = state_history[:, timestep, :]
+                if use_error:
+                    solution_state_history = solution_state_history[:, timestep, :]
                 if suffix is None:
                     suffix = ("_step{:0" + str(self._step_precision) + "}").format(timestep)
 
         if eqn_type == 'euler':
             state_history = self.euler_state_conversion(state_history)
+            if use_error:
+                solution_state_history = self.euler_state_conversion(solution_state_history)
 
-        if timestep is None:
+        if use_error:
+            state_history = np.abs(solution_state_history - state_history)
+
+        if location is None:
             if show_ghost:
                 x_values = self.grid.x
             else:
                 x_values = self.grid.real_x
+                if not override_history or history_includes_ghost:
+                    state_history = state_history[:, self.ng:-self.ng]
         else:
             if self.C is None:
                 x_values = self.fixed_step * np.arange(len(state_history))
@@ -151,7 +175,7 @@ class Plottable1DEnv(AbstractPDEEnv):
                 x_values = np.arange(len(state_history))
 
         log_dir = logger.get_dir()
-        filename = "{}_state{}.csv".format(eqn_type, suffix)
+        filename = "{}_{}{}.csv".format(eqn_type, error_or_state, suffix)
         filename = os.path.join(log_dir, filename)
         csv_file = open(filename, 'w')
 
@@ -163,7 +187,10 @@ class Plottable1DEnv(AbstractPDEEnv):
         else:
             csv_file.write('timestep')
         for component in ylabels:
-            csv_file.write(f",{component}")
+            if use_error:
+                csv_file.write(f",error_{component}")
+            else:
+                csv_file.write(f",{component}")
         csv_file.write('\n')
 
         # Write data.
@@ -319,10 +346,7 @@ class Plottable1DEnv(AbstractPDEEnv):
         except TypeError:
             ax = [ax]  # a hacky way to make subplots work with only one subplot
 
-        # I haven't done enough testing with timestep != None or location != None. Is this a bug?
-        # Ghosts should be fine with past steps; it's with a location over time where it doesn't
-        # make sense. Should this be if location is None?
-        if timestep is None:
+        if location is None:
             if show_ghost and (not override_history or history_includes_ghost):
                 # The ghost arrays slice off one real point so the line connects to the real points.
                 num_ghost_points = self.ng + 1
@@ -354,9 +378,7 @@ class Plottable1DEnv(AbstractPDEEnv):
             if weno_state_history is not None:
                 weno_state_history = weno_state_history[:, self.ng:-self.ng]
 
-        # Similarly here. With a specific timestep we still want physical x values. Should this
-        # also be if location is None?
-        if timestep is None:
+        if location is None:
             x_values = self.grid.x[self.ng:-self.ng]
         else:
             if self.C is None:
