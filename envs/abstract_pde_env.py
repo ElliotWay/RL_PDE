@@ -165,6 +165,7 @@ class AbstractPDEEnv(gym.Env):
         self.steps = 0
         self.action_history = []
         self.state_history = []
+        self.timestep_history = [] # Useful for dynamic timesteps.
 
         # These are used by Runge-Kutta functions.
         self.dt = self.timestep()
@@ -418,6 +419,7 @@ class AbstractPDEEnv(gym.Env):
         done : bool
         """
         self.t += dt
+        self.timestep_history.append(self.t)
 
         # Update solution before updating the grid, in case it depends on the current grid.
         self.solution.update(dt, self.t)
@@ -433,7 +435,7 @@ class AbstractPDEEnv(gym.Env):
             else:
                 done = False
         else:
-            if self.t >= self.time_max:
+            if self.t >= self.time_max - 1e-12:
                 done = True
             else:
                 done = False
@@ -489,6 +491,7 @@ class AbstractPDEEnv(gym.Env):
         self.action_history = []
 
         self.t = 0.0
+        self.timestep_history = [self.t]
         self.steps = 0
         self.previous_error = np.zeros_like(self.grid.get_full())
 

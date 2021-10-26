@@ -314,13 +314,9 @@ class Plottable1DEnv(AbstractPDEEnv):
                     weno_state_history = weno_state_history[:, timestep, :]
 
                 if title is None:
-                    if self.C is None:
-                        actual_time = timestep * self.fixed_step
-                        title = ("{} at t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(
-                                error_or_state, actual_time, timestep)
-                    else:
-                        # TODO get time with variable timesteps?
-                        title = "{} at step {:0" + str(self._step_precision) + "d}".format(error_or_state, timestep)
+                    actual_time = self.timestep_history[timestep]
+                    title = ("{} at t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(
+                            error_or_state, actual_time, timestep)
                 if suffix is None:
                     suffix = ("_step{:0" + str(self._step_precision) + "}").format(timestep)
 
@@ -716,7 +712,9 @@ class Plottable1DEnv(AbstractPDEEnv):
             action_labels = self._action_labels
         for vector_part_label in ylabels:
             for action_part_label in self._action_labels:
-                action_label = f"{vector_part_label}_{action_part_label}"
+                sep_char = '@' # In case labels have TeX in them, the @ is rarely used.
+                assert sep_char not in vector_part_label and sep_char not in action_part_label
+                action_label = f"{vector_part_label}{sep_char}{action_part_label}"
                 csv_file.write("," + action_label)
         csv_file.write('\n')
 
@@ -822,12 +820,8 @@ class Plottable1DEnv(AbstractPDEEnv):
                 weno_action_history = weno_action_history[timestep, :, :, :].transpose()
 
             if title is None:
-                if self.C is None:
-                    actual_time = timestep * self.fixed_step
-                    fig.suptitle("actions at t = {:.4} (step {})".format(actual_time, timestep))
-                else:
-                    # TODO get time with variable timesteps.
-                    fig.suptitle("actions at step {}".format(actual_time, timestep))
+                actual_time = self.timestep_history[timestep]
+                fig.suptitle("actions at t = {:.4} (step {})".format(actual_time, timestep))
             else:
                 fig.suptitle(title)
 
@@ -1080,13 +1074,9 @@ class Plottable2DEnv(AbstractPDEEnv):
                     solution_state_history = self.solution.get_state_history().copy()[timestep, :]
 
             if title is None:
-                if self.C is None:
-                    actual_time = timestep * self.fixed_step
-                    title = ("{} at t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(
-                            error_or_state, actual_time, timestep)
-                else:
-                    # TODO get time with variable timesteps?
-                    title = "{} at step {:0" + str(self._step_precision) + "d}".format(error_or_state, timestep)
+                actual_time = self.timestep_history[timestep]
+                title = ("{} at t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(
+                        error_or_state, actual_time, timestep)
             if suffix is None:
                 suffix = ("_step{:0" + str(self._step_precision) + "}").format(timestep)
 
@@ -1154,13 +1144,9 @@ class Plottable2DEnv(AbstractPDEEnv):
 
             state = state_history[timestep]
 
-            if self.C is None:
-                actual_time = timestep * self.fixed_step
-                time_str = (" t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(
-                                actual_time, timestep)
-            else:
-                # TODO get time with variable timesteps?
-                time_str = " step {:0" + str(self._step_precision) + "d}".format(timestep)
+            actual_time = self.timestep_history[timestep]
+            time_str = (" t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(
+                            actual_time, timestep)
             title = base_title + time_str
 
             if not show_ghost and (not override_history or history_includes_ghost):
