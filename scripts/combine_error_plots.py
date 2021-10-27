@@ -94,7 +94,7 @@ def main():
     # Create symlink for convenience.
     if len(dir_name) > 0:
         log_link_name = "last"
-        error = soft_link_directories(dir_name, log_link_name)
+        error = soft_link_directories(dir_name, log_link_name, safe=True)
         if error:
             print("Note: Failed to create \"last\" symlink.")
 

@@ -383,7 +383,7 @@ def main():
 
     # Create symlink for convenience. (Do this after loading the agent in case we are loading from last.)
     log_link_name = "last"
-    error = soft_link_directories(args.log_dir, log_link_name)
+    error = soft_link_directories(args.log_dir, log_link_name, safe=True)
     if error:
         print("Failed to create \"last\" symlink. Continuing without it.")
 
