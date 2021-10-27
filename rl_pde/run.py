@@ -77,6 +77,32 @@ from envs.plottable_env import Plottable1DEnv, Plottable2DEnv
 from util import action_snapshot
 from util.misc import human_readable_time_delta
 
+# We expect e.g. loss to drop quickly in the early episodes, but if it starts high enough that,
+# even with a log plot, it's hard to distinguish the rest of the data, then we can crop off the
+# high range of that early drop.
+# If the first point is more than 2 orders of magnitude above the 95% percentile, restrict the
+# range of the y axis to that point.
+def crop_early_shift(ax, mode):
+    percentile_limit = 5
+    order_limit = 2
+
+    data = [line.get_ydata() for line in ax.get_lines()]
+    firsts = [d[0] for d in data]
+    all_data = np.concatenate(data)
+    if mode == "normal":
+        max_first = max(firsts)
+        high_percentile = np.percentile(all_data, 100 - percentile_limit)
+        if ((max_first > 0 and high_percentile > 0) and
+                np.log10(max_first) - np.log10(high_percentile) > order_limit):
+            ax.set_ylim(top=(high_percentile * (10 ** order_limit)))
+    elif mode == "flipped":
+        # Values are high magnitude negative. (Not low magnitude.)
+        min_first = min(firsts)
+        low_percentile = np.percentile(all_data, percentile_limit)
+        if ((min_first < 0 and low_percentile < 0) and
+                np.log10(-min_first) - np.log10(-low_percentile) > order_limit):
+            ax.set_ylim(bottom=(low_percentile * (10 ** order_limit)))
+
 
 def write_summary_plots(log_dir, summary_plot_dir, total_episodes, eval_env_names):
     #TODO This is a hack. Consider adapting the SB logger class to our own purposes
@@ -92,6 +118,8 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, eval_env_name
 
     reward_fig = plt.figure()
     ax = reward_fig.gca()
+    
+    all_rewards = []
     train_reward = csv_df['avg_train_total_reward']
     ax.plot(episodes, train_reward, color=train_color, label="train")
     avg_eval_reward = csv_df['avg_eval_total_reward']
@@ -120,6 +148,8 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, eval_env_name
     #ax.yaxis.set_minor_locator(SymmetricalLogLocator(base=10, linthresh=min_scale,
             #subs=[0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 2.0, 3.0, 4.0]))
     #ax.set_ymargin(min_scale)
+
+    crop_early_shift(ax, "flipped")
 
     reward_filename = os.path.join(summary_plot_dir, "rewards.png")
     reward_fig.savefig(reward_filename)
@@ -151,6 +181,7 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, eval_env_name
     #if low > 0:
         #ax.set_ylim(bottom=0.0)
     ax.set_yscale('log')
+    crop_early_shift(ax, "normal")
 
     l2_filename = os.path.join(summary_plot_dir, "l2.png")
     l2_fig.savefig(l2_filename)
@@ -174,6 +205,7 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, eval_env_name
     #low, high = ax.get_ylim()
     #if low > 0:
         #ax.set_ylim(bottom=0.0)
+    crop_early_shift(ax, "normal")
 
     loss_filename = os.path.join(summary_plot_dir, "loss.png")
     loss_fig.savefig(loss_filename)
@@ -212,6 +244,7 @@ def write_final_plots(log_dir, summary_plot_dir, total_episodes, eval_env_names)
     ax.set_ylabel('L2 error')
     ax.grid(True)
     ax.set_yscale('log')
+    crop_early_shift(ax, "normal")
 
     l2_filename = os.path.join(summary_plot_dir, "final_l2.png")
     l2_fig.savefig(l2_filename)
