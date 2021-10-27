@@ -200,7 +200,7 @@ def main():
     parser.add_argument('--output-mode', '--output_mode', default=['plot'], nargs='+',
                         help="Type of output from the test. Default 'plot' creates the usual plot"
                         + " files. 'csv' puts the data that would be used for a plot in a csv"
-                        + " file. CURRENTLY 'csv' IS NOT IMPLEMENTED FOR ALL OUTPUTS."
+                        + " file. Currently 'csv' is not implemented for evolution plots."
                         + " Multiple modes can be used at once, e.g. --output-mode plot csv.")
     parser.add_argument('--repeat', type=str, default=None,
                         help="Load all of the parameters from a previous test's meta file to run a"

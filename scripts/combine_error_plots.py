@@ -19,8 +19,8 @@ def main():
             help="CSV files containing state data, where the error is computed"
             + " as the absolute difference between each pair. Specify multiple pairs"
             + " with --diff FILEA1 FILEB1 --diff FILEA2 FILEB2.")
-    parser.add_argument("--labels", type=str, nargs='+', default=None,
-            help="Labels for each error. By default, no labels are used.")
+    parser.add_argument("--labels", type=str, nargs='+', required=True,
+            help="Labels for each error.")
     parser.add_argument("--title", type=str, default=None,
             help="Title to add to the plot. By default, no title is added.")
     parser.add_argument("--output", "-o", type=str, required=True,
