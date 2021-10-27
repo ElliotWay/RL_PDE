@@ -304,8 +304,7 @@ def main():
             print("Reward mode switched to 'full' instead of 'one-step' for convergence plots.")
             env_args.reward_mode = env_args.reward_mode.replace('one-step', 'full')
         if dims == 1:
-            CONVERGENCE_PLOT_GRID_RANGE = [32, 64, 128]
-            #CONVERGENCE_PLOT_GRID_RANGE = [64, 81, 108, 128, 144, 192, 256]
+            CONVERGENCE_PLOT_GRID_RANGE = [64, 81, 108, 128, 144, 192, 256]
             #CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]#, 1024, 2048, 4096, 8192]
             #CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512, 1024, 2048, 4096, 8192]
             #CONVERGENCE_PLOT_GRID_RANGE = (2**np.linspace(6.0, 8.0, 50)).astype(np.int)
