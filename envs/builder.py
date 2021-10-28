@@ -2,7 +2,7 @@ import argparse
 import sys
 import re
 
-from util.misc import positive_int, nonnegative_float, positive_float, float_dict
+from util.argparse import positive_int, nonnegative_float, positive_float, float_dict
 from envs.abstract_pde_env import AbstractPDEEnv
 from envs import WENOBurgersEnv, SplitFluxBurgersEnv, FluxBurgersEnv
 from envs.burgers_2d_env import WENOBurgers2DEnv
