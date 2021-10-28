@@ -220,6 +220,10 @@ def soft_link_directories(dir_name, link_name, safe=False):
     Works on both Windows and Posix. The requirement that this link only directories, not files, is
     part of a restriction from Windows.
 
+    This is not thread-safe when safe=False. If safe=True, the return code may include errors
+    caused by other threads/processes calling this function with the same link_name,
+    but it will never raise an exeption.
+
     Parameters
     ----------
     dir_name : str
@@ -244,6 +248,10 @@ def soft_link_directories(dir_name, link_name, safe=False):
                 os.unlink(link_name)
             os.symlink(dir_name, link_name, target_is_directory=True)
         except OSError as e:
+            # One reason you can end up here is if another thread creates the same symlink just
+            # after we've unlinked the old one. Generally for this code base, if we're linking to
+            # the same file, we don't actually care about the link, so it doesn't matter that we
+            # just return the error code and let it go.
             if not safe:
                 raise
             else:

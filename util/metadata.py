@@ -282,6 +282,8 @@ def load_to_namespace(meta_filename, arg_manager, ignore_list=[], override_args=
                     continue
                 if arg == "fixed_timesteps":
                     continue
+                if arg == "output_mode":
+                    continue
                 arg = "--" + arg
                 arg_names = [arg]
                 # Allow for arguments with - instead of _.
@@ -302,6 +304,12 @@ def load_to_namespace(meta_filename, arg_manager, ignore_list=[], override_args=
                         help="Use a memoized solution to save time. Enabled by default. See --no-memo.")
     no_default_parser.add_argument('--no-memo', dest='memoize', action='store_false', default=None,
                         help="Do not use a memoized solution.")
+    if 'output_mode' in args:
+        no_default_parser.add_argument('--output-mode', '--output_mode', default=['plot'], nargs='+',
+                            help="Type of output from the test. Default 'plot' creates the usual plot"
+                            + " files. 'csv' puts the data that would be used for a plot in a csv"
+                            + " file. CURRENTLY 'csv' IS NOT IMPLEMENTED FOR ALL OUTPUTS."
+                            + " Multiple modes can be used at once, e.g. --output-mode plot csv.")
     no_default_parser.add_argument('-y', '--y', default=False, action='store_true',
                         help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
     no_default_parser.add_argument('-n', '--n', default=False, action='store_true',
@@ -322,7 +330,9 @@ def load_to_namespace(meta_filename, arg_manager, ignore_list=[], override_args=
                 + " such as changing --nx to --num-cells. This will assume the defaults,\n"
                 + " which is usually the right behavior.\n"
                 + " * Boolean parameters that are not default false flags will cause problems.\n"
-                + " They need to be handled explicitly.")
+                + " They need to be handled explicitly."
+                + " * Similarly, parameters with nargs>1 will cause problems.\n"
+                + " They must also be handled explicitly.")
 
     meta_dict = load_meta_file(meta_filename)
     if meta_dict['init_params'] != 'None':  # recover dictionary type from strings like 'a=0, b=1'

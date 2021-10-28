@@ -180,7 +180,7 @@ class Plottable1DEnv(AbstractPDEEnv):
         csv_file = open(filename, 'w')
 
         # Write column headers.
-        if timestep is None:
+        if location is None:
             csv_file.write('x')
         elif self.C is None:
             csv_file.write('t')
@@ -314,13 +314,9 @@ class Plottable1DEnv(AbstractPDEEnv):
                     weno_state_history = weno_state_history[:, timestep, :]
 
                 if title is None:
-                    if self.C is None:
-                        actual_time = timestep * self.fixed_step
-                        title = ("{} at t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(
-                                error_or_state, actual_time, timestep)
-                    else:
-                        # TODO get time with variable timesteps?
-                        title = "{} at step {:0" + str(self._step_precision) + "d}".format(error_or_state, timestep)
+                    actual_time = self.timestep_history[timestep]
+                    title = ("{} at t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(
+                            error_or_state, actual_time, timestep)
                 if suffix is None:
                     suffix = ("_step{:0" + str(self._step_precision) + "}").format(timestep)
 
@@ -632,6 +628,107 @@ class Plottable1DEnv(AbstractPDEEnv):
         plt.close(fig)
         return filename
 
+    def save_action(self, timestep=None, location=None, suffix=None):
+        """
+        Save action data to a CSV file.
+
+        Either the timestep parameter or the location parameter can be specified, but not both.
+        By default, the most recent timestep is used.
+
+        This requires actions to be recorded in self.action_history in the subclass's step function.
+
+        Parameters
+        ----------
+        timestep : int
+            Timestep at which to plot actions. By default, use the most recent timestep.
+        location : int
+            Index of location at which to plot actions.
+        suffix : string
+            The plot will be saved to burgers_action{suffix}.png. By default, the timestep/location
+            is used for the suffix.
+      
+        """
+        self.set_colors()
+
+        assert (timestep is None or location is None), "Can't save action at both a timestep and a location."
+
+        action_history = np.array(self.action_history)
+
+        if 'Euler' in str(self):
+            action_dimensions = np.prod(list(self.action_space.shape)[2:])
+            vector_dimensions = self.action_space.shape[0]
+            eqn_type = 'euler'
+            ylabels = ['rho', 'u', 'p', 'e']
+        else:  # Burgers
+            action_dimensions = np.prod(list(self.action_space.shape)[1:])
+            vector_dimensions = 1
+            action_history = np.expand_dims(action_history, 1)
+            eqn_type = 'burgers'
+            ylabels = ['u']
+
+        new_shape = (action_history.shape[0], action_history.shape[1], action_history.shape[2], action_dimensions)
+        action_history = action_history.reshape(new_shape)
+
+        # If plotting actions at a timestep, need to transpose location to the last dimension.
+        # If plotting actions at a location, need to transpose time to the last dimension.
+        if location is not None:
+            action_history = action_history[:, :, location, :].transpose()
+
+            actual_location = self.grid.x[location] - self.grid.dx/2
+        else:
+            if timestep is None:
+                timestep = len(action_history) - 1
+            action_history = action_history[timestep, :, :, :].transpose()
+
+        if location is None:
+            x_values = self.grid.inter_x[self.ng:-self.ng]
+        else:
+            if self.C is None:
+                x_values = self.fixed_step * np.arange(len(state_history))
+            else:
+                # Need to record time values with variable timesteps.
+                x_values = np.arange(len(state_history))
+
+        log_dir = logger.get_dir()
+        if suffix is None:
+            if location is not None:
+                suffix = ("_step{:0" + str(self._cell_index_precision) + "}").format(location)
+            else:
+                suffix = ("_step{:0" + str(self._step_precision) + "}").format(timestep)
+        filename = f"action{suffix}.csv"
+        filename = os.path.join(log_dir, filename)
+        csv_file = open(filename, 'w')
+
+        # Write column headers.
+        if location is None:
+            csv_file.write('x')
+        elif self.C is None:
+            csv_file.write('t')
+        else:
+            csv_file.write('timestep')
+        if self._action_labels is None:
+            action_labels = [f"$w_{i}$" for i in range(action_dimensions)]
+        else:
+            action_labels = self._action_labels
+        for vector_part_label in ylabels:
+            for action_part_label in self._action_labels:
+                sep_char = '@' # In case labels have TeX in them, the @ is rarely used.
+                assert sep_char not in vector_part_label and sep_char not in action_part_label
+                action_label = f"{vector_part_label}{sep_char}{action_part_label}"
+                csv_file.write("," + action_label)
+        csv_file.write('\n')
+
+        # Write data.
+        for x_index, x in enumerate(x_values):
+            csv_file.write(str(x))
+            for vector_index in range(vector_dimensions):
+                for action_index in range(action_dimensions):
+                    csv_file.write("," + str(action_history[action_index, x_index, vector_index]))
+            csv_file.write('\n')
+        csv_file.close()
+        print('Saved data to ' + filename + '.')
+        return filename
+
     def plot_action(self, timestep=None, location=None, suffix=None, title=None,
                     fixed_axes=False, no_borders=False, **kwargs):
         """
@@ -668,10 +765,14 @@ class Plottable1DEnv(AbstractPDEEnv):
         if 'Euler' in str(self):
             action_dimensions = np.prod(list(self.action_space.shape)[2:])
             vector_dimensions = self.action_space.shape[0]
+            eqn_type = 'euler'
+            ylabels = ['rho', 'u', 'p', 'e']
         else:  # Burgers
             action_dimensions = np.prod(list(self.action_space.shape)[1:])
             vector_dimensions = 1
             action_history = np.expand_dims(action_history, 1)
+            eqn_type = 'burgers'
+            ylabels = ['u']
 
         vertical_size = 5 * vector_dimensions
         horizontal_size = 4 * action_dimensions
@@ -719,24 +820,27 @@ class Plottable1DEnv(AbstractPDEEnv):
                 weno_action_history = weno_action_history[timestep, :, :, :].transpose()
 
             if title is None:
-                if self.C is None:
-                    actual_time = timestep * self.fixed_step
-                    fig.suptitle("actions at t = {:.4} (step {})".format(actual_time, timestep))
-                else:
-                    # TODO get time with variable timesteps.
-                    fig.suptitle("actions at step {}".format(actual_time, timestep))
+                actual_time = self.timestep_history[timestep]
+                fig.suptitle("actions at t = {:.4} (step {})".format(actual_time, timestep))
             else:
                 fig.suptitle(title)
 
-        real_x = self.grid.inter_x[self.ng:-self.ng]
+        if location is None:
+            x_values = self.grid.inter_x[self.ng:-self.ng]
+        else:
+            if self.C is None:
+                x_values = self.fixed_step * np.arange(len(state_history))
+            else:
+                # Need to record time values with variable timesteps.
+                x_values = np.arange(len(state_history))
 
         for i in range(vector_dimensions):
             for j in range(action_dimensions):
                 ax = axes[i][j]
 
                 if weno_action_history is not None:
-                    ax.plot(real_x, weno_action_history[j, :, i], c=weno_color, linestyle='-', label="WENO")
-                ax.plot(real_x, action_history[j, :, i], c=self.agent_color, linestyle='-', label="RL")
+                    ax.plot(x_values, weno_action_history[j, :, i], c=weno_color, linestyle='-', label="WENO")
+                ax.plot(x_values, action_history[j, :, i], c=self.agent_color, linestyle='-', label="RL")
 
                 if no_borders:
                     ax.set_xmargin(0.0)
@@ -756,7 +860,7 @@ class Plottable1DEnv(AbstractPDEEnv):
                 ax.set_title(self._action_labels[id])
 
         for id, ax in enumerate(axes[:, 0]):
-            ax.set_ylabel(f'Action Dimension {id}')
+            ax.set_ylabel(f"{ylabels[id]} actions")
 
         fig.tight_layout()
 
@@ -970,13 +1074,9 @@ class Plottable2DEnv(AbstractPDEEnv):
                     solution_state_history = self.solution.get_state_history().copy()[timestep, :]
 
             if title is None:
-                if self.C is None:
-                    actual_time = timestep * self.fixed_step
-                    title = ("{} at t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(
-                            error_or_state, actual_time, timestep)
-                else:
-                    # TODO get time with variable timesteps?
-                    title = "{} at step {:0" + str(self._step_precision) + "d}".format(error_or_state, timestep)
+                actual_time = self.timestep_history[timestep]
+                title = ("{} at t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(
+                        error_or_state, actual_time, timestep)
             if suffix is None:
                 suffix = ("_step{:0" + str(self._step_precision) + "}").format(timestep)
 
@@ -1044,13 +1144,9 @@ class Plottable2DEnv(AbstractPDEEnv):
 
             state = state_history[timestep]
 
-            if self.C is None:
-                actual_time = timestep * self.fixed_step
-                time_str = (" t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(
-                                actual_time, timestep)
-            else:
-                # TODO get time with variable timesteps?
-                time_str = " step {:0" + str(self._step_precision) + "d}".format(timestep)
+            actual_time = self.timestep_history[timestep]
+            time_str = (" t = {:.4f} (step {:0" + str(self._step_precision) + "d})").format(
+                            actual_time, timestep)
             title = base_title + time_str
 
             if not show_ghost and (not override_history or history_includes_ghost):

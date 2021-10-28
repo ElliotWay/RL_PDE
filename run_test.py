@@ -76,6 +76,8 @@ def do_test(env, agent, args):
         if (args.animate or step == next_update + 1) and args.plot_actions:
             if 'plot' in args.output_mode:
                 env.plot_action(**render_args)
+            if 'csv' in args.output_mode:
+                env.save_action()
         if step == next_update + 1:
             update_count += 1
             next_update = int(args.e.ep_length * (update_count / NUM_UPDATES))
@@ -97,6 +99,9 @@ def do_test(env, agent, args):
         env.save_state()
         if args.plot_error:
             env.save_state(use_error=True)
+        if args.plot_actions:
+            env.save_action()
+
     print("Test finished in {}.".format(human_readable_time_delta(time.time() - start_time)))
  
     if env.dimensions == 1:
@@ -195,7 +200,7 @@ def main():
     parser.add_argument('--output-mode', '--output_mode', default=['plot'], nargs='+',
                         help="Type of output from the test. Default 'plot' creates the usual plot"
                         + " files. 'csv' puts the data that would be used for a plot in a csv"
-                        + " file. CURRENTLY 'csv' IS NOT IMPLEMENTED FOR ALL OUTPUTS."
+                        + " file. Currently 'csv' is not implemented for evolution plots."
                         + " Multiple modes can be used at once, e.g. --output-mode plot csv.")
     parser.add_argument('--repeat', type=str, default=None,
                         help="Load all of the parameters from a previous test's meta file to run a"
@@ -299,8 +304,7 @@ def main():
             print("Reward mode switched to 'full' instead of 'one-step' for convergence plots.")
             env_args.reward_mode = env_args.reward_mode.replace('one-step', 'full')
         if dims == 1:
-            CONVERGENCE_PLOT_GRID_RANGE = [32, 64, 128]
-            #CONVERGENCE_PLOT_GRID_RANGE = [64, 81, 108, 128, 144, 192, 256]
+            CONVERGENCE_PLOT_GRID_RANGE = [64, 81, 108, 128, 144, 192, 256]
             #CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]#, 1024, 2048, 4096, 8192]
             #CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512, 1024, 2048, 4096, 8192]
             #CONVERGENCE_PLOT_GRID_RANGE = (2**np.linspace(6.0, 8.0, 50)).astype(np.int)
@@ -379,7 +383,7 @@ def main():
 
     # Create symlink for convenience. (Do this after loading the agent in case we are loading from last.)
     log_link_name = "last"
-    error = soft_link_directories(args.log_dir, log_link_name)
+    error = soft_link_directories(args.log_dir, log_link_name, safe=True)
     if error:
         print("Failed to create \"last\" symlink. Continuing without it.")
 

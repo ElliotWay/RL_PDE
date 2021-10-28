@@ -125,6 +125,94 @@ def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels
     print('Saved plot to ' + filename + '.')
     plt.close()
 
+def action_plot(x_vals, action_vals, x_label, labels, log_dir, name="actions.png", title=None,
+        vector_parts=None, action_parts=None, kwargs_list=None):
+    """
+    Create a plot of actions.
+
+    Intended to compare actions from different configurations, such as different agents.
+    Can handle x as the horizontal axis or time.
+
+    The number of action parts must be the same for each vector component.
+
+    Parameters
+    ----------
+    x_vals : [float] OR [[float]]
+        The locations (or times) for each action. Either a single list for every configuration, or
+        a list of different lists for each configuration.
+    action_vals : [[[[float]]]]
+        The actions at each x for each configuration.
+        Axes are [configuration, vector, action_part, x].
+    x_label : str
+        Label for the horizontal dimension.
+    labels : [str]
+        The label to apply to each configuration.
+    log_dir : str
+        Path of the directory to save the convergence plot to.
+    name : str
+        Name of the file to save into log_dir. 'error_over_x.png' by default.
+    title : str
+        Title to give to the plot. No title by default.
+    vector_parts : str
+        Name of each part of the vector. [u1, u2, ...] by default.
+    action_parts : str
+        Name of each action part. [w1, w2, ...] by default.
+    kwargs_list : [dict]
+        Kwargs passed to plot(), e.g. color and linestyle, for each action configuration.
+    """
+
+    try:
+        iterator = iter(x_vals[0])
+    except TypeError:
+        # broadcast_to creates a view that looks like the array repeated multiple times,
+        # but uses the same space as the original array.
+        x_vals = np.broadcast_to(x_vals, (len(action_vals), len(x_vals)))
+
+    vector_dimensions = len(action_vals[0])
+    action_dimensions = len(action_vals[0][0])
+
+    if vector_parts is None:
+        vector_parts = [f"$u_{i}$" for i in range(vector_dimensions)]
+    if action_parts is None:
+        action_parts = [f"$w_{i}$" for i in range(action_dimensions)]
+    if kwargs_list is None:
+        kwargs_list = [{}] * len(action_vals)
+
+    vertical_size = 5 * vector_dimensions
+    horizontal_size = 4 * action_dimensions
+    fig, axes = plt.subplots(vector_dimensions, action_dimensions, sharex=True, sharey=True,
+                             figsize=(horizontal_size, vertical_size), squeeze=False)
+
+    # x values are [config, x].
+    # Actions are [config, vector, action_part, x].
+    # Subplot axes are [vector, action_part].
+    for x, action, label, kwargs in zip(x_vals, action_vals, labels, kwargs_list):
+        for vector_actions, vector_axes in zip(action, axes):
+            for action_part, ax in zip(vector_actions, vector_axes):
+                ax.plot(x, action_part, label=str(label), **kwargs)
+
+    # Only put the x label on the bottom row of plots
+    # and the action part title on the top row.
+    for action_index in range(action_dimensions):
+        axes[-1][action_index].set_xlabel(x_label)
+        axes[0][action_index].set_title(action_parts[action_index])
+
+    # And the vector part label on the left column row.
+    for vector_index in range(vector_dimensions):
+        axes[vector_index][0].set_ylabel(vector_parts[vector_index])
+
+    # And the legend in only the top right plot.
+    axes[-1][-1].legend()
+
+    if title is not None:
+        fig.suptitle(title)
+
+    fig.tight_layout()
+
+    filename = os.path.join(log_dir, name)
+    plt.savefig(filename)
+    print("Saved plot to " + filename + ".")
+    plt.close(fig)
 
 def error_plot(x_vals, error_vals, labels, log_dir, name="error_over_x.png", title=None,
         vector_parts=None):
@@ -133,6 +221,8 @@ def error_plot(x_vals, error_vals, labels, log_dir, name="error_over_x.png", tit
 
     Intended to compare between the error of many configurations, e.g. the different sizes in a
     convergence plot, or using different agents.
+
+    The y axis (the error) will use log scaling.
 
     The data must be 1 dimensional, though it may be useful to plot slices of higher dimensional
     data.
@@ -188,7 +278,6 @@ def error_plot(x_vals, error_vals, labels, log_dir, name="error_over_x.png", tit
         scalar_mappable = matplotlib.cm.ScalarMappable(norm=normalize, cmap=color_map)
         scalar_mappable.set_array(labels)
 
-
     for i in range(vec_len):
         ax[i][0].set_xlabel("$x$")
         if vector_parts is None:
@@ -215,5 +304,5 @@ def error_plot(x_vals, error_vals, labels, log_dir, name="error_over_x.png", tit
     filename = os.path.join(log_dir, name)
     plt.savefig(filename)
     print("Saved plot to " + filename + ".")
-    plt.close()
+    plt.close(fig)
 
