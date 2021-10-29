@@ -267,13 +267,13 @@ def train(env, eval_envs, emi, args):
 
             ep_string = ("{:0" + str(ep_precision) + "}").format(ep)
 
-            if isinstance(emi, OneDimensionalStencil):
-                # The action snapshot only makes sense when the underlying policy can be applied to
-                # 1D environments of arbitrary length, e.g. if it is applied to each 1D stencil in
-                # an environment.
-                action_snapshot.save_action_snapshot(
-                        agent=emi.get_1D_policy(), weno_agent=weno_agent,
-                        suffix="_ep_" + ep_string)
+            # if isinstance(emi, OneDimensionalStencil):
+            #     # The action snapshot only makes sense when the underlying policy can be applied to
+            #     # 1D environments of arbitrary length, e.g. if it is applied to each 1D stencil in
+            #     # an environment.
+            #     action_snapshot.save_action_snapshot(
+            #             agent=emi.get_1D_policy(), weno_agent=weno_agent,
+            #             suffix="_ep_" + ep_string)
 
             # Run eval episodes.
             eval_rewards = []

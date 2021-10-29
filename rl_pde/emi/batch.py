@@ -73,17 +73,18 @@ class UnbatchedPolicy(Policy):
         if obs.shape[1:] == self.original_obs_shape:
             vec_obs = True
         else:
-            assert obs.shape[1:] == self.original_obs_shape[1:], \
+            assert obs.shape[2:] == self.original_obs_shape[2:], \
                     ("original obs shape {} does not match new shape {}"
                             .format(obs.shape, self.original_obs_shape))
             vec_obs = False
+        obs = obs.transpose([1, 0, 2, 3])
         obs = obs.reshape((len(obs),) + self.unbatched_obs_shape)
         actions, _ = self._model.predict(obs, deterministic=deterministic)
         
         if vec_obs:
-            actions = actions.reshape((-1,) + self.original_action_shape)
+            actions = actions.reshape((-1,) + self.original_action_shape).transpose([1, 0, 2, 3])
         else:
-            actions = actions.reshape((len(obs),) + self.original_action_shape[1:])
+            actions = actions.reshape((len(obs),) + self.original_action_shape[1:]).transpose([1, 0, 2, 3])
 
         return actions, None
 

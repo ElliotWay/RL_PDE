@@ -25,8 +25,9 @@ class VectorFakeEnv(gym.Env):
         vec_len = real_env.vec_length
         assert vec_len > 1
 
-        local_action_shape = real_env.action_space.shape[(dims + 1):]  # 0th is vec_length dimension, plus dims
-        local_obs_shape = real_env.observation_space.shape[(dims + 1):]
+        local_action_shape = (real_env.action_space.shape[0],) + real_env.action_space.shape[
+                                                                 (dims + 1):]  # 0th is vec_length dimension, plus dims
+        local_obs_shape = (real_env.observation_space.shape[0],) + real_env.observation_space.shape[(dims + 1):]
 
         new_action_shape = (2,) + local_action_shape
         action_space_cls = type(real_env.action_space)

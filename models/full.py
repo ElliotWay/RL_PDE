@@ -600,13 +600,14 @@ class IntegrateCell(Layer):
         real_state = state
 
         all_dims = real_state.get_shape().ndims
+        print('all_dims', all_dims)
         # - 2 for the batch and vector dims.
         spatial_dims = all_dims - 2
         # outer_dims squeezes the vector dimension.
         if real_state.get_shape()[1] == 1:
             outer_dims = all_dims - 1
         else:
-            outer_dims = all_dims
+            outer_dims = all_dims - 1
 
         # Use tf.map_fn to apply function across every element in the batch.
         tuple_type = (real_state.dtype,) * spatial_dims
@@ -615,11 +616,15 @@ class IntegrateCell(Layer):
 
         rl_action = []
         for rl_state_part in rl_state:
+            rl_state_part = tf.transpose(rl_state_part, perm=[0, 2, 1, 3, 4])  # (?, 3, 129, 2, 3)
+            print('rl_state_part', rl_state_part)
             # The policy expects a batch so we don't need to use tf.map_fn;
             # however, it expects batches of INDIVIDUAL states, not every location at once, so we need
             # to combine the batch, vector, and location axes first (and then reshape the actions back).
             rl_state_shape = rl_state_part.shape.as_list()
+            print('rl_state_shape', rl_state_shape)  # [None, 129, 3, 2, 3]
             new_state_shape = [-1,] + rl_state_shape[outer_dims:]
+            print('new_state_shape', new_state_shape)  # [-1, 3, 2, 3]
             reshaped_state = tf.reshape(rl_state_part, new_state_shape)
 
             #print("original shape:", rl_state_shape)
@@ -634,11 +639,14 @@ class IntegrateCell(Layer):
             # This loop is equivalent to ExtendAgent2D.
 
             shaped_action = self.policy_net(reshaped_state)
+            print('shaped_action', shaped_action)
 
             shaped_action_shape = shaped_action.shape.as_list()
             # Can't use rl_state_shape[:outer_dims] because rl_state_shape[0] is None; we need -1.
             rl_action_shape = [-1,] + rl_state_shape[1:outer_dims] + shaped_action_shape[1:]
+            print('rl_action_shape', rl_action_shape)
             rl_action_part = tf.reshape(shaped_action, rl_action_shape)
+            rl_action_part = tf.transpose(rl_action_part, perm=[0, 2, 1, 3, 4])
             rl_action.append(rl_action_part)
         rl_action = tuple(rl_action)
 

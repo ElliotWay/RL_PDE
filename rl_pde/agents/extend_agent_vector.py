@@ -14,11 +14,12 @@ class ExtendAgentVector(Policy):
         self.sub_agent = sub_agent
 
     def predict(self, state, deterministic=False):
-        actions = []
-        for index in range(state.shape[1]):
-            state_slice = state[:, index]
-            action, _ = self.sub_agent.predict(state_slice, deterministic=deterministic)
-            actions.append(action)
-        actions = np.stack(actions, axis=1)
+        # actions = []
+        # for index in range(state.shape[1]):
+        #     state_slice = state[:, index]
+        #     action, _ = self.sub_agent.predict(state_slice, deterministic=deterministic)
+        #     actions.append(action)
+        # actions = np.stack(actions, axis=1)
+        actions, _ = self.sub_agent.predict(state, deterministic=deterministic)
 
         return actions, None

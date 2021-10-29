@@ -109,6 +109,7 @@ class PolicyNet(Layer):
         flat_action = self.output_layer(output)
 
         action = tf.reshape(flat_action, (-1,) + self.action_shape)
+        print('action:', action.shape)
 
         return action
 
