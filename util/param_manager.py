@@ -274,8 +274,6 @@ class ArgTreeManager:
         args : nested Namespace
             The loaded nested namespace, self.args.
         """
-        raise Exception("I never actually used or tested this function. It should work, but check"
-                            + " for bugs.")
         self.argparser = None
         self._parser_constructor = None
 
