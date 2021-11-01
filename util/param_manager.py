@@ -87,6 +87,22 @@ class ArgTreeManager:
         else:
             return self.explicit[arg_name]
 
+    def set_explicit(self, *params, is_explicit=True):
+        """
+        Set whether a parameter is considered explicitly specified.
+        You might do this if, for example, a different parameter is explicitly specified that
+        requires other defaults; those defaults are also explicitly specified, in a way.
+
+        Multiple parameter names may be passed.
+        """
+        for param in params:
+            if '.' in param:
+                child_name, _, rest_of_name = param.partition('.')
+                self.children[child_name].set_explicit(rest_of_name, is_explicit=is_explicit)
+            else:
+                self.explicit[param] = is_explicit
+
+
     def parse_known_args(self, arg_string=None, parent_args=None):
         if arg_string is None:
             arg_string = sys.argv[1:]

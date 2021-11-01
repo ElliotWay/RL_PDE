@@ -253,6 +253,11 @@ def main():
             args.e.init_type = 'gaussian'
             args.e.time_max = 0.05
             args.e.C = 0.5
+            arg_manager.set_explicit('e.init_type', 'e.time_max', 'e.C')
+            # The old way to mark explicit. Remove if we don't need backwards compatability with
+            # old meta files.
+            sys.argv += ['--init-type', 'gaussian', '--time-max', '0.05', '--C', '0.5']
+
 
     env_builder.set_contingent_env_defaults(args, args.e, test=True)
     model_builder.set_contingent_model_defaults(args, args.m, test=True)

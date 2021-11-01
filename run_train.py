@@ -26,6 +26,7 @@ from rl_pde.emi import DimensionalAdapterEMI, VectorAdapterEMI
 from envs import builder as env_builder
 from models import builder as model_builder
 from util import action_snapshot
+from util import metadata
 from util.metadata import MetaFile
 from util.param_manager import ArgTreeManager
 from util.function_dict import numpy_fn
