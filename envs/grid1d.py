@@ -131,7 +131,7 @@ class Burgers1DGrid(GridBase):
             self.init_params.update(custom_params)
             self.space[0, self.ng:-self.ng] = new_u
 
-        elif self.init_type == "smooth_sine":
+        elif self.init_type == "smooth_sine" or self.init_type == "smooth_sine_shift":
             if boundary is None:
                 self.boundary = "periodic"
             if 'A' in params:
@@ -139,7 +139,16 @@ class Burgers1DGrid(GridBase):
             else:
                 A = float(1.0 / (2.0 * np.pi * 0.1))
             self.init_params['A'] = A
-            self.space[0] = A*np.sin(2 * np.pi * self.x)
+            if self.init_type == "smooth_sine_shift":
+                if 'phi' in params:
+                    phi = params['phi']
+                else:
+                                    # Using a prime number of points feels like the right idea.
+                    phi = 2 * np.pi * np.random.choice(np.linspace(0.0, 1.0, 23, endpoint=False))
+                self.init_params['phi'] = phi
+            else:
+                phi = 0.0
+            self.space[0] = A*np.sin(2 * np.pi * self.x + phi)
 
         elif self.init_type == "smooth_sine_outflow":
             self.boundary = "outflow"
