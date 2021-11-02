@@ -214,7 +214,7 @@ class OneStepSolution(SolutionBase):
         return getattr(self.inner_solution, attr)
 
 #TODO Handle ND analytical solutions. (Also non-Burgers solutions?)
-available_analytical_solutions = ["smooth_sine", "smooth_rare", "accelshock", "gaussian"]
+available_analytical_solutions = ["smooth_sine", "smooth_sine_shift", "smooth_rare", "accelshock", "gaussian"]
 #TODO account for xmin, xmax in case they're not 0 and 1.
 class AnalyticalSolution(SolutionBase):
     def __init__(self, nx, ng, xmin, xmax, vec_len=1, init_type="schedule"):
@@ -233,9 +233,14 @@ class AnalyticalSolution(SolutionBase):
 
         x_values = self.grid.real_x
 
-        if init_type in ["smooth_sine", "smooth_rare"]:
+        if init_type in ["smooth_sine", "smooth_rare", "smooth_sine_shift"]:
             if init_type == "smooth_sine":
-                iterate_func = lambda old_u, time: params['A'] * np.sin(2 * np.pi * (x_values - old_u * time))
+                iterate_func = (lambda old_u, time:
+                        params['A'] * np.sin(2 * np.pi * (x_values - old_u * time)))
+            if init_type == "smooth_sine_shift":
+                iterate_func = (lambda old_u, time:
+                        params['A'] * np.sin(2 * np.pi * (x_values - old_u * time)
+                        + params['phi']))
             elif init_type == "smooth_rare":
                 iterate_func = lambda old_u, time: params['A'] * np.tanh(params['k'] * (x_values - 0.5 - old_u*time))
 
@@ -270,6 +275,8 @@ class AnalyticalSolution(SolutionBase):
 
             updated_u = [initial_gaussian(brentq(residual, -2, 2, args=(x,))) for x in x_values]
             self.grid.set(updated_u)
+        else:
+            raise Exception()
 
 
     def _reset(self, params):
