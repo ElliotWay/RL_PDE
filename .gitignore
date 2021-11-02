@@ -19,3 +19,5 @@ sweeps/
 sandbox/
 # Directory of links to each source directory. Useful with grep.
 all_src/
+# Symlinks to important trained agents.
+agents/
