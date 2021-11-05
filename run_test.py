@@ -252,17 +252,30 @@ def main():
 
     # Convergence plots have different defaults.
     if args.convergence_plot is not None:
-        args.e.rk = 'rk4'
-        args.e.fixed_timesteps = False
         if not arg_manager.check_explicit('e.init_type'):
             args.e.init_type = 'gaussian'
             args.e.time_max = 0.05
             args.e.C = 0.5
+            print("Convergence Plot default environment loaded.")
+            print("(Gaussian, t_max = 0.05, C = 0.5)")
+            # Mark these arguments as explicitly specified so cannot be overridden
+            # by a loaded agent.
+            # (Do we need to do this? We do for the old system that loads all the parameters, but
+            # the new system only loads the model parameters and a few others, not the environment
+            # parameters. Does it make more sense to leave them as implicit defaults so they can be
+            # loaded by an intentionally loaded environment file?)
             arg_manager.set_explicit('e.init_type', 'e.time_max', 'e.C')
             # The old way to mark explicit. Remove if we don't need backwards compatability with
             # old meta files.
             sys.argv += ['--init-type', 'gaussian', '--time-max', '0.05', '--C', '0.5']
-
+        if not arg_manager.check_explicit('e.rk'):
+            args.e.rk = 'rk4'
+            arg_manager.set_explicit('e.rk')
+            sys.argv += ['--rk', '4']
+        if not arg_manager.check_explicit('e.fixed_timesteps'):
+            args.e.fixed_timesteps = False
+            arg_manager.set_explicit('e.fixed_timesteps')
+            sys.argv += ['--variable-timesteps']
 
     env_builder.set_contingent_env_defaults(args, args.e, test=True)
     model_builder.set_contingent_model_defaults(args, args.m, test=True)
