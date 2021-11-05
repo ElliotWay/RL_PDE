@@ -15,8 +15,8 @@ def generate_polynomial(order, grid_sizes, comparison_error):
     grid_sizes : [int]
         The x values on which to plot the polynomial curve.
     comparison_error : [float]
-        The error values for a real error plot. The polynomial curve will be scaled and
-        adjusted to be near the real error. comparison_error should have the same size as
+        Real error values for an error plot. The polynomial curve will be 
+        adjusted to be near the comparison error. comparison_error should have the same size as
         grid_sizes.
 
     Returns
@@ -29,9 +29,11 @@ def generate_polynomial(order, grid_sizes, comparison_error):
     values = (1.0 / grid_sizes) ** order
 
     # Scale so it intersects around the middle of the comparison error.
-    midpoint_error = np.sqrt((max(comparison_error) * min(comparison_error)))
-    midpoint_size = np.sqrt((max(grid_sizes) * min(grid_sizes)))
-    values = midpoint_error * (midpoint_size ** order) * values
+    #error_coord = np.sqrt((max(comparison_error) * min(comparison_error)))
+    #size_coord = np.sqrt((max(grid_sizes) * min(grid_sizes)))
+    error_coord = comparison_error[0]
+    size_coord = grid_sizes[0]
+    values = error_coord * (size_coord ** order) * values
 
     label = r"$\mathcal{{O}}(\Delta x^{{{}}})$".format(order)
 
