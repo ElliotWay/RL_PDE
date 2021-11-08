@@ -266,7 +266,7 @@ class GlobalBackpropModel(GlobalModel):
                 included_boundaries.append(boundary)
                 index_dict[boundary] = indexes
                 feed_dict[self.init_state_ph_dict[boundary]] = initial_state[indexes]
-                feed_dict[self.final_analytical_state_ph_dict[boundary]] = solution_states[indexes]
+                feed_dict[self.final_analytical_state_ph_dict[boundary]] = solution_states[:, indexes]
                 #print("{} has initial state with shape {}".format(boundary,
                     #feed_dict[self.init_state_ph_dict[boundary]].shape))
                 #print("indexes are {}".format(indexes))
