@@ -422,7 +422,14 @@ def main():
             error = []
             x_vals = []
             error_vals = []
-            for env, env_args in zip(conv_envs, conv_env_args):
+
+            # Iterate by index instead of the more Pythonic loop so that we can garbage collect
+            # the elements in the list after they were used.
+            #for env, env_args in zip(conv_envs, conv_env_args):
+            for env_index in range(len(conv_envs)):
+                env = conv_envs[env_index]
+                env_args = conv_env_args[env_index]
+
                 nx = env_args.num_cells[0] if dims > 1 else env_args.num_cells
 
                 sub_dir = os.path.join(args.log_dir, "nx_{}".format(nx))
@@ -445,10 +452,11 @@ def main():
 
                 # Some of these trajectories can get big, so clean them out when we don't need
                 # them.
-                #TODO Make sure it's actually freeing them.
                 env.close()
+                conv_envs[env_index] = None
+                env = None
                 gc.collect()
-            envs = []
+            conv_envs = []
 
             plots.convergence_plot(convergence_grid_range, error, args.log_dir)
             # Also log convergence data.
