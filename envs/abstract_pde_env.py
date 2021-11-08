@@ -245,6 +245,9 @@ class AbstractPDEEnv(gym.Env):
         elif self.rk_method is RKMethod.RK4:
             s, r, d = self.rk4_step(action)
             return s, r, d, {}
+        elif self.rk_method is RKMethod.DOP_RK8:
+            s, r, d = self.rk8_step(action)
+            return s, r, d, {}
 
         assert self.rk_method is RKMethod.EULER
 
@@ -323,6 +326,79 @@ class AbstractPDEEnv(gym.Env):
 
             self.rk_state = 1
             self.k1 = self.k2 = self.u_start = self.dt = None
+            return state, reward, done
+
+    def rk8_step(self, action):
+        """
+        Perform one substep in an 8th-order, 12-step Dormand-Price RK Method.
+
+        Note that this does not seem to work as intended. There must be an error or something I'm
+        missing. I had to reimplement some things to get this method to work in an RL environment.
+
+        You should call this function 12 times in successesion.
+        The first 11 calls will return the state after each substep.
+        The final call will return the state after the full RK8 step.
+        Regardless of the internal state, the action should always be based on the previously
+        returned state.
+        action and state are only recorded on the final call.
+
+        Returns
+        -------
+        state : ndarray
+            Either the state after the substep, or the state after the full step.
+        reward : ndarray
+            0.0 on all but the final call, the reward for each location on the final call.
+        done : bool
+            Whether this step ends the episode. Guaranteed to be False on all but the final call.
+
+
+        """
+        assert self.rk_method is RKMethod.DOP_RK8, "Wrong RK method."
+        assert not (np.isnan(action).any() if self.grid.ndim == 1 else \
+                any([np.isnan(a).any() for a in action])), "NaN detected in action."
+
+        if self.rk_state == 1:
+            self.u_start = np.array(self.grid.get_real())
+            self.dt = self.timestep()
+
+        # On stage 1, the action is for the current state. This assumes that the first row of
+        # the matrix is all 0s.
+        next_flux = self._rk_substep(action)
+
+        if not hasattr(self, 'rk_A'):
+            from scipy.integrate._ivp.rk import DOP853
+            self.stages = DOP853.n_stages
+            assert self.stages == 12
+            self.rk_A = DOP853.A
+            self.rk_B = DOP853.B
+            self.rk_C = None #DOP853.C If these are needed, there's a problem.
+                             # Our framework assumes the equation does not depend on time.
+            self.rk_storage = np.empty((self.stages,) +  next_flux.shape, dtype=next_flux.dtype)
+
+        self.rk_storage[self.rk_state - 1] = next_flux
+
+        if self.rk_state < self.stages:
+            stage_index = self.rk_state - 1
+            next_step = np.dot(np.moveaxis(self.rk_storage[:self.rk_state], 0, -1),
+                                    self.rk_A[stage_index, :self.rk_state])
+            next_state = self.u_start + self.dt * next_step
+
+            self.grid.set(next_state)
+            state = self._prep_state()
+
+            self.rk_state += 1
+            return state, np.zeros_like(action), False
+        else:
+            assert self.rk_state == self.stages
+            final_step = np.dot(np.moveaxis(self.rk_storage, 0, -1), self.rk_B)
+            final_state = self.u_start + self.dt * final_step
+
+            state, reward, done = self._finish_step(final_state, self.dt)
+
+            self.state_history.append(self.grid.get_full().copy())
+
+            self.rk_state = 1
+            self.u_start = self.dt = None
             return state, reward, done
 
     def rk4_step(self, action):

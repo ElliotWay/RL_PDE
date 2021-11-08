@@ -7,7 +7,11 @@ from util import plots
 from util.misc import soft_link_directories
 from util.argparse import ExtendAction
 
-ORDER_COLORS = [None, None, 'g', 'b', 'r', 'y', 'c', 'm']
+WENO_COLORS = [None, None, 'g', 'b', 'r', 'y', 'c', 'm']
+# Polynomial colors line up so that WENO color i is poly color 2i-1.
+# Even-indexed polynomial colors are the appropriate colors between the odd-indexed colors.
+POLY_COLORS = [None, 'grey', (0.4, 0.7, 0.0), 'g', 'c', 'b', 'm', 'r',
+        'tab:orange', 'y', (0.375, 0.75, 0.375), 'c', (0.375, 0.375, 0.75), 'm']
 
 class ExtendTupleAction(ExtendAction):
     def __init__(self, name, *args, **kwargs):
@@ -43,9 +47,11 @@ def main():
     parser.add_argument("--poly", type=int, action=ExtendTupleGen('poly'), dest='curves',
             help="Add a curve representing exact polynomial accuracy for comparison."
             + " The curve will be near the previous curve.")
-    parser.add_argument("--labels", type=str, nargs='+', default=None,
+    parser.add_argument("--labels", type=str, nargs='*', default=None,
             help="Labels for each file. By default, no labels are used."
-            + " Labels for WENO and polynomial curves should not be provided.")
+            + " Labels for WENO and polynomial curves use the default built-in labels so"
+            + " should not be provided. If only WENO and polynomial curves are plotted, indicate"
+            + " that labels should be added by using --labels with no arguments.")
     parser.add_argument("--output", "-o", type=str, required=True,
             help="Path to save the combined plot to. If an existing directory is passed,"
             + " the file will be saved to 'convergence.png' in that directory.")
@@ -81,19 +87,18 @@ def main():
             error_list = csv_df['l2_error']
             if args.labels is not None:
                 args.labels.insert(index, f"WENO, r={order}")
-            kwargs_list.append({'color': ORDER_COLORS[order], 'linestyle': '--'})
+            kwargs_list.append({'color': WENO_COLORS[order], 'linestyle': '--'})
         elif curve_type == "poly":
             if len(grid_sizes) == 0:
                 raise Exception("Polynomial cannot be the first curve in the plot.")
             order = curve_id
-            sizes = np.array(grid_sizes[-1])
+            previous_sizes = np.array(grid_sizes[-1])
             previous_errors = errors[-1]
-            error_list, label = plots.generate_polynomial(order, sizes, previous_errors)
- 
+            sizes, error_list, poly_label = plots.generate_polynomial(
+                                                    order, previous_sizes, previous_errors)
             if args.labels is not None:
-                args.labels.insert(index, label)
-            weno_order = int((order + 1) / 2)
-            kwargs_list.append({'color': ORDER_COLORS[weno_order], 'linestyle': ':'})
+                args.labels.insert(index, poly_label)
+            kwargs_list.append({'color': POLY_COLORS[order], 'linestyle': ':'})
 
         grid_sizes.append(sizes)
         errors.append(error_list)

@@ -573,7 +573,7 @@ class SplitFluxBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
 
         self.action_space = SoftmaxBox(low=-np.inf, high=np.inf,
                                        shape=(self.grid.real_length() + 1, 2, 2 * self.weno_order - 1),
-                                       dtype=np.float32)
+                                       dtype=np.float64)
         self.observation_space = spaces.Box(low=-1e7, high=1e7,
                                             shape=(self.grid.real_length() + 1, 2, 2 * self.state_order - 1),
                                             dtype=np.float64)
@@ -653,7 +653,7 @@ class FluxBurgersEnv(AbstractBurgersEnv):
 
         self.action_space = SoftmaxBox(low=-np.inf, high=np.inf,
                                        shape=(self.grid.real_length() + 1, 2 * self.weno_order),
-                                       dtype=np.float32)
+                                       dtype=np.float64)
         self.observation_space = spaces.Box(low=-1e7, high=1e7,
                                             shape=(self.grid.real_length() + 1, 2 * self.state_order),
                                             dtype=np.float64)

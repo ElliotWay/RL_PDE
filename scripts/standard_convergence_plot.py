@@ -96,9 +96,9 @@ def main():
             if not poly_added:
                 comparison_error = error_list
                 poly_order = order * 2 - 1
-                poly_values, poly_label = plots.generate_polynomial(poly_order, sizes, error_list)
-
-                grid_sizes.append(sizes)
+                poly_grid_sizes, poly_values, poly_label = plots.generate_polynomial(
+                                                            poly_order, sizes, error_list)
+                grid_sizes.append(poly_grid_sizes)
                 errors.append(poly_values)
                 labels.append(poly_label)
                 kwargs_list.append({'color': colors[order], 'linestyle': ':'})

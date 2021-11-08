@@ -15,14 +15,18 @@ def generate_polynomial(order, grid_sizes, comparison_error):
     grid_sizes : [int]
         The x values on which to plot the polynomial curve.
     comparison_error : [float]
-        Real error values for an error plot. The polynomial curve will be 
-        adjusted to be near the comparison error. comparison_error should have the same size as
-        grid_sizes.
+        Real error values for an error plot. The polynomial curve will be adjusted to be near the
+        comparison error. comparison_error should have the same size as grid_sizes.
+        The polynomial will be cropped so that it diverges by at most 2 orders of magnitude below
+        the comparison error.
 
     Returns
     -------
+    grid_sizes : [float]
+        x values of the polynomial curve. The same as the grid_sizes passed in unless cropped to
+        limit distance from comparison_error.
     polynomial_values : [float]
-        Values for the polynomial plot.
+        Values for the polynomial curve.
     label : str
         Standard O-notation label for this order of approximation.
     """         
@@ -35,9 +39,16 @@ def generate_polynomial(order, grid_sizes, comparison_error):
     size_coord = grid_sizes[0]
     values = error_coord * (size_coord ** order) * values
 
+    if np.log10(min(comparison_error)) - np.log10(values[-1]) > 2:
+        cutoff_index = np.argmax(np.log10(min(comparison_error)) - np.log10(values) > 2)
+        values = values[:cutoff_index]
+        out_grid_sizes = np.array(grid_sizes[:cutoff_index])
+    else:
+        out_grid_sizes = np.array(grid_sizes)
+
     label = r"$\mathcal{{O}}(\Delta x^{{{}}})$".format(order)
 
-    return values, label
+    return out_grid_sizes, values, label
  
 def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels=None,
         kwargs_list=None, title=None, polynomials=None):
@@ -118,7 +129,7 @@ def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels
     ax.set_yscale('log')
 
     if multiple_error_lists and labels is not None:
-        ax.legend()
+        ax.legend(loc="lower left")
     if title is not None:
         ax.set_title(title)
 

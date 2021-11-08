@@ -261,6 +261,8 @@ class RKMethod(Enum):
     RK4 = 2
     RK3 = 3
     SSP_RK3 = 3
+    RK8 = 8
+    DOP_RK8 = 8
     @property
     def steps(self):
         if self is RKMethod.EULER:
@@ -269,6 +271,8 @@ class RKMethod(Enum):
             return 4
         elif self is RKMethod.SSP_RK3:
             return 3
+        elif self is RKMethod.DOP_RK8:
+            return 12
         else:
             raise Exception()
 
