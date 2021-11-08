@@ -99,7 +99,7 @@ class BatchGlobalEMI(EMI, OneDimensionalStencil):
                         solution_env_states.append([item[self.analytical_solution_env.grid.real_slice]
                                                     for item in self.analytical_solution_env.state_history])
                         self.solution_env_states = np.swapaxes(np.array(solution_env_states), 0, 1)
-
+                        self.solution_env_states = self.solution_env_states[1:]
             else:
                 for init_params in all_init_params:
                     # Using init_params instead of copying the state directly allows the solution to use
@@ -118,7 +118,7 @@ class BatchGlobalEMI(EMI, OneDimensionalStencil):
                         solution_env_states.append([item[self.weno_solution_env.grid.real_slice]
                                                     for item in self.weno_solution_env.state_history])
                         self.solution_env_states = np.swapaxes(np.array(solution_env_states), 0, 1)
-            self.solution_env_states = self.solution_env_states[1:]
+                        self.solution_env_states = self.solution_env_states[1:]
         return self.solution_env_states
 
     def training_episode(self, env):
