@@ -327,11 +327,22 @@ def main():
             for index, proc in running_procs.items():
                 proc.send_signal(signal.SIGINT)
 
+            STILL_ALIVE_MAX = 10
+            still_alive_count = 0
+
             while len(running_procs) > 0:
                 time.sleep(SLEEP_TIME)
                 num_errors = check_procs(running_procs, output_queues)
                 # They probably WILL have errors, namely interrupt signal received errors.
                 commands_with_errors += num_errors
+
+                still_alive_count +=1
+                if still_alive_count >= STILL_ALIVE_MAX:
+                    print(f"{colors.WARNING}{len(running_procs)} processes are still running."
+                            + f" Sending them an interrupt signal again.{colors.ENDC}")
+                    for index, proc in running_procs.items():
+                        proc.send_signal(signal.SIGINT)
+                    still_alive_count = 0
 
     print("{}Done! {}/{} processes finished in {}.{}".format(
         colors.OKGREEN, commands_started, len(arg_matrix),
