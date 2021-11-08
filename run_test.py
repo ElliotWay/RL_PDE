@@ -54,10 +54,13 @@ def do_test(env, agent, args):
     render_args["show_ghost"] = False
 
     next_update = 0
+
+    dt_list = []
     def every_step(step):
         # Write to variables in parent scope.
         nonlocal next_update
         nonlocal update_count
+
         #if args.animate or step == next_update:
         if step == next_update:
             if step == next_update:
@@ -193,10 +196,12 @@ def main():
     parser.add_argument('--evolution-plot', '--evolution_plot', default=False, action='store_true',
                         help="Instead of usual rendering create 'evolution plot' which plots several states on the"
                         + " same plot in increasingly dark color.")
-    parser.add_argument('--convergence-plot', '--convergence_plot', default=False, action='store_true',
+    parser.add_argument('--convergence-plot', '--convergence_plot', nargs='*', type=int,
+                        default=None,
                         help="Do several runs with different grid sizes to create a convergence plot."
-                        " Overrides the --nx argument with 64, 128, 256, and 512, successively."
-                        " Sets the --analytical flag.")
+                        + " Overrides the --num-cells parameter and sets the --analytical flag."
+                        + " Use e.g. '--convergence-plot' to use the default grid sizes."
+                        + " Use e.g. '--convergence-plot A B C D' to specify your own.")
     parser.add_argument('--output-mode', '--output_mode', default=['plot'], nargs='+',
                         help="Type of output from the test. Default 'plot' creates the usual plot"
                         + " files. 'csv' puts the data that would be used for a plot in a csv"
@@ -246,13 +251,18 @@ def main():
             raise Exception(f"{mode} output mode not recognized.")
 
     # Convergence plots have different defaults.
-    if args.convergence_plot:
+    if args.convergence_plot is not None:
         args.e.rk = 'rk4'
         args.e.fixed_timesteps = False
         if not arg_manager.check_explicit('e.init_type'):
             args.e.init_type = 'gaussian'
             args.e.time_max = 0.05
             args.e.C = 0.5
+            arg_manager.set_explicit('e.init_type', 'e.time_max', 'e.C')
+            # The old way to mark explicit. Remove if we don't need backwards compatability with
+            # old meta files.
+            sys.argv += ['--init-type', 'gaussian', '--time-max', '0.05', '--C', '0.5']
+
 
     env_builder.set_contingent_env_defaults(args, args.e, test=True)
     model_builder.set_contingent_model_defaults(args, args.m, test=True)
@@ -293,7 +303,7 @@ def main():
 
     set_global_seed(args.seed)
 
-    if not args.convergence_plot:
+    if args.convergence_plot is None:
         env = env_builder.build_env(args.env, args.e, test=True)
     else:
         env_manager_copy = env_arg_manager.copy()
@@ -303,13 +313,15 @@ def main():
         if env_args.reward_mode is not None and 'one-step' in env_args.reward_mode:
             print("Reward mode switched to 'full' instead of 'one-step' for convergence plots.")
             env_args.reward_mode = env_args.reward_mode.replace('one-step', 'full')
-        if dims == 1:
-            CONVERGENCE_PLOT_GRID_RANGE = [64, 81, 108, 128, 144, 192, 256]
-            #CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512]#, 1024, 2048, 4096, 8192]
-            #CONVERGENCE_PLOT_GRID_RANGE = [64, 128, 256, 512, 1024, 2048, 4096, 8192]
-            #CONVERGENCE_PLOT_GRID_RANGE = (2**np.linspace(6.0, 8.0, 50)).astype(np.int)
+        if len(args.convergence_plot) > 0:
+            convergence_grid_range = args.convergence_plot
+        elif dims == 1:
+            convergence_grid_range = [64, 81, 108, 128, 144, 192, 256]
+            #convergence_grid_range = [64, 128, 256, 512]#, 1024, 2048, 4096, 8192]
+            #convergence_grid_range = [64, 128, 256, 512, 1024, 2048, 4096, 8192]
+            #convergence_grid_range = (2**np.linspace(6.0, 8.0, 50)).astype(np.int)
         elif dims == 2:
-            CONVERGENCE_PLOT_GRID_RANGE = [32, 64, 128, 256]
+            convergence_grid_range = [32, 64, 128, 256]
 
         # Set ep_length and timestep based on number of cells and time_max.
         env_args.ep_length = None
@@ -319,7 +331,7 @@ def main():
 
         conv_envs = []
         conv_env_args = []
-        for nx in CONVERGENCE_PLOT_GRID_RANGE:
+        for nx in convergence_grid_range:
             specific_env_copy = env_manager_copy.copy()
             env_args = specific_env_copy.args
             env_args.num_cells = nx
@@ -390,7 +402,7 @@ def main():
     # Run test.
     signal.signal(signal.SIGINT, signal.default_int_handler)
     try:
-        if not args.convergence_plot:
+        if args.convergence_plot is None:
             do_test(env, agent, args)
         else:
             convergence_start_time = time.time()
@@ -425,15 +437,15 @@ def main():
                 gc.collect()
             envs = []
 
-            plots.convergence_plot(CONVERGENCE_PLOT_GRID_RANGE, error, args.log_dir)
+            plots.convergence_plot(convergence_grid_range, error, args.log_dir)
             # Also log convergence data.
-            for nx, error in zip(CONVERGENCE_PLOT_GRID_RANGE, error):
+            for nx, error in zip(convergence_grid_range, error):
                 outer_logger.logkv("nx", nx)
                 outer_logger.logkv("l2_error", error)
                 outer_logger.dumpkvs()
 
             if dims == 1:
-                plots.error_plot(x_vals, error_vals, CONVERGENCE_PLOT_GRID_RANGE, args.log_dir,
+                plots.error_plot(x_vals, error_vals, convergence_grid_range, args.log_dir,
                         name="convergence_over_x.png")
             print("Convergence plot created in {}.".format(
                     human_readable_time_delta(time.time() - convergence_start_time)))

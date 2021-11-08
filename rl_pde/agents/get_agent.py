@@ -18,17 +18,17 @@ def get_agent(name, order, action_type="weno", dimensions=1):
 
     else:
         if name == "stationary":
-            agent = StationaryAgent(order=args.order, action_type=action_type)
+            agent = StationaryAgent(order=order, action_type=action_type)
         elif name == "equal":
-            agent = EqualAgent(order=args.order)
+            agent = EqualAgent(order=order)
         elif name == "middle":
-            agent = MiddleAgent(order=args.order)
+            agent = MiddleAgent(order=order)
         elif name == "left":
-            agent = LeftAgent(order=args.order)
+            agent = LeftAgent(order=order)
         elif name == "right":
-            agent = RightAgent(order=args.order)
+            agent = RightAgent(order=order)
         elif name == "random":
-            agent = RandomAgent(order=args.order, action_type=action_type)
+            agent = RandomAgent(order=order, action_type=action_type)
         else:
             return None
 

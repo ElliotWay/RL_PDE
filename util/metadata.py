@@ -6,7 +6,7 @@ import time
 import argparse
 from argparse import Namespace
 
-from util.misc import float_dict
+from util.argparse import float_dict
 from util.git import git_commit_hash, git_is_clean, git_branch_name
 
 META_FILE_NAME = "meta.yaml"

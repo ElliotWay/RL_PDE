@@ -2,7 +2,7 @@ import argparse
 import sys
 import re
 
-from util.misc import positive_int, nonnegative_float, positive_float, float_dict
+from util.argparse import positive_int, nonnegative_float, positive_float, float_dict
 from envs.abstract_pde_env import AbstractPDEEnv
 from envs import WENOBurgersEnv, SplitFluxBurgersEnv, FluxBurgersEnv
 from envs.burgers_2d_env import WENOBurgers2DEnv
@@ -249,10 +249,7 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
         # Mark these arguments as explicitly passed.
         if not just_defaults:
             env_arg_manager = arg_manager.get_child('e')
-            env_arg_manager.explicit['num_cells'] = True
-            env_arg_manager.explicit['timestep'] = True
-            env_arg_manager.explicit['time_max'] = True
-            env_arg_manager.explicit['ep_length'] = True
+            env_arg.manager.set_explicit('num_cells', 'timestep', 'time_max', 'ep_length')
 
             # The original way to do this before creating the argument manager was to add the
             # arguments directly to argv. We still need these if we want to load from an old file.

@@ -2,7 +2,7 @@ import argparse
 
 import tensorflow as tf
 
-from util.misc import positive_int, nonnegative_float, positive_float, proportion_float
+from util.argparse import positive_int, nonnegative_float, positive_float, proportion_float
 
 def get_model_arg_parser(model_type=None):
     parser = argparse.ArgumentParser(

@@ -409,7 +409,7 @@ class Euler1DGrid(GridBase):
         self.deterministic_init = deterministic_init
         self._init_schedule_index = 0
         if schedule is None:
-            self._init_schedule = ["sod", "sonic_rarefaction"]  # sod2 leads to NaNs during training
+            self._init_schedule = ["sod", "shock_tube"]  # sod2 leads to NaNs during training
         else:
             self._init_schedule = schedule
         self._init_sample_types = self._init_schedule
@@ -585,7 +585,7 @@ class Euler1DGrid(GridBase):
                 eos_gamma = 1.4  # Gamma law EOS
             rho_l = 3.857
             rho_r = 1
-            v_l = 0.90
+            v_l = 0.92
             v_r = 3.55
             p_l = 10.333
             p_r = 1
@@ -612,6 +612,29 @@ class Euler1DGrid(GridBase):
             v_r = -3.44
             p_l = 10.33
             p_r = 1
+            S_l = rho_l * v_l
+            S_r = rho_r * v_r
+            e_l = p_l / rho_l / (eos_gamma - 1)
+            e_r = p_r / rho_r / (eos_gamma - 1)
+            E_l = rho_l * (e_l + v_l ** 2 / 2)
+            E_r = rho_r * (e_r + v_r ** 2 / 2)
+            self.space[0] = np.where(self.x < 0, rho_l * np.ones_like(self.x), rho_r * np.ones_like(self.x))
+            self.space[1] = np.where(self.x < 0, S_l * np.ones_like(self.x), S_r * np.ones_like(self.x))
+            self.space[2] = np.where(self.x < 0, E_l * np.ones_like(self.x), E_r * np.ones_like(self.x))
+
+        elif self.init_type == "shock_tube":
+            if boundary is None:
+                self.boundary = "outflow"
+            if 'eos_gamma' in self.init_params:
+                eos_gamma = self.init_params['eos_gamma']
+            else:
+                eos_gamma = 1.4  # Gamma law EOS
+            rho_l = 0.445
+            rho_r = 0.5
+            v_l = 0.689
+            v_r = 0
+            p_l = 3.528
+            p_r = 0.571
             S_l = rho_l * v_l
             S_r = rho_r * v_r
             e_l = p_l / rho_l / (eos_gamma - 1)
