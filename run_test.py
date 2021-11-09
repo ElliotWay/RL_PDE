@@ -302,6 +302,8 @@ def main():
 
             # action scale and obs_scale ought to be model parameters.
             arg_manager.load_keys(args_dict, ['model', 'emi', 'action_scale', 'obs_scale'])
+            # Should order be a base level parameter? It affects both model and environment.
+            env_arg_manager.load_keys(args_dict['e'], ['order'])
             
             model_arg_manager.load_from_dict(args_dict['m'])
         else:
@@ -349,7 +351,8 @@ def main():
             env_args = specific_env_copy.args
             env_args.num_cells = nx
 
-            env_builder.set_contingent_env_defaults(args, env_args, test=True)
+            env_builder.set_contingent_env_defaults(args, env_args, test=True,
+                    print_prefix=f"{nx}: ")
 
             conv_envs.append(env_builder.build_env(args.env, env_args, test=True))
             conv_env_args.append(env_args)

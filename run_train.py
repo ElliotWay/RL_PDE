@@ -103,8 +103,6 @@ def main():
     if len(rest) > 0:
         raise Exception("Unrecognized arguments: " + " ".join(rest))
 
-    env_builder.set_contingent_env_defaults(args, args.e, test=False)
-    model_builder.set_contingent_model_defaults(args, args.m, test=False)
 
     if args.repeat is not None:
         _, extension = os.path.splitext(args.repeat)
@@ -118,6 +116,12 @@ def main():
         else:
             # Original meta.txt format.
             metadata.load_to_namespace(args.repeat, arg_manager)
+        print(f"Loaded all parameters from {args.repeat}.")
+    else:
+        # These go in this else block as they print messages that are misleading if they go before
+        # loading the repeat file.
+        env_builder.set_contingent_env_defaults(args, args.e, test=False)
+        model_builder.set_contingent_model_defaults(args, args.m, test=False)
 
     set_global_seed(args.seed)
 
@@ -127,51 +131,61 @@ def main():
     env = env_builder.build_env(args.env, args.e)
 
     eval_env_arg_manager = env_arg_manager.copy()
-    eval_env_args = eval_env_arg_manager.args
-    eval_env_args.follow_solution = False # Doesn't make sense for eval envs to do that.
     if args.eval_env == "std" or args.eval_env == "custom":
-        # We could restore defaults to do this - have env_arg_manager parse the empty string to get
-        # defaults, set some values manually, then use set_contingent_env_defaults.
-        # But do we want that behavior? Do we want unusual parameters to affect both the training
-        # and evaluation environments?
-
         #eval_env_args.memoize = True
+
         # Use standard default evaluation environments.
+        # These should be the default configuration irrespective of the training environment
+        # configuration to create a fair comparison across training runs.
+        # The exception is order, which must be the same. We can think of WENOBurgers, order 2 as a
+        # different environment from WENOBurgers, order 3.
         if args.env == "weno_burgers":
             eval_envs = []
-            eval_env_args.boundary = None
-            eval_env_args.ep_length = args.e.ep_length * 2
-            eval_env_args.time_max = args.e.time_max * 2
-            
-            eval_env_args.init_type = "smooth_sine"
-            eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
+            # Load default parameters.
+            eval_args = eval_env_arg_manager.parse_args([])
+            eval_args.order = args.e.order
+            eval_args.init_type = "smooth_sine"
+            # Update for smooth_sine defaults.
+            env_builder.set_contingent_env_defaults(args, eval_args, test=True,
+                    print_prefix="eval: ")
 
-            eval_env_args.init_type = "smooth_rare"
-            eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
+            eval_envs.append(env_builder.build_env(args.env, eval_args, test=True))
 
-            eval_env_args.init_type = "accelshock"
-            eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
+            # Since smooth_rare and accelshock use the same defaults, we don't need to reset and
+            # call set_contingent_env_defaults() again.
+            eval_args.init_type = "smooth_rare"
+            eval_envs.append(env_builder.build_env(args.env, eval_args, test=True))
+            eval_args.init_type = "accelshock"
+            eval_envs.append(env_builder.build_env(args.env, eval_args, test=True))
 
         elif args.env == "weno_burgers_2d":
             eval_envs = []
-            eval_env_args.boundary = None
-            eval_env_args.ep_length = args.e.ep_length * 2
-            eval_env_args.time_max = args.e.time_max * 2
+            eval_args = eval_env_arg_manager.parse_args([])
+            eval_args.order = args.e.order
+            eval_args.init_type = "gaussian"
+            env_builder.set_contingent_env_defaults(args, eval_args, test=True,
+                    print_prefix="eval (gauss/1d): ")
 
-            eval_env_args.init_type = "gaussian"
-            eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
+            eval_envs.append(env_builder.build_env(args.env, eval_args, test=True))
 
-            eval_env_args.init_type = "1d-smooth_sine-x"
-            eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
+            # 1D inits use the same defaults, so we don't need to reset params.
+            eval_args.init_type = "1d-smooth_sine-x"
+            eval_envs.append(env_builder.build_env(args.env, eval_args, test=True))
 
-            eval_env_args.init_type = "jsz7"
-            # Restore jsz7 defaults.
-            vars(eval_env_args).update({"min_value":None, "max_value":None, "num_cells":None,
-                "time_max":None, "ep_length":None, "timestep":None})
-            env_builder.set_contingent_env_defaults(args, eval_env_args, test=True)
-            eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
+            # jsz7 DOES use different defaults.
+            eval_args = eval_env_arg_manager.parse_args([])
+            eval_args.order = args.e.order
+            eval_args.init_type = "jsz7"
+            env_builder.set_contingent_env_defaults(args, eval_args, test=True,
+                    print_prefix="eval (jsz7): ")
+            eval_envs.append(env_builder.build_env(args.env, eval_args, test=True))
 
         elif args.env == "weno_euler":
+            eval_env_args = eval_env_arg_manager.args
+            # I'm not sure how the default Euler inits are configured, so I'm leaving this for now,
+            # but they probably should follow the same pattern. I.e. ep_length = ep_length * 2
+            # wasn't the right idea, it should just be set to 500; similarly for any other default
+            # parameters. - Elliot
             eval_envs = []
             eval_env_args.boundary = None
             eval_env_args.ep_length = args.e.ep_length * 2

@@ -121,7 +121,7 @@ def get_env_arg_parser():
 
     return parser
 
-def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=False):
+def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=False, print_prefix=""):
     """
     Set the defaults of environment parameters that depend on other parameters.
 
@@ -138,7 +138,13 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
         from another file.
     test : bool
         Whether this is a test or training run. Some defaults depend on this.
+    print_prefix : str
+        This function print messages so the user is aware of how the default parameters may have
+        changed. However, this can be confusing if multiple environments with different parameters
+        are configured this way. Use print_prefix to distinguish these messages. Include
+        whitespace.
     """
+    pfx = print_prefix
     if not test and main_args.model is not "weno_burgers":
         if env_args.rk != 'euler' or (
                 env_args.solution_rk is not None and env_args.solution_rk != 'euler'):
@@ -152,7 +158,7 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
         env_args.solution_rk = f"rk{env_args.solution_rk}"
 
     if main_args.model == "full" and env_args.reward_mode is None:
-        print("Reward mode forced to use 'one-step' to work with 'full' model.")
+        print(f"{pfx}Reward mode forced to use 'one-step' to work with 'full' model.")
         env_args.reward_mode = "one-step"
 
     if env_args.memoize is None:
@@ -168,7 +174,7 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
             #env_args.memoize = True
     
     env_args.reward_mode = AbstractPDEEnv.fill_default_reward_mode(env_args.reward_mode)
-    print("Full reward mode is '{}'.".format(env_args.reward_mode))
+    print(f"{pfx}Full reward mode is '{env_args.reward_mode}'.")
 
     just_defaults = (env_args.num_cells is None and env_args.timestep is None
             and env_args.time_max is None and env_args.ep_length is None)
@@ -202,7 +208,7 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
             _ = iter(env_args.num_cells)
     except TypeError:
         env_args.num_cells = (env_args.num_cells,)
-        print("num cells changed to ", env_args.num_cells)
+        print(f"{pfx}num cells changed to {env_args.num_cells}.")
     try:
         _ = iter(env_args.min_value)
     except TypeError:
@@ -242,9 +248,9 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
     env_args.ep_length = ep_length
     env_args.time_max = time_max
 
-    print("Using {} cells and {}s timesteps.".format(env_args.num_cells, env_args.timestep)
-            + " Episode length is {} steps, for a total of {}s.".format(
-                env_args.ep_length, env_args.time_max))
+    print(f"{pfx}Using {env_args.num_cells} cells and {env_args.timestep}s timesteps."
+            + f" Episode length is {env_args.ep_length} steps,"
+            + f" for a total of {env_args.time_max}s.")
     if arg_manager is not None:
         # Mark these arguments as explicitly passed.
         if not just_defaults:

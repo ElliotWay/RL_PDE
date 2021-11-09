@@ -102,6 +102,13 @@ class ArgTreeManager:
             else:
                 self.explicit[param] = is_explicit
 
+    def parse_args(self, *args, **kwargs):
+        args, rest = self.parse_known_args(*args, **kwargs)
+        if len(rest) > 0:
+            raise Exception("Param manager couldn't parse these arguments: "
+                    + " ".join(rest))
+        else:
+            return args
 
     def parse_known_args(self, arg_string=None, parent_args=None):
         if arg_string is None:
