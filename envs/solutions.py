@@ -481,7 +481,7 @@ class RiemannSolution(SolutionBase):
         if time == 0:  # xi = (x - xjump)/time  wouldn't work with time == 0
             pass
         else:
-            x_e, rho_e, v_e, p_e = self.sample_solution(time, npts)
+            x_e, rho_e, v_e, p_e = self.sample_solution(time, npts, self.grid.xmin, self.grid.xmax)
             u = rho_e * v_e  # convert back to states of the form (rho, rho*u, rho*E)
             e = p_e / (self.gamma - 1) / rho_e
             E = rho_e * (e + 0.5 * v_e ** 2)
