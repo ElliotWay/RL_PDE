@@ -194,7 +194,7 @@ def main():
             eval_env_args.init_type = "sod"
             eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
 
-            eval_env_args.init_type = "sonic_rarefaction"
+            eval_env_args.init_type = "shock_tube"
             eval_envs.append(env_builder.build_env(args.env, eval_env_args, test=True))
 
         else:
