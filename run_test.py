@@ -240,6 +240,9 @@ def main():
             open_file = open(args.repeat, 'r')
             args_dict = yaml.safe_load(open_file)
             open_file.close()
+            # y and n are special, and should never be loaded.
+            args_dict['y'] = args.y
+            args_dict['n'] = args.n
             arg_manager.load_from_dict(args_dict)
             args = arg_manager.args
         else:
