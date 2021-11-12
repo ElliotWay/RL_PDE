@@ -13,7 +13,8 @@ import tensorflow as tf
 import tensorflow.contrib as tc
 from mpi4py import MPI
 
-from stable_baselines import logger
+#from stable_baselines import logger
+from util import sb_logger as logger
 from stable_baselines.common import tf_util, OffPolicyRLModel, SetVerbosity, TensorboardWriter
 from stable_baselines.common.vec_env import VecEnv
 from stable_baselines.common.mpi_adam import MpiAdam

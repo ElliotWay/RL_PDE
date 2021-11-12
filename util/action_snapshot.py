@@ -9,7 +9,7 @@ import numpy as np
 import tensorflow as tf
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
-from stable_baselines import logger
+from util import sb_logger as logger
 
 from envs import get_env_arg_parser, build_env
 from rl_pde.agents import StationaryAgent, EqualAgent, MiddleAgent, LeftAgent, RightAgent, RandomAgent

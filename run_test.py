@@ -15,7 +15,7 @@ import numpy as np
 import tensorflow as tf
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
-from stable_baselines import logger
+from util import sb_logger as logger
 
 from rl_pde.run import rollout
 from rl_pde.emi import BatchEMI, StandardEMI, TestEMI, DimensionalAdapterEMI, VectorAdapterEMI
@@ -409,9 +409,9 @@ def main():
     meta_file = metadata.MetaFile(args.log_dir, arg_manager)
     meta_file.write_new()
 
-    # Put stable-baselines logs in same directory.
+    # Put stable baselines-style logs in same directory.
     logger.configure(folder=args.log_dir, format_strs=['csv', 'log'])
-    logger.set_level(logger.DEBUG)  # logger.INFO
+    logger.set_level(logger.DEBUG)
     outer_logger = logger.Logger.CURRENT
 
     # Create symlink for convenience. (Do this after loading the agent in case we are loading from last.)

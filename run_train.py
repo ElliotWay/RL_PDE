@@ -17,8 +17,7 @@ import matplotlib
 matplotlib.use("Agg")
 import yaml
 
-#TODO: Remove dependency on this logger. The functionality we need can be easily implemented.
-from stable_baselines import logger
+from util import sb_logger as logger
 #from stable_baselines.ddpg.noise import AdaptiveParamNoiseSpec, OrnsteinUhlenbeckActionNoise, NormalActionNoise
 
 from rl_pde.run import train
@@ -161,10 +160,12 @@ def main():
             # The aim of the Gaussian environment is to compare to the Gaussian convergence curve,
             # so we need to adjust the parameters to those used by convergence plots.
             eval_args = eval_env_arg_manager.parse_args([])
-            eval_Args.order = args.e.order
+            eval_args.order = args.e.order
             eval_args.init_type = "gaussian"
+            eval_args.time_max = 0.05
             eval_args.C = 0.5
             eval_args.rk = "rk4"
+            eval_args.num_cells = 128
             eval_args.fixed_timesteps = False
             env_builder.set_contingent_env_defaults(args, eval_args, test=True,
                     print_prefix="eval (gaussian): ")

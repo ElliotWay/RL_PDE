@@ -30,6 +30,8 @@ class SACModel(BaselinesModel):
     another wrapper, though.
     """
     def __init__(self, env, args):
+        super().__init__(env, args)
+
         policy_cls = LnMlpPolicy if args.m.layer_norm else MlpPolicy
 
         if args.m.learning_starts is None:

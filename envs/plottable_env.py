@@ -8,7 +8,8 @@ from matplotlib import cm
 from matplotlib.ticker import LinearLocator
 import matplotlib.animation as animation
 import numpy as np
-from stable_baselines import logger
+
+from util import sb_logger as logger
 
 from envs.abstract_pde_env import AbstractPDEEnv
 from envs.solutions import OneStepSolution

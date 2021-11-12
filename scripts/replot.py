@@ -1,6 +1,8 @@
 import argparse
 import os
+import re
 import yaml
+import pandas
 
 from rl_pde.run import write_summary_plots, write_final_plots
 from util import metadata
@@ -45,15 +47,21 @@ def main():
     summary_plot_dir = os.path.join(log_dir, "summary_plots")
     os.makedirs(summary_plot_dir, exist_ok=True)
 
-    if eval_env_type not in ["std", "custom"]:
-        eval_env_names = [init_type]
-    else:
-        if env_type == "weno_burgers":
-            eval_env_names = ['smooth_sine', 'smooth_rare', 'accelshock']
-        elif env_type == "weno_burgers_2d":
-            eval_env_names = ["gaussian", "1d-smooth_sine-x", "jsz7"]
+    csv_file_name = os.path.join(log_dir, "progress.csv")
+    csv_df = pandas.read_csv(csv_file_name, comment='#')
+    column_names = list(csv_df)
+    eval_env_names = [re.match("eval_(.*)_end_l2", name).group(1) for name in column_names
+                            if re.match("eval_.*_end_l2", name)]
+    if len(eval_env_names) == 0:
+        if eval_env_type not in ["std", "custom"]:
+            eval_env_names = [init_type]
         else:
-            raise Exception("Unknown eval env names.")
+            if env_type == "weno_burgers":
+                eval_env_names = ['smooth_sine', 'smooth_rare', 'accelshock']
+            elif env_type == "weno_burgers_2d":
+                eval_env_names = ["gaussian", "1d-smooth_sine-x", "jsz7"]
+            else:
+                raise Exception("Unknown eval env names.")
 
     write_summary_plots(log_dir, summary_plot_dir, total_episodes, eval_env_names)
     write_final_plots(log_dir, summary_plot_dir, total_episodes, eval_env_names)

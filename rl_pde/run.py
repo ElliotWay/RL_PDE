@@ -9,7 +9,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.ticker import SymmetricalLogLocator
 
-from stable_baselines import logger
+from util import sb_logger as logger
 
 # More imports below rollout() to avoid circular dependency.
 # Maybe rollout() should be in a separate file?
@@ -116,6 +116,14 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, eval_env_name
 
     episodes = csv_df['episodes']
 
+    # New name format.
+    if f"eval_{eval_env_names[0]}_reward" in csv_df:
+        eval_env_prefixes = [f"eval_{name}" for name in eval_env_names]
+    # Old name format. (Kept in case this function is being called from somewhere besides
+    # run() to update an old experiment.)
+    else:
+        eval_env_prefixes = [f"eval{num+1}" for num in range(len(eval_env_names))]
+
     reward_fig = plt.figure()
     ax = reward_fig.gca()
     
@@ -125,8 +133,8 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, eval_env_name
     avg_eval_reward = csv_df['avg_eval_total_reward']
     ax.plot(episodes, avg_eval_reward, color=eval_color, label="eval avg")
     if len(eval_env_names) > 1:
-        for i, name in enumerate(eval_env_names):
-            eval_reward = csv_df['eval{}_reward'.format(i+1)]
+        for i, (name, prefix) in enumerate(zip(eval_env_names, eval_env_prefixes)):
+            eval_reward = csv_df[f'{prefix}_reward']
             ax.plot(episodes, eval_reward,
                     color=envs_colors[i], ls='--', label=name)
 
@@ -162,8 +170,8 @@ def write_summary_plots(log_dir, summary_plot_dir, total_episodes, eval_env_name
     avg_eval_l2 = csv_df['avg_eval_end_l2']
     ax.plot(episodes, avg_eval_l2, color=eval_color, label="eval avg")
     if len(eval_env_names) > 1:
-        for i, name in enumerate(eval_env_names):
-            eval_l2 = csv_df['eval{}_end_l2'.format(i+1)]
+        for i, (name, prefix) in enumerate(zip(eval_env_names, eval_env_prefixes)):
+            eval_l2 = csv_df[f'{prefix}_end_l2']
             ax.plot(episodes, eval_l2,
                     color=envs_colors[i], ls='--', label=name)
 
@@ -224,6 +232,14 @@ def write_final_plots(log_dir, summary_plot_dir, total_episodes, eval_env_names)
 
     episodes = csv_df['episodes']
 
+    # New name format.
+    if f"eval_{eval_env_names[0]}_reward" in csv_df:
+        eval_env_prefixes = [f"eval_{name}" for name in eval_env_names]
+    # Old name format. (Kept in case this function is being called from somewhere besides
+    # run() to update an old experiment.)
+    else:
+        eval_env_prefixes = [f"eval{num+1}" for num in range(len(eval_env_names))]
+
     l2_fig = plt.figure()
     ax = l2_fig.gca()
     # Don't plot training L2 or average testing L2.
@@ -231,8 +247,8 @@ def write_final_plots(log_dir, summary_plot_dir, total_episodes, eval_env_names)
     #ax.plot(episodes, train_l2, color=train_color, label="train")
     #avg_eval_l2 = csv_df['avg_eval_end_l2']
     #ax.plot(episodes, avg_eval_l2, color=eval_color, label="eval avg")
-    for i, name in enumerate(eval_env_names):
-        eval_l2 = csv_df['eval{}_end_l2'.format(i+1)]
+    for i, (name, prefix) in enumerate(zip(eval_env_names, eval_env_prefixes)):
+        eval_l2 = csv_df[f'{prefix}_end_l2']
         # Use solid lines instead of dashed lines for this version.
         ax.plot(episodes, eval_l2,
                 color=envs_colors[i], ls='-', label=name)
@@ -355,8 +371,11 @@ def train(env, eval_envs, emi, args):
             logger.logkv("avg_eval_end_l2", average_eval_l2)
             if len(eval_envs) > 1:
                 for i in range(len(eval_envs)):
-                    logger.logkv("eval{}_reward".format(i+1), eval_rewards[i])
-                    logger.logkv("eval{}_end_l2".format(i+1), eval_l2[i])
+                    print("logging for ", eval_env_names[i])
+                    #logger.logkv("eval{}_reward".format(i+1), eval_rewards[i])
+                    #logger.logkv("eval{}_end_l2".format(i+1), eval_l2[i])
+                    logger.logkv(f"eval_{eval_env_names[i]}_reward".format(i+1), eval_rewards[i])
+                    logger.logkv(f"eval_{eval_env_names[i]}_end_l2".format(i+1), eval_l2[i])
             logger.logkv('time_elapsed', int(time.time() - start_time))
             logger.logkv('proportion_training', training_ratio)
             logger.logkv('proportion_evalating', eval_ratio)

@@ -2,6 +2,8 @@ import os
 import numpy as np
 
 from rl_pde.policy import Policy
+from util import sb_logger as internal_logger
+import stable_baselines.logger as external_logger
 
 class AbstractModel(Policy):
     """
@@ -98,7 +100,13 @@ class BaselinesModel(Model):
     def __init__(self):
         # Initialize the inner model in the subclass.
         self._model = None
-        raise NotImplementedError
+
+        # Declare separate SB logs here. We're using the same logging format, but
+        # with a modified file, so if SB functions that refer to the original are used, they would
+        # overwrite our new files if we do not put the SB files in a different directory.
+        outer_dir = internal_logger.get_dir()
+        inner_dir = os.path.join(outer_dir, "sb_logs")
+        logger.configure(inner_dir, ['csv', 'log'])
 
     def predict(self, state, deterministic=True):
         return self._model.predict(state, deterministic=deterministic)
