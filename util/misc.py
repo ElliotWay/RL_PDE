@@ -193,6 +193,10 @@ def soft_link_directories(dir_name, link_name, safe=False):
     """
     assert os.path.isdir(dir_name)
 
+    # If the target path is or contains a link, we risk symlink loops by linking directly to it.
+    # Instead resolve any links in the target path.
+    dir_name = os.path.realpath(dir_name)
+
     if ON_POSIX:
         try:
             if os.path.islink(link_name):
