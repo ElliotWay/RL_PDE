@@ -334,8 +334,10 @@ def main():
         if len(args.convergence_plot) > 0:
             convergence_grid_range = args.convergence_plot
         elif dims == 1:
-            convergence_grid_range = [64, 81, 108, 128, 144, 192, 256]
-            #convergence_grid_range = [64, 128, 256, 512]#, 1024, 2048, 4096, 8192]
+            # The original grid sizes included 81 instead of 82, but the parity of the grid size
+            # has peculiar affects on certain initial conditions (namely smooth_sine), so we switch
+            # the 81 to 82 so all grid sizes are even.
+            convergence_grid_range = [64, 82, 108, 128, 144, 192, 256]
             #convergence_grid_range = [64, 128, 256, 512, 1024, 2048, 4096, 8192]
             #convergence_grid_range = (2**np.linspace(6.0, 8.0, 50)).astype(np.int)
         elif dims == 2:
