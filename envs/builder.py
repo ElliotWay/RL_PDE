@@ -81,7 +81,7 @@ def get_env_arg_parser():
                         help="Some initial conditions accept parameters. For example, smooth_sine"
                         + " accepts A for the amplitude of the wave. Pass these parameters as a"
                         + " comma-separated list, e.g. \"a=1.0,b=2.5\". Note that this overrides"
-                        + " any random sampling that might exist for a given parameters. Dig into"
+                        + " any random sampling that might exist for given parameters. Dig into"
                         + " envs/grid.py for information on which parameters are available. Omit"
                         + " spaces!",)
     parser.add_argument('--nu', '--eps', type=nonnegative_float, default=0.0,
@@ -145,7 +145,7 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
         whitespace.
     """
     pfx = print_prefix
-    if not test and main_args.model is not "weno_burgers":
+    if not test and main_args.env is not "weno_burgers":
         if env_args.rk != 'euler' or (
                 env_args.solution_rk is not None and env_args.solution_rk != 'euler'):
             #env_args.rk = 'euler'

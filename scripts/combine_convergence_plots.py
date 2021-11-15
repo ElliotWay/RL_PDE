@@ -32,19 +32,22 @@ def main():
         description="Combine data from multiple convergence plots into a single plot.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(type=str, nargs='*', action=ExtendTupleGen('file'), dest='curves',
+            metavar='FILE',
             help="CSV files containing the relevant data. These files are in the log directory of"
             + " prior convergence plot runs.")
-    parser.add_argument("--file", type=str, action=ExtendTupleGen('file'), dest='curves',
+    parser.add_argument("--file", type=str, nargs='+', action=ExtendTupleGen('file'),
+            dest='curves', metavar='FILE',
             help="More CSV files. Useful to maintain correct ordering when also using --weno."
             + " Multiple file names can also be passed with --file.")
-    parser.add_argument("--weno", type=int, action=ExtendTupleGen('weno'), dest='curves',
+    parser.add_argument("--weno", type=int, nargs='+', action=ExtendTupleGen('weno'), dest='curves',
             metavar='ORDER',
             help="Add the convergence curve for the given weno order. The --weno-path must"
             + " also be specified, and data must be in WENO_PATH/order_ORDER/progress.csv.")
     parser.add_argument("--weno-path", "--weno_path", type=str,
             default="test/weno_burgers/gaussian_convergence/weno",
             help="Path for data to use with the --weno argument.")
-    parser.add_argument("--poly", type=int, action=ExtendTupleGen('poly'), dest='curves',
+    parser.add_argument("--poly", type=int, nargs='+', action=ExtendTupleGen('poly'),
+            dest='curves', metavar='ORDER',
             help="Add a curve representing exact polynomial accuracy for comparison."
             + " The curve will be near the previous curve.")
     parser.add_argument("--labels", type=str, nargs='*', default=None,

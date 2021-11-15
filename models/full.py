@@ -502,7 +502,6 @@ class GlobalBackpropModel(GlobalModel):
             feed_dict[placeholder] = param_value
 
         self.session.run(self.load_op, feed_dict=feed_dict)
-        print("Model loaded from {}".format(path))
 
         self.preloaded = True
 

@@ -26,8 +26,6 @@ def rollout(env, policy, num_rollouts=1, deterministic=False, every_step_hook=No
         Policy to deploy in the environment.
     num_rollouts : int
         Number of rollouts to collect. 1 by default.
-    rk_steps : int
-        Number of steps for a full timestep. 1 if we're using Euler stepping, 4 for RK4, etc.
     deterministic : bool
         Require a deterministic policy. Passed to policy.predict().
     every_step_hook : func(t)
@@ -312,7 +310,6 @@ def train(env, eval_envs, emi, args):
         if ep % args.log_freq == 0:
             eval_start_time = time.time()
             training_time = eval_start_time - train_start_time
-
 
             ep_string = ("{:0" + str(ep_precision) + "}").format(ep)
 
