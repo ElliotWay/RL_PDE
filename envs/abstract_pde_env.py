@@ -811,26 +811,35 @@ class AbstractPDEEnv(gym.Env):
 
         if (not "full" in reward_mode
                 and not "change" in reward_mode
-                and not "one-step" in reward_mode):
+                and not "one-step" in reward_mode
+                and not "tv" in reward_mode):
             if "l2d" in reward_mode:
                 reward_mode += "_full"
             else:
                 reward_mode += "_full"
+        
+        if ("full" in reward_mode
+                or "change" in reward_mode
+                or "one-step" in reward_mode):
 
-        if (not "adjacent" in reward_mode
-                and not "stencil" in reward_mode):
-            if "l2d" in reward_mode:
-                reward_mode += "_stencil"
-            else:
-                reward_mode += "_adjacent"
+            if (not "adjacent" in reward_mode
+                    and not "stencil" in reward_mode):
+                if "l2d" in reward_mode:
+                    reward_mode += "_stencil"
+                else:
+                    reward_mode += "_adjacent"
 
-        if (not "avg" in reward_mode
-                and not "max" in reward_mode
-                and not "L2" in reward_mode):
-            if "l2d" in reward_mode:
-                reward_mode += "_max"
-            else:
-                reward_mode += "_avg"
+            if (not "avg" in reward_mode
+                    and not "max" in reward_mode
+                    and not "L2" in reward_mode):
+                if "l2d" in reward_mode:
+                    reward_mode += "_max"
+                else:
+                    reward_mode += "_avg"
+
+        # TV specific parameters could go here.
+        if "tv" in reward_mode:
+            pass
 
         if (not "squash" in reward_mode):
             if "l2d" in reward_mode:
@@ -880,110 +889,141 @@ class AbstractPDEEnv(gym.Env):
                     error = tuple(np.sqrt(np.sum(action_diff_part**2, axis=-1)) for
                                 action_diff_part in action_diff)
             else:
-                raise Exception("AbstractBurgersEnv: reward_mode problem")
+                raise Exception("AbstractPDEEnv: reward_mode problem")
 
             return -error, done
 
+        total_reward = (0.0,) * self.dimensions
 
         # Use error with the "true" solution as the reward.
-        error = self.solution.get_full() - self.grid.get_full()
+        if ("full" in self.reward_mode or "change" in self.reward_mode
+                or "one-step" in self.reward_mode):
 
-        if "full" in self.reward_mode or "one-step" in self.reward_mode:
-            # one-step is handled by the solution
-            pass
-        # Use the difference in error as a reward instead of the full reward with the solution.
-        elif "change" in self.reward_mode:
-            previous_error = self.previous_error
-            self.previous_error = error
-            error = (error - previous_error)
-        else:
-            raise Exception("AbstractBurgersEnv: reward_mode problem")
+            error = self.solution.get_full() - self.grid.get_full()
 
-        error = np.abs(error)
+            if "full" in self.reward_mode or "one-step" in self.reward_mode:
+                # one-step is handled by the solution
+                pass
+            # Use the difference in error as a reward instead of the full reward with the solution.
+            elif "change" in self.reward_mode:
+                previous_error = self.previous_error
+                self.previous_error = error
+                error = (error - previous_error)
+            else:
+                raise Exception("AbstractPDEEnv: reward_mode problem")
 
-        # Clip tiny errors and enhance extreme errors.
-        if "clip" in self.reward_mode:
-            error[error < 0.001] = 0
-            error[error > 0.1] *= 10
+            error = np.abs(error)
 
-        # Average of error in two adjacent cells.
-        if "adjacent" in self.reward_mode and "avg" in self.reward_mode:
-            combined_error = []
-            for axis, ng in enumerate(self.grid.num_ghosts):
-                axis = axis + 1 # axis 0 is vector dimension
-                left_slice = list(self.grid.real_slice)
-                left_slice[axis] = slice(ng-1, -ng)
-                left_slice = tuple(left_slice)
-                right_slice = list(self.grid.real_slice)
-                right_slice[axis] = slice(ng, -(ng-1))
-                right_slice = tuple(right_slice)
+            # Clip tiny errors and enhance extreme errors.
+            if "clip" in self.reward_mode:
+                error[error < 0.001] = 0
+                error[error > 0.1] *= 10
 
-                combined_error.append((error[left_slice] + error[right_slice]) / 2)
+            # Average of error in two adjacent cells.
+            if "adjacent" in self.reward_mode and "avg" in self.reward_mode:
+                combined_error = []
+                for axis, ng in enumerate(self.grid.num_ghosts):
+                    axis = axis + 1 # axis 0 is vector dimension
+                    left_slice = list(self.grid.real_slice)
+                    left_slice[axis] = slice(ng-1, -ng)
+                    left_slice = tuple(left_slice)
+                    right_slice = list(self.grid.real_slice)
+                    right_slice[axis] = slice(ng, -(ng-1))
+                    right_slice = tuple(right_slice)
 
-        # Combine error across the WENO stencil.
-        # (NOT the state stencil i.e. self.state_order * 2 - 1, even if we are using a wide state.)
-        elif "stencil" in self.reward_mode:
-            combined_error = []
-            for axis, (nx, ng) in enumerate(zip(self.grid.num_cells, self.grid.num_ghosts)):
-                axis = axis + 1 # axis 0 is vector dimension
+                    combined_error.append((error[left_slice] + error[right_slice]) / 2)
 
-                stencil_indexes = create_stencil_indexes(
-                        stencil_size=(self.weno_order * 2 - 1),
-                        num_stencils=(nx + 1),
-                        offset=(ng - self.weno_order))
-                stencil_slice = list(self.grid.real_slice)
-                stencil_slice[axis] = stencil_indexes
-                stencil_slice = tuple(stencil_slice)
-                error_stencils = error[stencil_slice]
+            # Combine error across the WENO stencil.
+            # (NOT the state stencil i.e. self.state_order * 2 - 1, even if we are using a wide state.)
+            elif "stencil" in self.reward_mode:
+                combined_error = []
+                for axis, (nx, ng) in enumerate(zip(self.grid.num_cells, self.grid.num_ghosts)):
+                    axis = axis + 1 # axis 0 is vector dimension
 
-                # Indexing for the stencils inserts a new stencil dimension at axis+1, so we
-                # reduce over this axis.
-                if "max" in self.reward_mode:
-                    combined_error.append(np.amax(error_stencils, axis=(axis+1)))
-                elif "avg" in self.reward_mode:
-                    combined_error.append(np.mean(error_stencils, axis=(axis+1)))
-                elif "L2" in self.reward_mode:
-                    combined_error.append(np.sqrt(np.sum(error_stencils**2, axis=(axis+1))))
-                else:
-                    raise Exception("AbstractBurgersEnv: reward_mode problem")
-        else:
-            raise Exception("AbstractBurgersEnv: reward_mode problem")
+                    stencil_indexes = create_stencil_indexes(
+                            stencil_size=(self.weno_order * 2 - 1),
+                            num_stencils=(nx + 1),
+                            offset=(ng - self.weno_order))
+                    stencil_slice = list(self.grid.real_slice)
+                    stencil_slice[axis] = stencil_indexes
+                    stencil_slice = tuple(stencil_slice)
+                    error_stencils = error[stencil_slice]
+
+                    # Indexing for the stencils inserts a new stencil dimension at axis+1, so we
+                    # reduce over this axis.
+                    if "max" in self.reward_mode:
+                        combined_error.append(np.amax(error_stencils, axis=(axis+1)))
+                    elif "avg" in self.reward_mode:
+                        combined_error.append(np.mean(error_stencils, axis=(axis+1)))
+                    elif "L2" in self.reward_mode:
+                        combined_error.append(np.sqrt(np.sum(error_stencils**2, axis=(axis+1))))
+                    else:
+                        raise Exception("AbstractPDEEnv: reward_mode problem")
+            else:
+                raise Exception("AbstractPDEEnv: reward_mode problem")
+
+            total_reward = tuple(reward_part - error_part for
+                                    reward_part, error_part in zip(total_reward, combined_error))
+
+        # Minimize increase in total variation with the reward.
+        if "tv" in self.reward_mode:
+            prev = self.state_history[-1]
+            current = self.grid.get_full()
+            #TODO add this parameter
+            # 1e-3 weights the tv increase such that it is approximately the same scale as
+            # the one-step error.
+            if not hasattr(self, 'tv_weight'):
+                self.tv_weight = 1e-3
+
+            # Note: This definitely works for 1 dimension, but I'm not sure if this is correct
+            # for multiple dimensions. The Wikipedia definition is full of vector calculus.
+            # Recall that axis 0 is the vector dimension, hence axis+1.
+            prev_variation = [np.abs(AxisSlice(prev, axis+1)[1:] - AxisSlice(prev, axis+1)[:-1])
+                                    for axis in range(self.dimensions)]
+            previous_tv = np.sum([np.sum(variation_axis) for variation_axis in prev_variation])
+            current_variation = [
+                    np.abs(AxisSlice(current, axis+1)[1:] - AxisSlice(current, axis+1)[:-1])
+                                    for axis in range(self.dimensions)]
+            current_tv = np.sum([np.sum(variation_axis) for variation_axis in current_variation])
+            tv_increase = current_tv - previous_tv
+            normalized_tv_increase = tv_increase / np.prod(self.grid.num_cells)
+            if tv_increase > 0.0:
+                total_reward = tuple(reward_part - self.tv_weight * normalized_tv_increase for
+                                        reward_part in total_reward)
 
         # Squash reward.
         if "nosquash" in self.reward_mode:
             max_penalty = 1e7
-            reward = tuple(error for error in combined_error)
+            reward = tuple(reward_part for reward_part in total_reward)
         elif "logsquash" in self.reward_mode:
             max_penalty = 1e7
-            reward = tuple(np.log(error + 1e-30) for error in combined_error)
+            reward = tuple(-np.log(-reward_part + 1e-30) for reward_part in total_reward)
         elif "arctansquash" in self.reward_mode:
             max_penalty = np.pi / 2
             if "noadjust" in self.reward_mode:
-                reward = tuple(np.arctan(-error) for error in combined_error)
+                reward = tuple(np.arctan(reward_part) for reward_part in total_reward)
             else:
                 # The constant controls the relative importance of small rewards compared to large rewards.
                 # Towards infinity, all rewards (or penalties) are equally important.
                 # Towards 0, small rewards are increasingly less important.
                 # An alternative to arctan(C*x) with this property would be x^(1/C).
-                reward = tuple(np.arctan(self.reward_adjustment * -error) for error in
-                        combined_error)
+                reward = tuple(np.arctan(self.reward_adjustment * reward_part)
+                                                for reward_part in total_reward)
         else:
-            raise Exception("AbstractBurgersEnv: reward_mode problem")
+            raise Exception("AbstractPDEEnv: reward_mode problem")
 
         # Conservation-based reward.
         # Doesn't work (always 0), but a good idea. We'll try this again eventually.
         # reward = -np.log(np.sum(rhs[g.ilo:g.ihi+1]))
 
         # Give a penalty and end the episode if we're way off.
-        #if np.max(state) > 1e7 or np.isnan(np.max(state)): state possibly made more sense here?
-        if np.max(error) > 1e7 or np.isnan(np.max(error)):
+        current_state = self.grid.get_full()
+        if np.max(current_state) > 1e7 or np.isnan(np.max(current_state)):
             reward = tuple(reward_part - max_penalty * (self.episode_length - self.steps)
                         for reward_part in reward)
             done = True
 
-        #print("reward:", reward)
-
-        if self.grid.ndim == 1:
+        if self.dimensions == 1:
             reward = reward[0]
 
         return reward, done
