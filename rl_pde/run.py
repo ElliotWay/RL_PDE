@@ -4,12 +4,9 @@ import sys
 import time
 import numpy as np
 import pandas as pd
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-from matplotlib.ticker import SymmetricalLogLocator
 
 from util import sb_logger as logger
+from util.plots import plot_reward_summary, plot_l2_summary, plot_loss_summary
 
 # More imports below rollout() to avoid circular dependency.
 # Maybe rollout() should be in a separate file?
@@ -75,194 +72,31 @@ from envs.plottable_env import Plottable1DEnv, Plottable2DEnv
 from util import action_snapshot
 from util.misc import human_readable_time_delta
 
-# We expect e.g. loss to drop quickly in the early episodes, but if it starts high enough that,
-# even with a log plot, it's hard to distinguish the rest of the data, then we can crop off the
-# high range of that early drop.
-# If the first point is more than 2 orders of magnitude above the 95% percentile, restrict the
-# range of the y axis to that point.
-def crop_early_shift(ax, mode):
-    percentile_limit = 5
-    order_limit = 2
-
-    data = [line.get_ydata() for line in ax.get_lines()]
-    firsts = [d[0] for d in data]
-    all_data = np.concatenate(data)
-    if mode == "normal":
-        max_first = max(firsts)
-        high_percentile = np.percentile(all_data, 100 - percentile_limit)
-        if ((max_first > 0 and high_percentile > 0) and
-                np.log10(max_first) - np.log10(high_percentile) > order_limit):
-            ax.set_ylim(top=(high_percentile * (10 ** order_limit)))
-    elif mode == "flipped":
-        # Values are high magnitude negative. (Not low magnitude.)
-        min_first = min(firsts)
-        low_percentile = np.percentile(all_data, percentile_limit)
-        if ((min_first < 0 and low_percentile < 0) and
-                np.log10(-min_first) - np.log10(-low_percentile) > order_limit):
-            ax.set_ylim(bottom=(low_percentile * (10 ** order_limit)))
-
-
 def write_summary_plots(log_dir, summary_plot_dir, total_episodes, eval_env_names):
     #TODO This is a hack. Consider adapting the SB logger class to our own purposes
     # so we can fetch this file name instead of hardcoding it here.
     csv_file = os.path.join(log_dir, "progress.csv")
     csv_df = pd.read_csv(csv_file, comment='#')
 
-    train_color = 'k'
-    eval_color = 'tab:orange'
-    envs_colors = ['b', 'r', 'g', 'm', 'c', 'y']
-
-    episodes = csv_df['episodes']
-
-    # New name format.
-    if f"eval_{eval_env_names[0]}_reward" in csv_df:
-        eval_env_prefixes = [f"eval_{name}" for name in eval_env_names]
-    # Old name format. (Kept in case this function is being called from somewhere besides
-    # run() to update an old experiment.)
-    else:
-        eval_env_prefixes = [f"eval{num+1}" for num in range(len(eval_env_names))]
-
-    reward_fig = plt.figure()
-    ax = reward_fig.gca()
-    
-    all_rewards = []
-    train_reward = csv_df['avg_train_total_reward']
-    ax.plot(episodes, train_reward, color=train_color, label="train")
-    avg_eval_reward = csv_df['avg_eval_total_reward']
-    ax.plot(episodes, avg_eval_reward, color=eval_color, label="eval avg")
-    if len(eval_env_names) > 1:
-        for i, (name, prefix) in enumerate(zip(eval_env_names, eval_env_prefixes)):
-            eval_reward = csv_df[f'{prefix}_reward']
-            ax.plot(episodes, eval_reward,
-                    color=envs_colors[i], ls='--', label=name)
-
-    reward_fig.legend(loc="lower right")
-    ax.set_xlim((0, total_episodes))
-    ax.set_title("Total Reward per Episode")
-    ax.set_xlabel('episodes')
-    ax.set_ylabel('reward')
-    ax.grid(True)
-    #linthresh=0.1
-    #ax.set_yscale('symlog', linthreshy=linthresh)
-    #ax.yaxis.set_minor_locator(SymmetricalLogLocator(base=10, linthresh=linthresh,
-                                                        #subs=[1.0, 0.75, 0.5, 0.25]))
-    #low, high = ax.get_ylim()
-    #if high < 0:
-        #ax.set_ylim(top=0.0)
-    ax.set_yscale('symlog')
-    #min_scale = 1e-10
-    #ax.yaxis.set_minor_locator(SymmetricalLogLocator(base=10, linthresh=min_scale,
-            #subs=[0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 2.0, 3.0, 4.0]))
-    #ax.set_ymargin(min_scale)
-
-    crop_early_shift(ax, "flipped")
-
     reward_filename = os.path.join(summary_plot_dir, "rewards.png")
-    reward_fig.savefig(reward_filename)
-    plt.close(reward_fig)
-
-    l2_fig = plt.figure()
-    ax = l2_fig.gca()
-    train_l2 = csv_df['avg_train_end_l2']
-    ax.plot(episodes, train_l2, color=train_color, label="train")
-    avg_eval_l2 = csv_df['avg_eval_end_l2']
-    ax.plot(episodes, avg_eval_l2, color=eval_color, label="eval avg")
-    if len(eval_env_names) > 1:
-        for i, (name, prefix) in enumerate(zip(eval_env_names, eval_env_prefixes)):
-            eval_l2 = csv_df[f'{prefix}_end_l2']
-            ax.plot(episodes, eval_l2,
-                    color=envs_colors[i], ls='--', label=name)
-
-    l2_fig.legend(loc="upper right")
-    ax.set_xlim((0, total_episodes))
-    ax.set_title("L2 Error with WENO at End of Episode")
-    ax.set_xlabel('episodes')
-    ax.set_ylabel('L2 error')
-    ax.grid(True)
-    #linthresh=0.001
-    #ax.set_yscale('symlog', linthreshy=linthresh)
-    #ax.yaxis.set_minor_locator(SymmetricalLogLocator(base=10, linthresh=linthresh,
-                                                        #subs=[1.0, 0.75, 0.5, 0.25]))
-    #low, high = ax.get_ylim()
-    #if low > 0:
-        #ax.set_ylim(bottom=0.0)
-    ax.set_yscale('log')
-    crop_early_shift(ax, "normal")
-
+    plot_reward_summary(csv_df, reward_filename, total_episodes, eval_env_names)
     l2_filename = os.path.join(summary_plot_dir, "l2.png")
-    l2_fig.savefig(l2_filename)
-    plt.close(l2_fig)
-
-    loss_fig = plt.figure()
-    ax = loss_fig.gca()
-    if 'loss' in csv_df:
-        loss = csv_df['loss']
-    elif 'policy_loss' in csv_df:
-        loss = -csv_df['policy_loss']
-    else:
-        raise Exception("Can't find loss in progress.csv file.")
-    ax.plot(episodes, loss, color='k')
-    ax.set_xlim((0, total_episodes))
-    ax.set_title("Loss Function")
-    ax.set_xlabel('episodes')
-    ax.set_ylabel('loss')
-    ax.grid(True)
-    ax.set_yscale('log')
-    #low, high = ax.get_ylim()
-    #if low > 0:
-        #ax.set_ylim(bottom=0.0)
-    crop_early_shift(ax, "normal")
-
+    plot_l2_summary(csv_df, l2_filename, total_episodes, eval_env_names)
     loss_filename = os.path.join(summary_plot_dir, "loss.png")
-    loss_fig.savefig(loss_filename)
-    plt.close(loss_fig)
+    plot_loss_summary(csv_df, loss_filename, total_episodes)
 
-    print("Summary plots updated in {}.".format(summary_plot_dir))
+    print(f"Summary plots updated in {summary_plot_dir}.")
 
 def write_final_plots(log_dir, summary_plot_dir, total_episodes, eval_env_names):
     """ Create final plots that are different from the summary plots in some way. """ 
     csv_file = os.path.join(log_dir, "progress.csv")
     csv_df = pd.read_csv(csv_file, comment='#')
 
-    train_color = 'k'
-    eval_color = 'tab:orange'
-    envs_colors = ['b', 'r', 'g', 'm', 'c', 'y']
-
-    episodes = csv_df['episodes']
-
-    # New name format.
-    if f"eval_{eval_env_names[0]}_reward" in csv_df:
-        eval_env_prefixes = [f"eval_{name}" for name in eval_env_names]
-    # Old name format. (Kept in case this function is being called from somewhere besides
-    # run() to update an old experiment.)
-    else:
-        eval_env_prefixes = [f"eval{num+1}" for num in range(len(eval_env_names))]
-
-    l2_fig = plt.figure()
-    ax = l2_fig.gca()
-    # Don't plot training L2 or average testing L2.
-    #train_l2 = csv_df['avg_train_end_l2']
-    #ax.plot(episodes, train_l2, color=train_color, label="train")
-    #avg_eval_l2 = csv_df['avg_eval_end_l2']
-    #ax.plot(episodes, avg_eval_l2, color=eval_color, label="eval avg")
-    for i, (name, prefix) in enumerate(zip(eval_env_names, eval_env_prefixes)):
-        eval_l2 = csv_df[f'{prefix}_end_l2']
-        # Use solid lines instead of dashed lines for this version.
-        ax.plot(episodes, eval_l2,
-                color=envs_colors[i], ls='-', label=name)
-
-    l2_fig.legend(loc="upper right")
-    ax.set_xlim((0, total_episodes))
-    ax.set_title("L2 Error with WENO at End of Episode")
-    ax.set_xlabel('episodes')
-    ax.set_ylabel('L2 error')
-    ax.grid(True)
-    ax.set_yscale('log')
-    crop_early_shift(ax, "normal")
-
+    reward_filename = os.path.join(summary_plot_dir, "final_rewards.png")
+    plot_reward_summary(csv_df, reward_filename, total_episodes, eval_env_names, only_eval=True)
     l2_filename = os.path.join(summary_plot_dir, "final_l2.png")
-    l2_fig.savefig(l2_filename)
-    plt.close(l2_fig)
+    plot_l2_summary(csv_df, l2_filename, total_episodes, eval_env_names, only_eval=True)
+
     print("Final plots created in {}.".format(summary_plot_dir))
 
 def train(env, eval_envs, emi, args):

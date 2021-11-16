@@ -1,8 +1,10 @@
 import os
+import re
+import numpy as np
+import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import numpy as np
 
 def generate_polynomial(order, grid_sizes, comparison_error):
     """
@@ -318,4 +320,178 @@ def error_plot(x_vals, error_vals, labels, log_dir, name="error_over_x.png", tit
     plt.savefig(filename)
     print("Saved plot to " + filename + ".")
     plt.close(fig)
+
+TRAIN_COLOR = 'black'
+AVG_EVAL_COLOR = 'tab:orange'
+ENV_COLORS = ['b', 'r', 'g', 'm', 'c', 'y']
+
+def crop_early_shift(ax, mode):
+    """
+    Crop a major change in the begining of the plot.
+
+    We expect e.g. loss to drop quickly in the early episodes, but if it starts high enough that,
+    even with a log plot, it's hard to distinguish the rest of the data, then we can crop off the
+    high range of that early drop.
+    If the first point is more than 2 orders of magnitude above the 95% percentile, restrict the
+    range of the y axis to that point.
+
+    Parameters
+    ----------
+    ax : Axes
+        The axes of the plot to crop.
+    mode : string
+        "normal" for cropping a rapid drop from large positive values.
+        "flipped" for cropping a rapid increase from large negative values.
+    """
+
+    percentile_limit = 5
+    order_limit = 2
+
+    data = [line.get_ydata() for line in ax.get_lines()]
+    if data:
+        firsts = [d[0] for d in data]
+        all_data = np.concatenate(data)
+        if mode == "normal":
+            max_first = max(firsts)
+            high_percentile = np.percentile(all_data, 100 - percentile_limit)
+            if ((max_first > 0 and high_percentile > 0) and
+                    np.log10(max_first) - np.log10(high_percentile) > order_limit):
+                ax.set_ylim(top=(high_percentile * (10 ** order_limit)))
+        elif mode == "flipped":
+            # Values are high magnitude negative. (Not low magnitude.)
+            min_first = min(firsts)
+            low_percentile = np.percentile(all_data, percentile_limit)
+            if ((min_first < 0 and low_percentile < 0) and
+                    np.log10(-min_first) - np.log10(-low_percentile) > order_limit):
+                ax.set_ylim(bottom=(low_percentile * (10 ** order_limit)))
+
+def plot_reward_summary(csv_file, output_file, total_episodes, eval_env_names=None,
+        only_eval=False):
+    if not isinstance(csv_file, pd.DataFrame):
+        csv_df = pd.read_csv(csv_file, comment='#')
+    else:
+        csv_df = csv_file
+
+    # Assume new name format.
+    if eval_env_names is None:
+        eval_env_names = [re.fullmatch("eval_(.+)_reward", name).group(1)
+                    for name in list(csv_df) if re.fullmatch("eval_.+_reward", name)]
+        eval_env_prefixes = [f"eval_{name}" for name in eval_env_names]
+    # Check for new name format.
+    elif f"eval_{eval_env_names[0]}_reward" in csv_df:
+        eval_env_prefixes = [f"eval_{name}" for name in eval_env_names]
+    # Old name format. (Kept in case this function is being called from somewhere besides
+    # run() to update an old experiment.)
+    else:
+        eval_env_prefixes = [f"eval{num+1}" for num in range(len(eval_env_names))]
+
+    episodes = csv_df['episodes']
+
+    reward_fig = plt.figure()
+    ax = reward_fig.gca()
+    
+    all_rewards = []
+    if not only_eval:
+        if 'avg_train_total_reward' in csv_df:
+            train_reward = csv_df['avg_train_total_reward']
+            ax.plot(episodes, train_reward, color=TRAIN_COLOR, label="train")
+        if len(eval_env_prefixes) > 1 and 'avg_eval_total_reward' in csv_df:
+            avg_eval_reward = csv_df['avg_eval_total_reward']
+            ax.plot(episodes, avg_eval_reward, color=AVG_EVAL_COLOR, label="eval avg")
+    for i, (name, prefix) in enumerate(zip(eval_env_names, eval_env_prefixes)):
+        eval_reward = csv_df[f'{prefix}_reward']
+        linestyle = '-' if only_eval else '--'
+        ax.plot(episodes, eval_reward,
+                color=ENV_COLORS[i], ls=linestyle, label=name)
+
+    reward_fig.legend(loc="lower right")
+    ax.set_xlim((0, total_episodes))
+    ax.set_title("Total Reward per Episode")
+    ax.set_xlabel('episodes')
+    ax.set_ylabel('reward')
+    ax.grid(True)
+    # Use symlog as the rewards are negative.
+    ax.set_yscale('symlog')
+    crop_early_shift(ax, "flipped")
+
+    reward_fig.savefig(output_file)
+    plt.close(reward_fig)
+
+def plot_l2_summary(csv_file, output_file, total_episodes, eval_env_names=None,
+        only_eval=False):
+    if not isinstance(csv_file, pd.DataFrame):
+        csv_df = pd.read_csv(csv_file, comment='#')
+    else:
+        csv_df = csv_file
+
+    # Assume new name format.
+    if eval_env_names is None:
+        eval_env_names = [re.fullmatch("eval_(.+)_end_l2", name).group(1)
+                    for name in list(csv_df) if re.fullmatch("eval_.+_end_l2", name)]
+        eval_env_prefixes = [f"eval_{name}" for name in eval_env_names]
+    # Check for new name format.
+    elif f"eval_{eval_env_names[0]}_end_l2" in csv_df:
+        eval_env_prefixes = [f"eval_{name}" for name in eval_env_names]
+    # Old name format. (Kept in case this function is being called from somewhere besides
+    # run() to update an old experiment.)
+    else:
+        eval_env_prefixes = [f"eval{num+1}" for num in range(len(eval_env_names))]
+
+    episodes = csv_df['episodes']
+
+    l2_fig = plt.figure()
+    ax = l2_fig.gca()
+    if not only_eval:
+        if 'avg_train_end_l2' in csv_df:
+            train_l2 = csv_df['avg_train_end_l2']
+            ax.plot(episodes, train_l2, color=TRAIN_COLOR, label="train")
+        if len(eval_env_prefixes) > 1 and 'avg_eval_end_l2' in csv_df:
+            avg_eval_l2 = csv_df['avg_eval_end_l2']
+            ax.plot(episodes, avg_eval_l2, color=AVG_EVAL_COLOR, label="eval avg")
+    for i, (name, prefix) in enumerate(zip(eval_env_names, eval_env_prefixes)):
+        eval_l2 = csv_df[f'{prefix}_end_l2']
+        linestyle = '-' if only_eval else '--'
+        ax.plot(episodes, eval_l2,
+                color=ENV_COLORS[i], ls=linestyle, label=name)
+
+    l2_fig.legend(loc="upper right")
+    ax.set_xlim((0, total_episodes))
+    ax.set_title("L2 Error with WENO at End of Episode")
+    ax.set_xlabel('episodes')
+    ax.set_ylabel('L2 error')
+    ax.grid(True)
+    ax.set_yscale('log')
+    crop_early_shift(ax, "normal")
+
+    l2_fig.savefig(output_file)
+    plt.close(l2_fig)
+
+def plot_loss_summary(csv_file, output_file, total_episodes):
+    if not isinstance(csv_file, pd.DataFrame):
+        csv_df = pd.read_csv(csv_file, comment='#')
+    else:
+        csv_df = csv_file
+
+    episodes = csv_df['episodes']
+
+    loss_fig = plt.figure()
+    ax = loss_fig.gca()
+    if 'loss' in csv_df:
+        loss = csv_df['loss']
+    elif 'policy_loss' in csv_df:
+        loss = -csv_df['policy_loss']
+    else:
+        raise Exception("Can't find loss in progress.csv file.")
+    ax.plot(episodes, loss, color='k')
+    ax.set_xlim((0, total_episodes))
+    ax.set_title("Loss Function")
+    ax.set_xlabel('episodes')
+    ax.set_ylabel('loss')
+    ax.grid(True)
+    ax.set_yscale('log')
+    crop_early_shift(ax, "normal")
+
+    loss_fig.savefig(output_file)
+    plt.close(loss_fig)
+
 
