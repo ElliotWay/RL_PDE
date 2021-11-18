@@ -158,7 +158,7 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
         env_args.solution_rk = f"rk{env_args.solution_rk}"
 
     if main_args.model == "full" and env_args.reward_mode is None:
-        print(f"{pfx}Reward mode forced to use 'one-step' to work with 'full' model.")
+        print(f"{pfx}Reward mode defaulted to 'one-step' as expected by 'full' model.")
         env_args.reward_mode = "one-step"
 
     if env_args.memoize is None:

@@ -716,13 +716,13 @@ class AbstractPDEEnv(gym.Env):
     def compute_l2_error(self, timestep=None):
         """
         Compute the L2 error between the solution and the state at a given timestep.
-        By default, the current timestep is used.
 
         Parameters
         ----------
         timestep : int (or string)
-            Timestep for which to calculate the L2 error. Passing "all" for timestep will instead
-            calculate the L2 error at every timestep, and return them as a list.
+            Timestep for which to compute the L2 error. The most recent timestep by default.
+            Passing "all" for timestep will instead calculate the L2 error at every timestep,
+            and return them as a list.
 
 
         Returns
@@ -741,6 +741,42 @@ class AbstractPDEEnv(gym.Env):
             combined_cell_size = np.prod(self.grid.cell_size)
             l2_error = np.sqrt(combined_cell_size * np.sum(np.square(error)))
             return l2_error
+
+    def get_total_variation(self, timestep=None):
+        """
+        Compute the total variation (TV, as in TVD) in the state.
+
+        Total variation does not include ghost cells.
+        Note: for spaces with dimensions > 1, I'm not 100% certain this method is correct.
+        The current version computes the variation along each dimension independently, then adds
+        them together.
+
+        Parameters
+        ----------
+        timestep : int (or string)
+            Timestep for which to compute the TV. Use the current grid state by default.
+            Passing "all" for timestep will compute the TV at every timestep, and return them as a
+            list.
+
+        Returns
+        -------
+        tv : float (or list of floats)
+            The total variation, or list of TVs if "all" is passed to timestep.
+        """
+        if timestep == "all":
+            tvs = []
+            for step in range(len(self.state_history)):
+                tvs.append(self.get_total_variation(step))
+            return tvs
+
+        else:
+            state = self.get_state(timestep=timestep, full=False)
+            # axis+1 because axis 0 is vector axis.
+            variation = [np.abs(AxisSlice(state, axis+1)[1:] - AxisSlice(state, axis+1)[:-1])
+                                    for axis in range(self.dimensions)]
+            tv = np.sum([np.sum(variation_axis) for variation_axis in variation])
+
+            return tv
 
     def get_action(self, timestep=None, location=None, axis=None,
             action_history=None):
@@ -967,25 +1003,14 @@ class AbstractPDEEnv(gym.Env):
 
         # Minimize increase in total variation with the reward.
         if "tv" in self.reward_mode:
-            prev = self.state_history[-1]
-            current = self.grid.get_full()
             #TODO add this parameter
             # 1e-3 weights the tv increase such that it is approximately the same scale as
             # the one-step error.
             if not hasattr(self, 'tv_weight'):
                 self.tv_weight = 1e-3
-
-            # Note: This definitely works for 1 dimension, but I'm not sure if this is correct
-            # for multiple dimensions. The Wikipedia definition is full of vector calculus.
-            # Recall that axis 0 is the vector dimension, hence axis+1.
-            prev_variation = [np.abs(AxisSlice(prev, axis+1)[1:] - AxisSlice(prev, axis+1)[:-1])
-                                    for axis in range(self.dimensions)]
-            previous_tv = np.sum([np.sum(variation_axis) for variation_axis in prev_variation])
-            current_variation = [
-                    np.abs(AxisSlice(current, axis+1)[1:] - AxisSlice(current, axis+1)[:-1])
-                                    for axis in range(self.dimensions)]
-            current_tv = np.sum([np.sum(variation_axis) for variation_axis in current_variation])
-            tv_increase = current_tv - previous_tv
+            current_tv = self.get_total_variation()
+            prev_tv = self.get_total_variation(timestep=-1)
+            tv_increase = current_tv - prev_tv
             normalized_tv_increase = tv_increase / np.prod(self.grid.num_cells)
             if tv_increase > 0.0:
                 total_reward = tuple(reward_part - self.tv_weight * normalized_tv_increase for
