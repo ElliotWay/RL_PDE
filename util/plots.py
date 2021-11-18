@@ -53,7 +53,7 @@ def generate_polynomial(order, grid_sizes, comparison_error):
     return out_grid_sizes, values, label
  
 def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels=None,
-        kwargs_list=None, title=None, polynomials=None):
+        kwargs_list=None, title=None):
     """
     Create a convergence plot of grid size vs. L2 error.
 
@@ -79,7 +79,6 @@ def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels
         Name of the file to save into log_dir. 'convergence.png' by default.
     label : [str]
         Labels for each set of errors, if there are more than one.
-        the index of the error plot that the polynomial will be based on.
     kwargs_list : [dict]
         Kwargs passed to plot(), e.g. color and linestyle, for each set of errors.
     title : str
@@ -87,20 +86,20 @@ def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels
     """
     try:
         _ = iter(grid_sizes[0])
-    except:
+    except TypeError:
         multiple_size_lists = False
     else:
         multiple_size_lists = True
 
     try:
         _ = iter(errors[0])
-    except:
+    except TypeError:
         multiple_error_lists = False
     else:
         multiple_error_lists = True
 
     if multiple_size_lists and not multiple_error_lists:
-        raise ValueError("Can't use {} lists of grid sizes for only one set or L2 errors.".format(
+        raise ValueError("Can't use {} lists of grid sizes for only one set of L2 errors.".format(
                                                                         len(grid_sizes)))
 
     if multiple_error_lists:
@@ -320,6 +319,128 @@ def error_plot(x_vals, error_vals, labels, log_dir, name="error_over_x.png", tit
     plt.savefig(filename)
     print("Saved plot to " + filename + ".")
     plt.close(fig)
+
+#TODO, possibly: should this handle vectors? I.e. plot some value for each vector component over
+# time?
+def plot_over_time(times, values, log_dir, name, scaling='linear',
+        ylabel=None, labels=None, kwargs_list=None, title=None):
+    """
+    Plot some scalar over the time of an episode.
+
+    If possible use the actual time, not the timestep.
+
+    Parameters
+    ----------
+    times : [float] or [[float]]
+        Time values for the x-axis. Either one list for every set of values, or a separate list for
+        each set of values.
+    values : [float] or [[float]]
+        The values of the y-axis. May be one list of values, or multiple for multiple lines.
+    log_dir : string
+        Location to save to.
+    name : string
+        Name of the file in log_dir to save to.
+    scaling : string
+        The scaling to apply to the y-axis (e.g. 'linear', 'log', 'symlog').
+    ylabel : string
+        Name of what is being plotted against time.
+    labels : string or [string]
+        Label(s) for the plotted values. Either one for every or a list for each.
+    kwargs_list : dict or [dict]
+        Kwargs passed to plot, e.g. color and linestyle. Either one for every or a list for each.
+    title : str
+        Title of the plot. No title by default.
+    """
+    try:
+        _ = iter(times[0])
+    except TypeError:
+        multiple_time_lists = False
+    else:
+        multiple_time_lists = True
+
+    try:
+        _ = iter(values[0])
+    except TypeError:
+        multiple_value_lists = False
+    else:
+        multiple_value_lists = True
+    if multiple_time_lists and not multiple_value_lists:
+        raise ValueError(f"Can't use {len(times)} lists of times for only one set of values.")
+
+    if kwargs_list is not None:
+        try:
+            _ = kwargs_list.items()
+        except (AttributeError, TypeError):
+            multiple_kwargs_dicts = True
+        else:
+            multiple_kwargs_dicts = False
+    if labels is not None:
+        try:
+            _ = iter(labels[0])
+        except TypeError:
+            multiple_labels = False
+        else:
+            multiple_labels = True
+        if multiple_labels and not multiple_value_lists:
+            raise ValueError(f"Can't use {len(labels)} for only one set of values.")
+        if multiple_value_lists and not multiple_labels:
+            raise ValueError(f"Can't use the same label for {len(values)} sets of values.")
+
+    if multiple_value_lists:
+        for index, value_list in enumerate(values):
+            if multiple_time_lists:
+                time_list = times[index]
+            else:
+                time_list = times
+
+            if kwargs_list is None:
+                kwargs = {}
+            elif multiple_kwargs_dicts:
+                kwargs = kwargs_list[index]
+            else:
+                kwargs = kwargs_list
+
+            if labels is not None:
+                label = labels[index]
+                plt.plot(time_list, value_list, label=label, **kwargs)
+            else:
+                plt.plot(time_list, value_list, **kwargs)
+                
+    else:
+        if kwargs_list is not None:
+            if multiple_kwargs_dicts:
+                kwargs = kwargs_list[0]
+            else:
+                kwargs = kwargs_list
+        else:
+            kwargs = {}
+        if 'color' not in kwargs or 'c' not in kwargs:
+            kwargs['color'] = 'black'
+
+        if labels is not None:
+            label = labels
+            plt.plot(times, values, label=label, **kwargs)
+        else:
+            plt.plot(times, values, **kwargs)
+
+    ax = plt.gca()
+    ax.set_xlabel("time")
+    if ylabel is not None:
+        ax.set_ylabel(ylabel)
+    ax.set_yscale(scaling)
+
+    if labels is not None:
+        ax.legend()
+    if title is not None:
+        ax.set_title(title)
+
+    plt.tight_layout()
+
+    filename = os.path.join(log_dir, name)
+    plt.savefig(filename)
+    print('Saved plot to ' + filename + '.')
+    plt.close()
+
 
 TRAIN_COLOR = 'black'
 AVG_EVAL_COLOR = 'tab:orange'

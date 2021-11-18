@@ -12,6 +12,7 @@ import gc # manual garbage collection
 
 import yaml
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
@@ -66,16 +67,17 @@ def do_test(env, agent, args):
             if step == next_update:
                 print(f"step = {env.steps}, t = {env.t:.4f}")
 
-            if 'plot' in args.output_mode:
-                env.plot_state(**render_args)
-            if 'csv' in args.output_mode:
-                env.save_state()
-
+            if args.plot_state:
+                if 'plot' in args.output_mode:
+                    env.plot_state(**render_args)
+                if 'csv' in args.output_mode:
+                    env.save_state()
             if args.plot_error:
                 if 'plot' in args.output_mode:
                     env.plot_state(plot_error=True, **render_args)
                 if 'csv' in args.output_mode:
                     env.save_state(use_error=True)
+        # Plot the action that leads to the plotted state.
         if (args.animate or step == next_update + 1) and args.plot_actions:
             if 'plot' in args.output_mode:
                 env.plot_action(**render_args)
@@ -93,13 +95,15 @@ def do_test(env, agent, args):
     print(f"step = {env.steps}, t = {env.t:.4f} (done)")
 
     if 'plot' in args.output_mode:
-        env.plot_state(**render_args)
+        if args.plot_state:
+            env.plot_state(**render_args)
         if args.plot_error:
             env.plot_state(plot_error=True, **render_args)
         if args.plot_actions:
             env.plot_action(**render_args)
     if 'csv' in args.output_mode:
-        env.save_state()
+        if args.plot_state:
+            env.save_state()
         if args.plot_error:
             env.save_state(use_error=True)
         if args.plot_actions:
@@ -139,7 +143,7 @@ def do_test(env, agent, args):
                 actual_max, actual_argmax, dim_names[dim_with_max]))
 
     error = env.compute_l2_error()
-    print("Final error with solution was {}.".format(error))
+    print(f"Final L2 error with solution was {error}.")
 
     if args.evolution_plot:
         if 'plot' in args.output_mode:
@@ -153,6 +157,17 @@ def do_test(env, agent, args):
                 raise Exception()
         if 'csv' in args.output_mode:
             print("CSV format for evolution is not implemented.")
+    if args.plot_tv:
+        times = env.timestep_history
+        tvs = env.get_total_variation(timestep="all")
+        if 'plot' in args.output_mode:
+            plots.plot_over_time(times, tvs, log_dir=args.log_dir, name="total_variation.png",
+                    title="Total Variation")
+        if 'csv' in args.output_mode:
+            tv_df = pd.DataFrame({'t': times, 'tv': tvs})
+            tv_filename = os.path.join(args.log_dir, "total_variation.csv")
+            tv_df.to_csv(tv_filename, index=False)
+            print(f"Saved data to {tv_filename}.")
 
     return error
 
@@ -187,12 +202,18 @@ def main():
                         help="Directory to place log file and other results. Default is test/env/agent/timestamp.")
     parser.add_argument('--seed', type=int, default=1,
                         help="Set random seed for reproducibility.")
+    parser.add_argument('--no-state', '--no_state', default=True, dest='plot_state',
+                        action='store_false',
+                        help="Override the default and do not plot the state of the environment.")
     parser.add_argument('--plot-actions', '--plot_actions', default=False, action='store_true',
-                        help="Plot the actions in addition to the state.")
+                        help="Plot the agent's actions.")
     parser.add_argument('--animate', default=False, action='store_true',
-                        help="Enable animation mode. Plot the state at every timestep, and keep the axes fixed across every plot.")
+                        help="Enable animation mode. Plot the state at every timestep,"
+                        + " and keep the axes fixed across every plot.")
     parser.add_argument('--plot-error', '--plot_error', default=False, action='store_true',
                         help="Plot the error between the agent and the solution. Combines with evolution-plot.")
+    parser.add_argument('--plot-tv', '--plot_tv', default=False, action='store_true',
+                        help="Plot the total variation vs time for an episode.")
     parser.add_argument('--evolution-plot', '--evolution_plot', default=False, action='store_true',
                         help="Instead of usual rendering create 'evolution plot' which plots several states on the"
                         + " same plot in increasingly dark color.")
