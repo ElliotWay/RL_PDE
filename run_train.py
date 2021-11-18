@@ -167,6 +167,8 @@ def main():
             eval_args.rk = "rk4"
             eval_args.num_cells = 128
             eval_args.fixed_timesteps = False
+            eval_args.analytical = True
+            eval_args.reward_mode = "full"
             env_builder.set_contingent_env_defaults(args, eval_args, test=True,
                     print_prefix="eval (gaussian): ")
             eval_envs.append(env_builder.build_env(args.env, eval_args, test=True))
