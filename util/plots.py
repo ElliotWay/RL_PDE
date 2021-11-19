@@ -2,6 +2,7 @@ import os
 import re
 import numpy as np
 import pandas as pd
+import scipy.stats
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -440,6 +441,80 @@ def plot_over_time(times, values, log_dir, name, scaling='linear',
     plt.savefig(filename)
     print('Saved plot to ' + filename + '.')
     plt.close()
+
+
+# float regex from https://stackoverflow.com/a/12929311/2860127
+FLOAT_REGEX = r'[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?'
+
+def add_average_with_ci(ax, x, ys, ci_type="range", label=None, plot_kwargs=None):
+    """
+    On an existing axis, plot the mean of multiple data series with a shaded region around it for a
+    confidence interval.
+
+    Parameters
+    ----------
+    ax : Axes
+        The axes to plot on.
+    x : [float]
+        The x values of the data.
+    y : [[float]]
+        The y values for each series of data.
+        Axes are [series, x].
+    ci_type : str
+        The type of confidence interval to plot. Options are:
+        range: [min,max]
+        Xconf: [P(lower)=(1-X)/2,P(higher)=(1-X)/2] (T dist), X in [0,1]
+        Xsig: [-X std deviations,+X std deviations] (normal dist), X > 0
+        Nperc: [Nth percentile,100-Nth percentile], N in [0, 50]
+        none: (only plot the average, no confidence interval)
+    label : str
+        Label of the average line.
+    plot_kwargs : dict
+        Kwargs to pass to the plot function, e.g. color and linestyle.
+    """
+    if plot_kwargs is None:
+        plot_kwargs = {}
+
+    y_data = np.array(ys)
+    y_mean = np.mean(y_data, axis=0)
+
+    if label is None:
+        mean_line = ax.plot(x, y_mean, **plot_kwargs)[0]
+    else:
+        mean_line = ax.plot(x, y_mean, label=label, **plot_kwargs)[0]
+
+    if ci_type is not None and ci_type != "none":
+        if ci_type == "range":
+            lower = np.min(y_data, axis=0)
+            upper = np.max(y_data, axis=0)
+        elif re.fullmatch(f"{float_regex}conf", ci_type):
+            confidence = float(re.fullmatch(f"({float_regex})conf", ci_type).group(1))
+            size = len(y_data)
+            if confidence < 0.0 or confidence > 1.0:
+                raise ValueError()
+            t_constant = float(scipy.stats.t.ppf((1.0 - confidence)/2.0, df=(size - 1)))
+            ci_size = t_constant * np.std(y_values, ddof=1, axis=0)/np.sqrt(size)
+            lower = y_mean - ci_size
+            upper = y_mean + ci_size
+        elif re.fullmatch(f"{float_regex}sig", ci_type):
+            num_sigmas = float(re.fullmatch(f"({float_regex})sig", ci_type).group(1))
+            if num_sigmas < 0.0:
+                raise ValueError()
+            ci_size = num_sigmas * np.std(y_values, axis=0)
+            lower = y_mean - ci_size
+            upper = y_mean + ci_size
+        elif re.fullmatch(f"{float_regex}perc", ci_type):
+            lower_percentile = float(re.fullmatch(f"({float_regex})perc", ci_type).group(1))
+            if lower_percentile < 0.0 or lower_percentile > 50.0:
+                raise ValueError()
+            upper_percentile = 100.0 - lower_percentile
+            lower = np.percentile(y_data, lower_percentile, axis=0)
+            upper = np.percentile(y_data, upper_percentile, axis=0)
+        else:
+            raise ValueError()
+
+        mean_color = mean_line.get_color()
+        ax.fill_between(x, lower, upper, color=mean_color, alpha=0.1)
 
 
 TRAIN_COLOR = 'black'
