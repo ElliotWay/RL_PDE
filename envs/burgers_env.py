@@ -414,94 +414,112 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
 
             return -error
 
-        error = weno_next_real_state - next_real_state
-        error = tf.reduce_sum(error, axis=0)
+        total_reward = tf.zeros((rl_action.shape[0],), dtype=tf.float64)
 
-        if "one-step" in self.reward_mode:
-            pass
-            # This version is ALWAYS one-step - the others are tricky to implement in TF.
-        elif "full" in self.reward_mode:
-            raise Exception("Reward mode 'full' invalid - only 'one-step' reward implemented"
-                " in Tensorflow functions.")
-        elif "change" in self.reward_mode:
-            raise Exception("Reward mode 'change' invalid - only 'one-step' reward implemented"
-                " in Tensorflow functions.")
-        else:
-            raise Exception("reward_mode problem")
+        # Use error with the "true" solution as the reward.
+        if ("full" in self.reward_mode or "change" in self.reward_mode
+                or "one-step" in self.reward_mode):
+            error = weno_next_real_state - next_real_state
+            error = tf.reduce_sum(error, axis=0)
 
-        if "clip" in self.reward_mode:
-            raise Exception("Reward clipping not implemented in Tensorflow functions.")
-
-        boundary = self.grid.boundary
-        if not type(boundary) is str:
-            boundary = boundary[0]
-
-        # Average of error in two adjacent cells.
-        if "adjacent" in self.reward_mode and "avg" in self.reward_mode:
-            error = tf.abs(error)
-            combined_error = (error[:-1] + error[1:]) / 2
-            if boundary == "outflow":
-                # Error beyond boundaries will be identical to error at edge, so average error
-                # at edge interfaces is just the error at the edge.
-                combined_error = tf.concat([[error[0]], combined_error, [error[-1]]], axis=0)
-            elif boundary == "periodic":
-                # With a periodic environment, the first and last interfaces are actually the
-                # same interface.
-                edge_error = (error[0] + error[-1]) / 2
-                combined_error = tf.concat([[edge_error], combined_error, [edge_error]], axis=0)
-            else:
-                raise NotImplementedError()
-        # Combine error across the stencil.
-        elif "stencil" in self.reward_mode:
-            # This is trickier and we need to expand the error into the ghost cells.
-            ghost_size = tf.constant(self.ng, shape=(1,))
-            if boundary == "outflow":
-                left_error = tf.fill(ghost_size, error[0])
-                right_error = tf.fill(ghost_size, error[-1])
-            elif boundary == "periodic":
-                left_error = error[-ghost_size[0]:]
-                right_error = error[:ghost_size[0]]
-            else:
-                raise NotImplementedError()
-            full_error = tf.concat([left_error, error, right_error])
-
-            stencil_indexes = create_stencil_indexes(
-                    stencil_size=(self.weno_order * 2 - 1),
-                    num_stencils=(self.nx + 1),
-                    offset=(self.ng - self.weno_order))
-            error_stencils = full_error[stencil_indexes]
-            if "max" in self.reward_mode:
-                error_stencils = tf.abs(error_stencils)
-                combined_error = tf.reduce_max(error_stencils, axis=-1)
-            elif "avg" in self.reward_mode:
-                error_stencils = tf.abs(error_stencils)
-                combined_error = tf.reduce_mean(error_stencils, axis=-1)
-            elif "L2" in self.reward_mode:
-                combined_error = tf.sqrt(tf.reduce_sum(error_stencils**2, axis=-1))
-            elif "L1" in self.reward_mode:
-                error_stencils = tf.abs(error_stencils)
-                combined_error = tf.reduce_sum(error_stencils, axis=-1)
+            if "one-step" in self.reward_mode:
+                pass
+                # This version is ALWAYS one-step - the others are tricky to implement in TF.
+            elif "full" in self.reward_mode:
+                raise Exception("Reward mode 'full' invalid - only 'one-step' reward implemented"
+                    " in Tensorflow functions.")
+            elif "change" in self.reward_mode:
+                raise Exception("Reward mode 'change' invalid - only 'one-step' reward implemented"
+                    " in Tensorflow functions.")
             else:
                 raise Exception("reward_mode problem")
-        else:
-            raise Exception("reward_mode problem")
+
+            if "clip" in self.reward_mode:
+                raise Exception("Reward clipping not implemented in Tensorflow functions.")
+
+            boundary = self.grid.boundary
+            if not type(boundary) is str:
+                boundary = boundary[0]
+
+            # Average of error in two adjacent cells.
+            if "adjacent" in self.reward_mode and "avg" in self.reward_mode:
+                error = tf.abs(error)
+                combined_error = (error[:-1] + error[1:]) / 2
+                if boundary == "outflow":
+                    # Error beyond boundaries will be identical to error at edge, so average error
+                    # at edge interfaces is just the error at the edge.
+                    combined_error = tf.concat([[error[0]], combined_error, [error[-1]]], axis=0)
+                elif boundary == "periodic":
+                    # With a periodic environment, the first and last interfaces are actually the
+                    # same interface.
+                    edge_error = (error[0] + error[-1]) / 2
+                    combined_error = tf.concat([[edge_error], combined_error, [edge_error]], axis=0)
+                else:
+                    raise NotImplementedError()
+            # Combine error across the stencil.
+            elif "stencil" in self.reward_mode:
+                # This is trickier and we need to expand the error into the ghost cells.
+                ghost_size = tf.constant(self.ng, shape=(1,))
+                if boundary == "outflow":
+                    left_error = tf.fill(ghost_size, error[0])
+                    right_error = tf.fill(ghost_size, error[-1])
+                elif boundary == "periodic":
+                    left_error = error[-ghost_size[0]:]
+                    right_error = error[:ghost_size[0]]
+                else:
+                    raise NotImplementedError()
+                full_error = tf.concat([left_error, error, right_error])
+
+                stencil_indexes = create_stencil_indexes(
+                        stencil_size=(self.weno_order * 2 - 1),
+                        num_stencils=(self.nx + 1),
+                        offset=(self.ng - self.weno_order))
+                error_stencils = full_error[stencil_indexes]
+                if "max" in self.reward_mode:
+                    error_stencils = tf.abs(error_stencils)
+                    combined_error = tf.reduce_max(error_stencils, axis=-1)
+                elif "avg" in self.reward_mode:
+                    error_stencils = tf.abs(error_stencils)
+                    combined_error = tf.reduce_mean(error_stencils, axis=-1)
+                elif "L2" in self.reward_mode:
+                    combined_error = tf.sqrt(tf.reduce_sum(error_stencils**2, axis=-1))
+                elif "L1" in self.reward_mode:
+                    error_stencils = tf.abs(error_stencils)
+                    combined_error = tf.reduce_sum(error_stencils, axis=-1)
+                else:
+                    raise Exception("reward_mode problem")
+            else:
+                raise Exception("reward_mode problem")
+
+            total_reward = total_reward - combined_error
+
+        # Minimize increase in total variation with the reward.
+        if "tv" in self.reward_mode:
+            current_tv = self.tf_total_variation(next_real_state)
+            prev_tv = self.tf_total_variation(real_state)
+            tv_increase = current_tv - prev_tv
+            normalized_tv_increase = tv_increase / np.prod(self.grid.num_cells)
+
+            tv_penalty = tf.cast(normalized_tv_increase > 0.0, tf.float64) * normalized_tv_increase
+            tv_penalty = tf.fill(value=tv_penalty, dims=(rl_action.shape[0],))
+            total_reward = total_reward - tv_penalty
 
         # Squash reward.
         if "nosquash" in self.reward_mode:
-            reward = -combined_error
+            reward = total_reward
         elif "logsquash" in self.reward_mode:
             epsilon = tf.constant(1e-16)
-            reward = -tf.log(combined_error + epsilon)
+            reward = -tf.log(-total_reward + epsilon)
         elif "arctansquash" in self.reward_mode:
             if "noadjust" in self.reward_mode:
-                reward = tf.atan(-combined_error)
+                reward = tf.atan(total_reward)
             else:
                 reward_adjustment = tf.constant(self.reward_adjustment, dtype=real_state.dtype)
                 # The constant controls the relative importance of small rewards compared to large rewards.
                 # Towards infinity, all rewards (or penalties) are equally important.
                 # Towards 0, small rewards are increasingly less important.
                 # An alternative to arctan(C*x) with this property would be x^(1/C).
-                reward = tf.atan(reward_adjustment * -combined_error)
+                reward = tf.atan(reward_adjustment * total_reward)
         else:
             raise Exception("reward_mode problem")
 

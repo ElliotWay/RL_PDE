@@ -7,7 +7,7 @@ from envs.solutions import OneStepSolution
 from envs.weno_solution import WENOSolution, RKMethod
 from envs.source import RandomSource
 from util.misc import create_stencil_indexes
-from util.misc import AxisSlice
+from util.misc import AxisSlice, TensorAxisSlice
 
 class AbstractPDEEnv(gym.Env):
     """
@@ -154,6 +154,10 @@ class AbstractPDEEnv(gym.Env):
         self.episode_length = episode_length
         self.time_max = time_max
         self.reward_adjustment = reward_adjustment
+        #TODO Make this parameter adjustable.
+        # 1e-4 weights the tv increase such that it is approximately the same scale as
+        # the one-step error.
+        self.tv_weight = 1e-4
 
         self.rk_method = rk_method
 
@@ -774,9 +778,18 @@ class AbstractPDEEnv(gym.Env):
             # axis+1 because axis 0 is vector axis.
             variation = [np.abs(AxisSlice(state, axis+1)[1:] - AxisSlice(state, axis+1)[:-1])
                                     for axis in range(self.dimensions)]
+            # Inner sum is over the vector and spatial axes except the axis of variation,
+            # outer sum is over each axis of variation.
             tv = np.sum([np.sum(variation_axis) for variation_axis in variation])
 
             return tv
+
+    def tf_total_variation(self, real_state):
+        variation = [tf.abs(TensorAxisSlice(real_state, axis+1)[1:]
+                        - TensorAxisSlice(real_state, axis+1)[:-1])
+                        for axis in range(self.dimensions)]
+        tv = tf.reduce_sum([tf.reduce_sum(variation_axis) for variation_axis in variation])
+        return tv
 
     def get_action(self, timestep=None, location=None, axis=None,
             action_history=None):
@@ -1003,11 +1016,6 @@ class AbstractPDEEnv(gym.Env):
 
         # Minimize increase in total variation with the reward.
         if "tv" in self.reward_mode:
-            #TODO add this parameter
-            # 1e-3 weights the tv increase such that it is approximately the same scale as
-            # the one-step error.
-            if not hasattr(self, 'tv_weight'):
-                self.tv_weight = 1e-3
             current_tv = self.get_total_variation()
             prev_tv = self.get_total_variation(timestep=-1)
             tv_increase = current_tv - prev_tv
