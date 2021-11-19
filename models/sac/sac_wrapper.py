@@ -30,21 +30,23 @@ class SACModel(BaselinesModel):
     another wrapper, though.
     """
     def __init__(self, env, args):
-        policy_cls = LnMlpPolicy if args.layer_norm else MlpPolicy
+        super().__init__(env, args)
 
-        if args.learning_starts is None:
-            args.learning_starts = args.ep_length*(args.nx+1)
+        policy_cls = LnMlpPolicy if args.m.layer_norm else MlpPolicy
 
-        policy_kwargs = {'layers':args.layers}
+        if args.m.learning_starts is None:
+            args.m.learning_starts = args.e.ep_length*(args.e.nx+1)
+
+        policy_kwargs = {'layers':args.m.layers}
         self.sac = SAC(policy_cls,
                        env,
-                       gamma=args.gamma,
+                       gamma=args.m.gamma,
                        policy_kwargs=policy_kwargs,
-                       learning_rate=args.learning_rate,
-                       buffer_size=args.buffer_size,
-                       learning_starts=args.learning_starts,
-                       batch_size=args.batch_size,
-                       train_freq=args.train_freq,
+                       learning_rate=args.m.learning_rate,
+                       buffer_size=args.m.buffer_size,
+                       learning_starts=args.m.learning_starts,
+                       batch_size=args.m.batch_size,
+                       train_freq=args.m.train_freq,
                        verbose=1,
                        #TODO: should this be out of the actual log dir? I don't
                        # actually use tensorboard, so I'm not sure.
@@ -56,12 +58,12 @@ class SACModel(BaselinesModel):
         self._model = self.sac # Used by superclass.
 
         # To use the MARL style replay buffer, we need to replace the one SAC is currently using.
-        if args.replay_style == "marl":
+        if args.m.replay_style == "marl":
             print("Using MARL style replay buffer.")
             #TODO: Fix this hack. This class should NOT be aware of the number of agents via this
             # parameter. It should only perceive the individual environment.
-            self.sac.replay_buffer = SB_MARL_ReplayBuffer(num_agents=(args.nx+1),
-                    size=args.buffer_size)
+            self.sac.replay_buffer = SB_MARL_ReplayBuffer(num_agents=(args.e.nx+1),
+                    size=args.m.buffer_size)
 
         sac = self.sac
         sac._setup_learn()
@@ -69,7 +71,7 @@ class SACModel(BaselinesModel):
         # Transform to callable if needed
         sac.learning_rate = get_schedule_fn(sac.learning_rate)
 
-        self.total_timesteps = args.ep_length * args.total_episodes
+        self.total_timesteps = args.e.ep_length * args.total_episodes
         self.steps_seen = 0
         self.reward_acc = 0
         self.n_updates = 0

@@ -1,3 +1,9 @@
+V47, b598a6b, 10/05/21
+--------------------------------
+The syntax for using RK4 has changed. Now use --rk rk4 instead of --rk4. This comes with allowing --rk rk3 as well.
+Training currently ignores this parameter.
+The defaults for convergence plots have changed to reflect the comparable plot in Introduction to Computational Astrophysical Hydrodynamics.
+
 V46, f58eb7b, 06/18/21
 ---------------------------------
 It's been some time since I updated this file - it was just me working on the repo for a long time,
@@ -96,12 +102,12 @@ I've added two such variants: one where the agent supplies coefficients to the s
 Also since the last email: a random external source (thanks to Changjin for some of this implementation) for permuting the state. This chooses a random sinusoidal function each episode that is added to the solution at each timestep. This can be accessed with --srca f, where "srca" means "source amplitude," and f is a mean parameter for the amplitude of the source. (The actual amplitude of the source varies randomly around this value.)
 
 Other things of note:
-Grid1d, PreciseWENOSolution, and RandomSource all inherit from the same GridBase abstract class as they all represent values along a grid. Each has reset(), get_full(), get_real(), and update() functions. For Grid1d, update is overrided to update(new_state), the rest use internal mechanisms to update and use update(dt, time).
+Burgers1DGrid, PreciseWENOSolution, and RandomSource all inherit from the same GridBase abstract class as they all represent values along a grid. Each has reset(), get_full(), get_real(), and update() functions. For Burgers1DGrid, update is overrided to update(new_state), the rest use internal mechanisms to update and use update(dt, time).
 
 
 V?, ?, 7/28/20
 ---------------------------------
-The structure of the "actual" solution has been changed. Now the environment has self.solution, where the type of solution is a solution class. The solution object maintains a separate Grid1d from the environment.
+The structure of the "actual" solution has been changed. Now the environment has self.solution, where the type of solution is a solution class. The solution object maintains a separate Burgers1DGrid from the environment.
 
 This was part of adding a feature in the Learning to Discretize repo: their reward is calculated based on the error with a solution that has higher precision, i.e. more cells, than the agent sees. This behavior is now accessible in our environment by setting the --precise_scale parameter. Sometimes higher precision seems to cause oscillations relative to lower precision curves; I'm not sure what's causing this, which is why this behavior is disabled by default.
 

@@ -9,21 +9,23 @@ import numpy as np
 import tensorflow as tf
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
-from stable_baselines import logger
+from util import sb_logger as logger
 
 from envs import get_env_arg_parser, build_env
-from agents import StandardWENOAgent, StationaryAgent, EqualAgent, MiddleAgent, LeftAgent, RightAgent, RandomAgent
+from rl_pde.agents import StationaryAgent, EqualAgent, MiddleAgent, LeftAgent, RightAgent, RandomAgent
 
 standard_envs = None
 
-def declare_standard_envs(args):
+def declare_standard_envs(env_args):
+    env_name = "weno_burgers" # Could we have other types of standard 1D environments here?
+
     # Make a copy - we need to change the args, but the caller should not
     # have to worry about args changing.
-    args = Namespace(**vars(args))
-    # No point memoizing any these environments.
-    args.memoize = False
-    # These environments are not analytical, though they could be.
+    args = Namespace(**vars(env_args))
+    args.memoize = False # No point memoizing any of these environments.
     args.analytical = False
+    args.min_value = 0.0
+    args.max_value = 1.0
 
     global standard_envs
 
@@ -34,8 +36,8 @@ def declare_standard_envs(args):
         return flat_state, {}
     args.init_type = flat
     args.boundary = "outflow"
-    args.nx = len(flat_state)
-    flat_env = build_env(args.env, args)
+    args.num_cells = len(flat_state)
+    flat_env = build_env(env_name, args)
     standard_envs.append(flat_env)
 
     rising_state = np.arange(1, 1.2, 0.02)
@@ -43,8 +45,8 @@ def declare_standard_envs(args):
         return rising_state, {}
     args.init_type = rising
     args.boundary = "first"
-    args.nx = len(rising_state)
-    rising_env = build_env(args.env, args)
+    args.num_cells = len(rising_state)
+    rising_env = build_env(env_name, args)
     standard_envs.append(rising_env)
 
     falling_state = np.arange(1.2, 1, -0.02)
@@ -52,8 +54,8 @@ def declare_standard_envs(args):
         return falling_state, {}
     args.init_type = falling
     args.boundary = "first"
-    args.nx = len(falling_state)
-    falling_env = build_env(args.env, args)
+    args.num_cells = len(falling_state)
+    falling_env = build_env(env_name, args)
     standard_envs.append(falling_env)
 
     shock_state = np.full(10, 1.0)
@@ -62,8 +64,8 @@ def declare_standard_envs(args):
         return shock_state, {}
     args.init_type = shock
     args.boundary = "outflow"
-    args.nx = len(shock_state)
-    shock_env = build_env(args.env, args)
+    args.num_cells = len(shock_state)
+    shock_env = build_env(env_name, args)
     standard_envs.append(shock_env)
 
     rare_state = np.full(10, -1.0)
@@ -72,8 +74,8 @@ def declare_standard_envs(args):
         return rare_state, {}
     args.init_type = rare
     args.boundary = "outflow"
-    args.nx = len(rare_state)
-    rare_env = build_env(args.env, args)
+    args.num_cells = len(rare_state)
+    rare_env = build_env(env_name, args)
     standard_envs.append(rare_env)
 
 def save_action_snapshot(agent, weno_agent=None, suffix=""):
@@ -104,11 +106,11 @@ def save_action_snapshot(agent, weno_agent=None, suffix=""):
 
         state_axis = axes[0, index]
         cell_x_values = env.grid.x
-        state_axis.plot(cell_x_values, grid_state, linestyle='-', color='black')
+        state_axis.plot(cell_x_values, grid_state[0], linestyle='-', color='black')
         state_axis.set_xmargin(0.0)
         state_axis.set_ylim((-2.0, 2.0))
 
-        interface_x_values = env.grid.inter_x[env.ng:-(env.ng-1)]
+        interface_x_values = env.grid.inter_x[env.ng:-env.ng]
         for dim in range(action_dimensions):
             action_axis = axes[1+dim, index]
             if weno_agent is not None:
@@ -121,7 +123,7 @@ def save_action_snapshot(agent, weno_agent=None, suffix=""):
                 action_axis.yaxis.set_ticklabels([])
 
     log_dir = logger.get_dir()
-    filename = "burgers_action_snap" + suffix + ".png"
+    filename = "action_snap" + suffix + ".png"
     filename = os.path.join(log_dir, filename)
     fig.tight_layout()
     plt.savefig(filename)
@@ -150,6 +152,9 @@ def main():
                         help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
     parser.add_argument('-n', default=False, action='store_true',
                         help="Choose no for any questions, namely overwriting existing files. Useful for scripts. Overrides the -y option.")
+    raise Exception("The main method in this file hasn't been used in a while;"
+            + " it almost certainly won't work. Update it if you're trying to get"
+            + " an action snapshot of an existing agent.")
 
     main_args, rest = parser.parse_known_args()
 

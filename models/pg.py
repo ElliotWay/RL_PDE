@@ -76,8 +76,8 @@ def tf_nll_gaussian(values, means, stds):
 class PolicyGradientModel(Model):
     def __init__(self, env, args):
 
-        self.return_style = args.return_style
-        self.gamma = args.gamma
+        self.return_style = args.m.return_style
+        self.gamma = args.m.gamma
 
         obs_space = env.observation_space
         action_space = env.action_space
@@ -109,7 +109,7 @@ class PolicyGradientModel(Model):
 
         # Probably use ReLU? Could use tanh since network doesn't have too many layers.
         self.policy_mean, self.policy_log_std = gaussian_policy_net(
-                self.state_ph, action_space.shape, args.layers, tf.nn.relu,
+                self.state_ph, action_space.shape, args.m.layers, tf.nn.relu,
                 scope="policy")
         self.policy_std = tf.exp(self.policy_log_std)
         #TODO Squash policy output?
@@ -130,7 +130,7 @@ class PolicyGradientModel(Model):
         grads = list(zip(policy_gradients, policy_params))
         self.params = policy_params
 
-        self.optimizer = get_optimizer(args)
+        self.optimizer = get_optimizer(args.m)
         self.train_policy = self.optimizer.apply_gradients(grads)
 
         tf.global_variables_initializer().run(session=self.session)

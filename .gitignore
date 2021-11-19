@@ -6,10 +6,18 @@ test/
 *.png
 *.gif
 last
-*sh
-!param_sweep_template.sh
 *.swp
 *log.txt
 *meta.txt
+*meta.yaml
 *progress.csv
 *.zip
+
+# Parameter sweep scripts.
+sweeps/
+# Code for checking how Python works.
+sandbox/
+# Directory of links to each source directory. Useful with grep.
+all_src/
+# Symlinks to important trained agents.
+agents/

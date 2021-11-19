@@ -18,18 +18,29 @@ from rl_pde.emi import BatchEMI, HomogenousMARL_EMI, BatchGlobalEMI, StandardEMI
 # later.
 
 def get_model_class(model_name):
-    if model_name == 'sac':
-        return SACModel
-    elif model_name == 'full':
+    if model_name == 'full':
         return GlobalBackpropModel
-    elif model_name == 'pg' or model_name == 'reinforce':
+    elif model_name == 'sac':
+        return SACModel
+    elif model_name == 'pg': # Policy Gradient
         return PolicyGradientModel
+    elif model_name == "fixed-1step":
+        return FixedOneStepModel
     elif model_name == 'test':
         return TestModel
-    elif model_name == "fixed-1step" or model_name == "fixed":
-        return FixedOneStepModel
+    elif model_name == "ddpg":
+        raise Exception("Some DDPG files still exist in this repo, but they are not currently"
+                + " supported.")
     else:
         raise Exception("Unrecognized model type: \"{}\"".format(model_name))
+
+def get_model_dims(model_name):
+    # Currently, they're ALL 1-dimensionsal.
+    # We'll need to change this later when 2-dimensional models exist.
+    # Note that this refers to the dimensions of the underlying policy, i.e. the stencil that the
+    # policy operates on.
+    # We only need to worry about this when we have a policy using a multi-dimensional stencil.
+    return 1
 
 def get_emi_class(emi_name):
     if emi_name == 'batch':

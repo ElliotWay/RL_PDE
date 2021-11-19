@@ -13,7 +13,7 @@ class SoftmaxBox(Box):
     This adjustment is only performed along the last dimension of the space.
     """
 
-    def __init___(self, low, high, shape=None, dtype=np.float32):
+    def __init___(self, low, high, shape=None, dtype=np.float64):
         assert (low == 0.0)
         assert (high == 1.0)
         super(SoftmaxBox, self).__init__(low, high, shape, dtype)

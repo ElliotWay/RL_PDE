@@ -18,7 +18,7 @@ from stable_baselines.sac.policies import SACPolicy
 
 from util.misc import rescale
 from util.action_snapshot import save_action_snapshot
-from agents import StandardWENOAgent
+from rl_pde.agents import StandardWENOAgent
 
 class SACBatch(OffPolicyRLModel):
     """

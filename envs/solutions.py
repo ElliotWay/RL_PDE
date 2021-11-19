@@ -4,10 +4,11 @@ from scipy.optimize import fixed_point
 from scipy.optimize import brentq
 
 import envs.weno_coefficients as weno_coefficients
-from envs.grid import GridBase, Grid1d
+from envs.grid import AbstractGrid
+from envs.grid1d import Burgers1DGrid, Euler1DGrid
 
 
-class SolutionBase(GridBase):
+class SolutionBase(AbstractGrid):
     """
     Base class for Solutions.
 
@@ -21,7 +22,7 @@ class SolutionBase(GridBase):
     update and reset here are lightweight wrappers of _update and _reset
     that record the state history.
     """
-    def __init__(self, record_state=False, *args, **kwargs):
+    def __init__(self, *args, record_state=False, **kwargs):
         super().__init__(*args, **kwargs)
         self.record_state = False
         self.state_history = []
@@ -55,261 +56,6 @@ class SolutionBase(GridBase):
         return False
 
 
-class PreciseWENOSolution(SolutionBase):
-    #TODO: should also calculate precise WENO with smaller timesteps.
-
-    def __init__(self, nx, ng, xmin, xmax,
-                 precise_order, precise_scale, init_type, boundary, flux_function,
-                 eps=0.0, source=None,
-                 record_state=False, record_actions=None):
-        super().__init__(nx=nx, ng=ng, xmin=xmin, xmax=xmax)
-
-        assert (precise_scale % 2 == 1), "Precise scale must be odd for easier downsampling."
-
-        self.precise_scale = precise_scale
-
-        self.precise_nx = precise_scale * nx
-        if precise_order + 1 > precise_scale * ng:
-            self.precise_ng = precise_order + 1
-            self.extra_ghosts = self.precise_ng - (precise_scale * ng)
-        else:
-            self.precise_ng = precise_scale * ng
-            self.extra_ghosts = 0
-        self.precise_grid = Grid1d(xmin=xmin, xmax=xmax, nx=self.precise_nx, ng=self.precise_ng,
-                                   boundary=boundary, init_type=init_type)
-
-        self.flux_function = flux_function
-        self.eps = eps
-        self.order = precise_order
-        self.source = source
-
-        self.record_actions = record_actions
-        self.action_history = []
-
-        self.use_rk4 = False
-
-    def set_rk4(self, use_rk4):
-        self.use_rk4 = use_rk4
-
-    def is_recording_actions(self):
-        return (self.record_actions is not None)
-    def set_record_actions(self, record_mode):
-        self.record_actions = record_mode
-    def get_action_history(self):
-        return self.action_history
-
-    def weno_stencils(self, q):
-        """
-        Compute WENO stencils
-
-        Parameters
-        ----------
-        q : np array
-          Scalar data to reconstruct.
-
-        Returns
-        -------
-        stencils
-
-        """
-        order = self.order
-        a = weno_coefficients.a_all[order]
-        num_points = len(q) - 2 * order
-        q_stencils = np.zeros((order, len(q)))
-        for i in range(order, num_points + order):
-            for k in range(order):
-                for l in range(order):
-                    q_stencils[k, i] += a[k, l] * q[i + k - l]
-
-        return q_stencils
-
-    def weno_weights(self, q):
-        """
-        Compute WENO weights
-
-        Parameters
-        ----------
-        q : np array
-          Scalar data to reconstruct.
-
-        Returns
-        -------
-        stencil weights
-
-        """
-        order = self.order
-        C = weno_coefficients.C_all[order]
-        sigma = weno_coefficients.sigma_all[order]
-
-        beta = np.zeros((order, len(q)))
-        w = np.zeros_like(beta)
-        num_points = len(q) - 2 * order
-        epsilon = 1e-16
-        for i in range(order, num_points + order):
-            alpha = np.zeros(order)
-            for k in range(order):
-                for l in range(order):
-                    for m in range(l + 1):
-                        beta[k, i] += sigma[k, l, m] * q[i + k - l] * q[i + k - m]
-                alpha[k] = C[k] / (epsilon + beta[k, i] ** 2)
-            w[:, i] = alpha / np.sum(alpha)
-
-        return w
-
-    def weno_new(self, q):
-        """
-        Compute WENO reconstruction
-
-        Parameters
-        ----------
-        q : numpy array
-          Scalar data to reconstruct.
-
-        Returns
-        -------
-        qL: numpy array
-          Reconstructed data.
-
-        """
-
-        weights = self.weno_weights(q)
-        q_stencils = self.weno_stencils(q)
-        qL = np.zeros_like(q)
-        num_points = len(q) - 2 * self.order
-        for i in range(self.order, num_points + self.order):
-            qL[i] = np.dot(weights[:, i], q_stencils[:, i])
-        return qL, weights
-
-    def rk_substep(self):
-
-        # get the solution data
-        g = self.precise_grid
-        g.update_boundary()
-
-
-        # compute flux at each point
-        f = self.flux_function(g.u)
-
-        # get maximum velocity
-        alpha = np.max(abs(g.u))
-
-        # Lax Friedrichs Flux Splitting
-        fp = (f + alpha * g.u) / 2
-        fm = (f - alpha * g.u) / 2
-
-        fpr = g.scratch_array()
-        fml = g.scratch_array()
-        flux = g.scratch_array()
-
-        # compute fluxes at the cell edges
-        # compute f plus to the right
-        fpr[1:], fp_weights = self.weno_new(fp[:-1])
-        # compute f minus to the left
-        # pass the data in reverse order
-        fml[-1::-1], fm_weights = self.weno_new(fm[-1::-1])
-
-        if self.record_actions is not None:
-            action_weights = np.stack((fp_weights[:, self.ng-1:-(self.ng-1)], fm_weights[:, -(self.ng+1):self.ng-2:-1]))
-            # resulting array is (fp, fm) X stencil X location
-            # transpose to location X (fp, fm) X stencil
-            action_weights = action_weights.transpose((2, 0, 1))
-
-            if self.record_actions == "weno":
-                self.action_history.append(action_weights)
-            elif self.record_actions == "coef":
-                # Same as in Standard WENO agent in agents.py.
-                order = self.order
-                a_mat = weno_coefficients.a_all[order]
-                a_mat = np.flip(a_mat, axis=-1)
-                combined_weights = a_mat[None, None, :, :] * action_weights[:, :, :, None]
-
-                flux_weights = np.zeros((g.real_length() + 1, 2, self.order * 2 - 1))
-                for sub_stencil_index in range(order):
-                    flux_weights[:, :, sub_stencil_index:sub_stencil_index + order] += combined_weights[:, :, sub_stencil_index, :]
-                self.action_history.append(flux_weights)
-            else:
-                raise Exception("Unrecognized action type: '{}'".format(self.record_actions))
-
-        # compute flux from fpr and fml
-        flux[1:-1] = fpr[1:-1] + fml[1:-1]
-        rhs = g.scratch_array()
-
-        if self.eps > 0.0:
-            R = self.eps * self.lap()
-            rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:]) + R[1:-1]
-        else:
-            rhs[1:-1] = 1 / g.dx * (flux[1:-1] - flux[2:])
-
-        if self.source is not None:
-            rhs[1:-1] += self.source.get_full()[1:-1]
-
-        return rhs
-
-    def lap(self):
-        """
-        Returns the Laplacian of g.u.
-
-        This calculation relies on ghost cells, so make sure they have been filled before calling this.
-        """
-
-        gr = self.precise_grid
-        u = gr.u
-
-        lapu = gr.scratch_array()
-
-        ib = gr.ilo - 1
-        ie = gr.ihi + 1
-
-        lapu[ib:ie + 1] = (u[ib - 1:ie] - 2.0 * u[ib:ie + 1] + u[ib + 1:ie + 2]) / gr.dx ** 2
-
-        return lapu
-
-    def _update(self, dt, time):
-        if self.use_rk4:
-            u_start = np.array(self.precise_grid.get_full())
-            
-            k1 = dt * self.rk_substep()
-            self.precise_grid.u = u_start + (k1 / 2)
-
-            k2 = dt * self.rk_substep()
-            self.precise_grid.u = u_start + (k2 / 2)
-
-            k3 = dt * self.rk_substep()
-            self.precise_grid.u = u_start + k3
-
-            k4 = dt * self.rk_substep()
-            k4_step = (k1 + 2*(k2 + k3) + k4) / 6
-            self.precise_grid.u = u_start + k4_step
-
-        else:
-            euler_step = dt * self.rk_substep()
-            self.precise_grid.u += euler_step
-
-        self.precise_grid.update_boundary()
-
-    def get_full(self):
-        """ Downsample the precise solution to get coarse solution values. """
-
-        grid = self.precise_grid.get_full()
-        if self.extra_ghosts > 0:
-            grid = grid[self.extra_ghosts:-self.extra_ghosts]
-
-        # For each coarse cell, there are precise_scale precise cells, where the middle
-        # cell corresponds to the same location as the coarse cell.
-        middle = int(self.precise_scale / 2)
-        return grid[middle::self.precise_scale]
-
-    def get_real(self):
-        return self.get_full()[self.ng:-self.ng]
-
-    def _reset(self, init_params):
-        self.precise_grid.reset(init_params)
-        self.action_history = []
-
-    def set(self, real_values):
-        """ Force set the current grid. Will make the state/action history confusing. """
-        self.precise_grid.set(real_values)
-
 class MemoizedSolution(SolutionBase):
     """
     Decorator on solutions that memoizes their state to save computation.
@@ -318,11 +64,12 @@ class MemoizedSolution(SolutionBase):
     of the same parameters.
     Wastes memory for solutions that change every episode.
     """
-    def __init__(self, solution, ep_length):
+    def __init__(self, solution, ep_length, vec_len=1):
         assert not isinstance(solution, OneStepSolution), ("Memoized solutions are not compatible"
         + " with one-step solutions. (Memoized solutions stay the same whereas one-step solutions"
         + " always change).")
-        super().__init__(nx=solution.nx, ng=solution.ng, xmin=solution.xmin, xmax=solution.xmax,
+        super().__init__(solution.num_cells, solution.num_ghosts, solution.min_value,
+                solution.max_value, vec_len,
                 # The inner solution should record the state history, not this wrapper.
                 record_state=False)
 
@@ -339,7 +86,7 @@ class MemoizedSolution(SolutionBase):
         self.time_index = -1
 
         self.dt = None
-        self.MAX_MEMOS = 100
+        self.MAX_MEMOS = 500
 
     # Forward method calls that aren't available here to inner solution.
     # If you're not familiar, __getattr__ is only called when the
@@ -392,7 +139,7 @@ class MemoizedSolution(SolutionBase):
             return self.inner_solution.get_full()
 
     def get_real(self):
-        return self.get_full()[self.ng:-self.ng]
+        return self.get_full()[self.real_slice]
 
     def _reset(self, init_params):
         # If time_index is -1, then this is the first call to reset,
@@ -421,6 +168,7 @@ class MemoizedSolution(SolutionBase):
             self.inner_solution.reset(init_params)
             self.time_index = -2
 
+
 class OneStepSolution(SolutionBase):
     """
     A OneStepSolution is only one step different from a different grid.
@@ -431,15 +179,15 @@ class OneStepSolution(SolutionBase):
     Using a solution like this can be used for a more reliable comparison,
     as there is only one step's worth of different actions.
     """
-    def __init__(self, solution, current_grid):
+    def __init__(self, solution, current_grid, vec_len=1):
         assert not isinstance(solution, MemoizedSolution), ("Memoized solutions are not compatible"
         + " with one-step solutions. (Memoized solutions stay the same whereas one-step solutions"
         + " always change).")
         assert not isinstance(solution, AnalyticalSolution), ("One-step solutions are not compatible"
         + " with analytical solutions. (Analytical solutions stay the same whereas one-step solutions"
         + " always change).")
-        super().__init__(nx=solution.nx, ng=solution.ng, xmin=solution.xmin, xmax=solution.xmax,
-                record_state=False)
+        super().__init__(solution.num_cells, solution.num_ghosts, solution.min_value,
+                solution.max_value, vec_len, record_state=False)
         self.inner_solution = solution
         self.current_grid = current_grid
 
@@ -465,28 +213,34 @@ class OneStepSolution(SolutionBase):
     def __getattr__(self, attr):
         return getattr(self.inner_solution, attr)
 
-available_analytical_solutions = ["smooth_sine", "smooth_rare", "accelshock", "gaussian"]
+#TODO Handle ND analytical solutions. (Also non-Burgers solutions?)
+available_analytical_solutions = ["smooth_sine", "smooth_sine_shift", "smooth_rare", "accelshock", "gaussian"]
 #TODO account for xmin, xmax in case they're not 0 and 1.
 class AnalyticalSolution(SolutionBase):
-    def __init__(self, nx, ng, xmin, xmax, init_type="schedule"):
-        super().__init__(nx=nx, ng=ng, xmin=xmin, xmax=xmax)
+    def __init__(self, nx, ng, xmin, xmax, vec_len=1, init_type="schedule"):
+        super().__init__(nx, ng, xmin, xmax, vec_len=vec_len)
 
-        if (not init_type in available_analytical_solutions 
+        if (not init_type in available_analytical_solutions
                 and not init_type in ['schedule', 'sample']):
             raise Exception("Invalid analytical type \"{}\", available options are {}.".format(init_type, available_analytical_solutions))
 
-        self.grid = Grid1d(nx=nx, ng=ng, xmin=xmin, xmax=xmax, init_type=init_type)
+        self.grid = Burgers1DGrid(nx, ng, xmin, xmax, init_type)
 
     def _update(self, dt, time):
-        # Assume that Grid1d.reset() is still setting the correct parameters.
+        # Assume that Burgers1DGrid.reset() is still setting the correct parameters.
         params = self.grid.init_params
         init_type = params['init_type']
 
         x_values = self.grid.real_x
 
-        if init_type in ["smooth_sine", "smooth_rare"]:
+        if init_type in ["smooth_sine", "smooth_rare", "smooth_sine_shift"]:
             if init_type == "smooth_sine":
-                iterate_func = lambda old_u, time: params['A'] * np.sin(2 * np.pi * (x_values - old_u * time))
+                iterate_func = (lambda old_u, time:
+                        params['A'] * np.sin(2 * np.pi * (x_values - old_u * time)))
+            if init_type == "smooth_sine_shift":
+                iterate_func = (lambda old_u, time:
+                        params['A'] * np.sin(2 * np.pi * (x_values - old_u * time)
+                        + params['phi']))
             elif init_type == "smooth_rare":
                 iterate_func = lambda old_u, time: params['A'] * np.tanh(params['k'] * (x_values - 0.5 - old_u*time))
 
@@ -521,6 +275,8 @@ class AnalyticalSolution(SolutionBase):
 
             updated_u = [initial_gaussian(brentq(residual, -2, 2, args=(x,))) for x in x_values]
             self.grid.set(updated_u)
+        else:
+            raise Exception()
 
 
     def _reset(self, params):
@@ -536,3 +292,210 @@ class AnalyticalSolution(SolutionBase):
 
     def set(self, real_values):
         raise Exception("An analytical solution cannot be set.")
+
+
+class RiemannSolution(SolutionBase):
+    def __init__(self, nx, ng, xmin, xmax, vec_len=3, init_type="sod", gamma=1.4):
+        super().__init__(nx, ng, xmin, xmax, vec_len)
+
+        self.grid = Euler1DGrid(nx=nx, ng=ng, xmin=xmin, xmax=xmax, init_type=init_type)
+        self.gamma = gamma
+        self.grid.reset({'init_type': init_type, 'gamma': gamma})
+        self.left = self.euler_state_conversion(self.grid.space[:, 0])
+        self.right = self.euler_state_conversion(self.grid.space[:, -1])
+
+        self.ustar = None
+        self.pstar = None
+        self.find_star_state()
+
+    def euler_state_conversion(self, state):
+        rho = state[0]
+        v = state[1] / state[0]
+        p = (self.gamma - 1) * (state[2] - rho * v ** 2 / 2)
+        return np.stack([rho, v, p])
+
+    def u_hugoniot(self, p, side, shock=False):
+        """define the Hugoniot curve, u(p).  If shock=True, we do a 2-shock
+        solution"""
+
+        if side == "left":
+            state = self.left
+            s = 1.0
+        elif side == "right":
+            state = self.right
+            s = -1.0
+
+        c = np.sqrt(self.gamma*state[2]/state[0])
+
+        if shock:
+            # shock
+            beta = (self.gamma+1.0)/(self.gamma-1.0)
+            u = state[1] + s*(2.0*c/np.sqrt(2.0*self.gamma*(self.gamma-1.0)))* \
+                (1.0 - p/state[2])/np.sqrt(1.0 + beta*p/state[2])
+
+        else:
+            if p < state[2]:
+                # rarefaction
+                u = state[1] + s*(2.0*c/(self.gamma-1.0))* \
+                    (1.0 - (p/state[2])**((self.gamma-1.0)/(2.0*self.gamma)))
+            else:
+                # shock
+                beta = (self.gamma+1.0)/(self.gamma-1.0)
+                u = state[1] + s*(2.0*c/np.sqrt(2.0*self.gamma*(self.gamma-1.0)))* \
+                    (1.0 - p/state[2])/np.sqrt(1.0 + beta*p/state[2])
+
+        return u
+
+    def find_star_state(self, p_min=0.001, p_max=1000.0):
+        """ root find the Hugoniot curve to find ustar, pstar """
+
+        # we need to root-find on
+        self.pstar = brentq(
+            lambda p: self.u_hugoniot(p, "left") - self.u_hugoniot(p, "right"),
+            p_min, p_max)
+        self.ustar = self.u_hugoniot(self.pstar, "left")
+
+
+    def find_2shock_star_state(self, p_min=0.001, p_max=1000.0):
+        """ root find the Hugoniot curve to find ustar, pstar """
+
+        # we need to root-find on
+        self.pstar = brentq(
+            lambda p: self.u_hugoniot(p, "left", shock=True) - self.u_hugoniot(p, "right", shock=True),
+            p_min, p_max)
+        self.ustar = self.u_hugoniot(self.pstar, "left", shock=True)
+
+    def shock_solution(self, sgn, xi, state):
+        """return the interface solution considering a shock"""
+
+        p_ratio = self.pstar/state[2]
+        c = np.sqrt(self.gamma*state[2]/state[0])
+
+        # Toro, eq. 4.52 / 4.59
+        S = state[1] + sgn*c*np.sqrt(0.5*(self.gamma + 1.0)/self.gamma*p_ratio +
+                                    0.5*(self.gamma - 1.0)/self.gamma)
+
+        # are we to the left or right of the shock?
+        if (sgn > 0 and xi > S) or (sgn < 0 and xi < S):
+            # R/L region
+            solution = state
+        else:
+            # * region -- get rhostar from Toro, eq. 4.50 / 4.57
+            gam_fac = (self.gamma - 1.0)/(self.gamma + 1.0)
+            rhostar = state[0] * (p_ratio + gam_fac)/(gam_fac * p_ratio + 1.0)
+            solution = np.stack([rhostar, self.ustar, self.pstar], axis=0)
+
+        return solution
+
+    def rarefaction_solution(self, sgn, xi, state):
+        """return the interface solution considering a rarefaction wave"""
+
+        # find the speed of the head and tail of the rarefaction fan
+
+        # isentropic (Toro eq. 4.54 / 4.61)
+        p_ratio = self.pstar/state[2]
+        c = np.sqrt(self.gamma*state[2]/state[0])
+        cstar = c*p_ratio**((self.gamma-1.0)/(2*self.gamma))
+
+        lambda_head = state[1] + sgn*c
+        lambda_tail = self.ustar + sgn*cstar
+
+        gam_fac = (self.gamma - 1.0)/(self.gamma + 1.0)
+
+        if (sgn > 0 and xi > lambda_head) or (sgn < 0 and xi < lambda_head):
+            # R/L region
+            solution = state
+
+        elif (sgn > 0 and xi < lambda_tail) or (sgn < 0 and xi > lambda_tail):
+            # * region, we use the isentropic density (Toro 4.53 / 4.60)
+            solution = np.stack([state[0]*p_ratio**(1.0/self.gamma), self.ustar, self.pstar], axis=0)
+
+        else:
+            # we are in the fan -- Toro 4.56 / 4.63
+            rho = state[0] * (2/(self.gamma + 1.0) -
+                               sgn*gam_fac*(state[1] - xi)/c)**(2.0/(self.gamma-1.0))
+            u = 2.0/(self.gamma + 1.0) * ( -sgn*c + 0.5*(self.gamma - 1.0)*state[1] + xi)
+            p = state[2] * (2/(self.gamma + 1.0) -
+                           sgn*gam_fac*(state[1] - xi)/c)**(2.0*self.gamma/(self.gamma-1.0))
+            solution = np.stack([rho, u, p], axis=0)
+
+        return solution
+
+    def sample_solution(self, time, npts, xmin=0.0, xmax=1.0):
+        """given the star state (ustar, pstar), sample the solution for npts
+        points between xmin and xmax at the given time.
+
+        this is a similarity solution in xi = x/t """
+
+        # we write it all explicitly out here -- this could be vectorized
+        # better.
+
+        dx = (xmax - xmin)/npts
+        xjump = 0.5*(xmin + xmax)
+
+        x = np.linspace(xmin, xmax, npts, endpoint=False) + 0.5*dx
+        xi = (x - xjump)/time
+
+        # which side of the contact are we on?
+        # chi = np.sign(xi - self.ustar)
+
+        # gam = self.gamma
+        # gam_fac = (gam - 1.0)/(gam + 1.0)
+
+        rho_v = []
+        u_v = []
+        p_v = []
+
+        for n in range(npts):
+
+            if xi[n] > self.ustar:
+                # we are in the R* or R region
+                state = self.right
+                sgn = 1.0
+            else:
+                # we are in the L* or L region
+                state = self.left
+                sgn = -1.0
+
+            # is non-contact wave a shock or rarefaction?
+            if self.pstar > state[2]:
+                # compression! we are a shock
+                solution = self.shock_solution(sgn, xi[n], state)
+
+            else:
+                # rarefaction
+                solution = self.rarefaction_solution(sgn, xi[n], state)
+
+            # store
+            rho_v.append(solution[0])
+            u_v.append(solution[1])
+            p_v.append(solution[2])
+
+        return x, np.array(rho_v), np.array(u_v), np.array(p_v)
+
+    def _update(self, dt, time):
+
+        x_values = self.grid.real_x
+        npts = len(x_values)
+
+        if time == 0:  # xi = (x - xjump)/time  wouldn't work with time == 0
+            pass
+        else:
+            x_e, rho_e, v_e, p_e = self.sample_solution(time, npts, self.grid.xmin, self.grid.xmax)
+            u = rho_e * v_e  # convert back to states of the form (rho, rho*u, rho*E)
+            e = p_e / (self.gamma - 1) / rho_e
+            E = rho_e * (e + 0.5 * v_e ** 2)
+            updated_u = np.stack([rho_e, u, E], axis=0)
+            self.grid.set(updated_u)
+
+    def _reset(self, params):
+        self.grid.reset(params)
+
+    def get_full(self):
+        return self.grid.get_full()
+
+    def get_real(self):
+        return self.grid.get_real()
+
+    def set(self, real_values):
+        self.grid.set(real_values)

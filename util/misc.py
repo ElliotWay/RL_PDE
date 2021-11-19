@@ -1,14 +1,13 @@
+import sys
 import os
-import argparse
-import subprocess
 import random
 import re
 import numpy as np
 import tensorflow as tf
-
+import subprocess
 
 # I've started using indexes instead of indices because it bothers me when people use "indice" as the singular.
-# Between "index and indexes" and "indices and indices" I much prefer the former, so I decided to start using
+# Between "index and indexes" and "indice and indices" I much prefer the former, so I decided to start using
 # indexes, Latin plurals be damned.
 def create_stencil_indexes(stencil_size, num_stencils, offset=0):
     """
@@ -36,47 +35,6 @@ def create_stencil_indexes(stencil_size, num_stencils, offset=0):
 
     return offset + np.arange(stencil_size)[None, ...] + np.arange(num_stencils)[..., None]
 
-def positive_float(value):
-    fvalue = float(value)
-    if fvalue <= 0.0:
-        raise argparse.ArgumentTypeError("{} is not positive".format(fvalue))
-    return fvalue
-
-def nonnegative_float(value):
-    fvalue = float(value)
-    if fvalue < 0.0:
-        raise argparse.ArgumentTypeError("{} is not non-negative".format(fvalue))
-    return fvalue
-
-def positive_int(value):
-    ivalue = int(value)
-    if ivalue <= 0:
-        raise argparse.ArgumentTypeError("{} is not positive".format(ivalue))
-    return ivalue
-
-def nonnegative_int(value):
-    ivalue = int(value)
-    if ivalue < 0:
-        raise argparse.ArgumentTypeError("{} is not non-negative".format(ivalue))
-    return ivalue
-
-def float_dict(string_dict):
-    pairs = string_dict.split(sep=',')
-    # empty string returns empty dict
-    if len(pairs) <= 1 and len(pairs[0]) == 0:
-        return {}
-    output_dict = {}
-    for pair in pairs:
-        match = re.fullmatch("([^=]+)=([^=]+)", pair)
-        if not match:
-            raise argparse.ArgumentTypeError("In \"{}\", \'{}\' must be key=value.".format(
-                string_dict, pair))
-        else:
-            key = match.group(1)
-            value = float(match.group(2))
-            output_dict[key] = value
-    return output_dict
-
 def rescale(values, source, target):
     source_low, source_high = source
     target_low, target_high = target
@@ -86,22 +44,6 @@ def rescale(values, source, target):
     rescaled = (descaled * (target_high - target_low)) + target_low
 
     return rescaled
-
-def get_git_commit_id():
-    try:
-        git_head_proc = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, timeout=1.0)
-    except TimeoutError:
-        return -1, "timeout"
-
-    output_str = git_head_proc.stdout.strip()
-
-    return git_head_proc.returncode, output_str
-
-def is_clean_git_repo():
-    """ Returns True if in a clean git repo, False if in a dirty git repo OR an error occurred. """
-
-    return_code = os.system("git diff --quiet")
-    return (return_code == 0)
 
 def set_global_seed(seed):
     # I still CANNOT get it to be deterministic.
@@ -154,3 +96,135 @@ def human_readable_time_delta(time_delta, sig_units=0):
         return "{:.2f}wk".format(weeks)
 
     return "{:.2f}yr".format(years)
+
+
+class AxisSlice:
+    """
+    Restrict an ndarray to indexing along a particular axis.
+
+    AxisSlice(a, 1)[index] is (supposed to be) equivalent to a[:, index].
+    The advantage of AxisSlice comes when the axis is not known at compile time.
+
+    Examples
+    --------
+    >>> a = np.arange(12).reshape(3, 4)
+    >>> a
+    array([[0, 1,  2,  3],
+           [4, 5,  6,  7],
+           [8, 9, 10, 11]])
+    >>> axis0_slice = AxisSlice(a, 0)
+    >>> axis0_slice[-2:]
+    array([[4, 5, 6, 7],
+           [8, 9, 10, 11]])
+    >>> axis1_slice = AxisSlice(a, 1)
+    >>> axis1_slice[1]
+    array([1, 5, 9])
+    >>> axis1_slice[(0,3)] = [3,1,4]
+    >>> a
+    array([[3, 1,  2, 3],
+           [1, 5,  6, 1],
+           [4, 9, 10, 4]])
+    """
+    def __init__(self, arr, axis):
+        self.arr = arr
+        self.axis = axis % arr.ndim # Using "% arr.ndim" handles negative axes.
+    def __getitem__(self, indexes):
+        return self.arr[(slice(None),) * self.axis + (indexes,)]
+    def __setitem__(self, indexes, values):
+        # Handle other array-like, but don't make a new copy if already ndarray.
+        values = np.array(values, copy=False)
+
+        # If indexes is NOT a single index, but values is shaped to fit a single index,
+        # then we need to adjust the shape to broadcast correctly.
+        if (not np.issubdtype(type(indexes), np.integer)
+                and values.ndim == self.arr.ndim - 1):
+            values = np.expand_dims(values, axis=self.axis)
+
+        self.arr[(slice(None),) * self.axis + (indexes,)] = values
+
+def TensorAxisSlice(tensor, axis):
+    """
+    Like AxisSlice, but for a Tensorflow Tensor instead.
+
+    The Tensor must have a known number of dimensions.
+    Note that Tensors cannot use advanced indexing like ndarrays can.
+
+    We could use AxisSlice directly except Tensors don't have a direct 'ndim' property.
+    I guess this makes sense since Tensors can have unknown shape. We could use
+    len(arr.shape) as an alternative to work for both, but this would be slower, and I prefer if
+    AxisSlice is as fast as possible.
+
+    This pretends to be a class, but is actually just a function that adds an 'ndim' property to
+    the Tensor and then returns a standard AxisSlice.
+    """
+    tensor.ndim = tensor.shape.ndims
+    return AxisSlice(tensor, axis)
+
+ON_POSIX = 'posix' in sys.builtin_module_names
+
+def soft_link_directories(dir_name, link_name, safe=False):
+    """
+    Create a symlink between 2 directories.
+
+    If the link already exists, it will be unlinked and deleted before being linked to the new
+    directory.
+    Works on both Windows and Posix. The requirement that this link only directories, not files, is
+    part of a restriction from Windows.
+
+    This is not thread-safe when safe=False. If safe=True, the return code may include errors
+    caused by other threads/processes calling this function with the same link_name,
+    but it will never raise an exeption.
+
+    Parameters
+    ----------
+    dir_name : str
+        Name of existing directory.
+    link_name : str
+        Path to link to dir_name.
+    safe : bool
+        safe=False will raise an Exception if the link cannot be created.
+        safe=True will return the error code instead.
+
+    Returns
+    -------
+    errno : int
+        0 if the links were created succesfully, otherwise the error code.
+        (Always 0 if safe=False.)
+    """
+    assert os.path.isdir(dir_name)
+
+    # If the target path is or contains a link, we risk symlink loops by linking directly to it.
+    # Instead resolve any links in the target path.
+    dir_name = os.path.realpath(dir_name)
+
+    if ON_POSIX:
+        try:
+            if os.path.islink(link_name):
+                os.unlink(link_name)
+            os.symlink(dir_name, link_name, target_is_directory=True)
+        except OSError as e:
+            # One reason you can end up here is if another thread creates the same symlink just
+            # after we've unlinked the old one. Generally for this code base, if we're linking to
+            # the same file, we don't actually care about the link, so it doesn't matter that we
+            # just return the error code and let it go.
+            if not safe:
+                raise
+            else:
+                return e.errno
+    else:
+        # On Windows, creating a symlink requires admin priveleges, but creating
+        # a "junction" does not, even though a junction is just a symlink on directories.
+        # I think there may be some support in Python3.8 for this,
+        # but we need Python3.7 for Tensorflow 1.15.
+        try:
+            if os.path.isdir(link_name):
+                os.rmdir(link_name)
+            subprocess.run("mklink /J {} {}".format(link_name, dir_name), shell=True)
+        except OSError as e:
+            if not safe:
+                raise
+            else:
+                return e.errno
+
+    return 0
+
