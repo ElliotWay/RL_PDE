@@ -12,6 +12,7 @@ last
 *meta.yaml
 *progress.csv
 *.zip
+*.h5
 
 # Parameter sweep scripts.
 sweeps/
