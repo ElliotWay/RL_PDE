@@ -215,12 +215,15 @@ def main():
         else:
             print(f"No standard evaluation environments declared for {args.env};"
                     + " evaluation environment will be identical to training environment.")
+            eval_env_args = eval_env_arg_manager.args
             eval_envs = [env_builder.build_env(args.env, eval_env_args, test=True)]
 
     elif args.eval_env == "long":
+        eval_env_args = eval_env_arg_manager.args
         eval_env_args.ep_length = args.e.ep_length * 2
         eval_envs = [env_builder.build_env(args.env, eval_env_args, test=True)]
     elif args.eval_env == "same" or args.eval_env is None:
+        eval_env_args = eval_env_arg_manager.args
         eval_envs = [env_builder.build_env(args.env, eval_env_args, test=True)]
     else:
         raise Exception("eval env type \"{}\" not recognized.".format(args.eval_env))

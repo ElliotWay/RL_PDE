@@ -200,12 +200,11 @@ def train(env, eval_envs, emi, args):
             logger.logkv("avg_train_end_l2", average_train_l2)
             logger.logkv("avg_eval_total_reward", average_eval_reward)
             logger.logkv("avg_eval_end_l2", average_eval_l2)
-            if len(eval_envs) > 1:
-                for i in range(len(eval_envs)):
-                    #logger.logkv("eval{}_reward".format(i+1), eval_rewards[i])
-                    #logger.logkv("eval{}_end_l2".format(i+1), eval_l2[i])
-                    logger.logkv(f"eval_{eval_env_names[i]}_reward".format(i+1), eval_rewards[i])
-                    logger.logkv(f"eval_{eval_env_names[i]}_end_l2".format(i+1), eval_l2[i])
+            for i in range(len(eval_envs)):
+                #logger.logkv("eval{}_reward".format(i+1), eval_rewards[i])
+                #logger.logkv("eval{}_end_l2".format(i+1), eval_l2[i])
+                logger.logkv(f"eval_{eval_env_names[i]}_reward".format(i+1), eval_rewards[i])
+                logger.logkv(f"eval_{eval_env_names[i]}_end_l2".format(i+1), eval_l2[i])
             logger.logkv('time_elapsed', int(time.time() - start_time))
             logger.logkv('proportion_training', training_ratio)
             logger.logkv('proportion_evalating', eval_ratio)
