@@ -2,9 +2,135 @@ import os
 import re
 import numpy as np
 import pandas as pd
+import scipy.stats
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
+import util.colors as colors
+
+
+def create_avg_plot(x_data, y_data, labels, kwargs_list, ci_type='range'):
+    """
+    Plot data where each line can be either a single line or an averaged mean line with a
+    confidence interval.
+
+    Parameters
+    ----------
+    x_data : [[float]]
+        Data on the x-axis. May be different for different series.
+    data : [[float] or [[float]]]
+        The data to plot. The data is a list of series. If a series is a list of floats, the series
+        itself will be plotted. If a series is a list of list of floats, the average with a
+        confidence interval will be plotted.
+    labels : [str]
+        Labels for each data series.
+    kwargs_list : [dict]
+        Arguments provided to the plot function e.g. color and linestyle.
+    ci_type : str
+        Type of confidence interval if one is plotted. Options are:
+        range: [min,max]
+        Xconf: [P(lower)=(1-X)/2,P(higher)=(1-X)/2] (T dist), X in [0,1]
+        Xsig: [-X std deviations,+X std deviations] (normal dist), X > 0
+        Nperc: [Nth percentile,100-Nth percentile], N in [0, 50]
+        none: (only plot the average, no confidence interval)
+
+    Returns
+    -------
+    fig : Figure
+        The matplotlib figure with the data plotted on it. Only the lines are plotted;
+        the figure still needs a legend, axis labels, etc.
+    """
+    fig = plt.figure()
+    ax = fig.gca()
+
+    for x, y, label, kwargs in zip(x_data, y_data, labels, kwargs_list):
+        try:
+            _ = iter(y[0])
+        except TypeError:
+            take_average = False
+        else:
+            take_average = True
+
+        if take_average:
+            add_average_with_ci(ax, x, y, label=label, plot_kwargs=kwargs,
+                    ci_type=ci_type)
+        else:
+            ax.plot(x, y, label=label, **kwargs)
+    return fig
+
+# float regex from https://stackoverflow.com/a/12929311/2860127
+FLOAT_REGEX = r'[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?'
+
+def add_average_with_ci(ax, x, ys, ci_type="range", label=None, plot_kwargs=None):
+    """
+    On an existing axis, plot the mean of multiple data series with a shaded region around it for a
+    confidence interval.
+
+    Parameters
+    ----------
+    ax : Axes
+        The axes to plot on.
+    x : [float]
+        The x values of the data.
+    y : [[float]]
+        The y values for each series of data.
+        Axes are [series, x].
+    ci_type : str
+        The type of confidence interval to plot. Options are:
+        range: [min,max]
+        Xconf: [P(lower)=(1-X)/2,P(higher)=(1-X)/2] (T dist), X in [0,1]
+        Xsig: [-X std deviations,+X std deviations] (normal dist), X > 0
+        Nperc: [Nth percentile,100-Nth percentile], N in [0, 50]
+        none: (only plot the average, no confidence interval)
+    label : str
+        Label of the average line.
+    plot_kwargs : dict
+        Kwargs to pass to the plot function, e.g. color and linestyle.
+    """
+    if plot_kwargs is None:
+        plot_kwargs = {}
+
+    y_data = np.array(ys)
+    y_mean = np.mean(y_data, axis=0)
+
+    if label is None:
+        mean_line = ax.plot(x, y_mean, **plot_kwargs)[0]
+    else:
+        mean_line = ax.plot(x, y_mean, label=label, **plot_kwargs)[0]
+
+    if ci_type is not None and ci_type != "none":
+        if ci_type == "range":
+            lower = np.min(y_data, axis=0)
+            upper = np.max(y_data, axis=0)
+        elif re.fullmatch(f"{float_regex}conf", ci_type):
+            confidence = float(re.fullmatch(f"({float_regex})conf", ci_type).group(1))
+            size = len(y_data)
+            if confidence < 0.0 or confidence > 1.0:
+                raise ValueError()
+            t_constant = float(scipy.stats.t.ppf((1.0 - confidence)/2.0, df=(size - 1)))
+            ci_size = t_constant * np.std(y_values, ddof=1, axis=0)/np.sqrt(size)
+            lower = y_mean - ci_size
+            upper = y_mean + ci_size
+        elif re.fullmatch(f"{float_regex}sig", ci_type):
+            num_sigmas = float(re.fullmatch(f"({float_regex})sig", ci_type).group(1))
+            if num_sigmas < 0.0:
+                raise ValueError()
+            ci_size = num_sigmas * np.std(y_values, axis=0)
+            lower = y_mean - ci_size
+            upper = y_mean + ci_size
+        elif re.fullmatch(f"{float_regex}perc", ci_type):
+            lower_percentile = float(re.fullmatch(f"({float_regex})perc", ci_type).group(1))
+            if lower_percentile < 0.0 or lower_percentile > 50.0:
+                raise ValueError()
+            upper_percentile = 100.0 - lower_percentile
+            lower = np.percentile(y_data, lower_percentile, axis=0)
+            upper = np.percentile(y_data, upper_percentile, axis=0)
+        else:
+            raise ValueError()
+
+        mean_color = mean_line.get_color()
+        ax.fill_between(x, lower, upper, color=mean_color, alpha=0.1)
 
 def generate_polynomial(order, grid_sizes, comparison_error):
     """
@@ -441,11 +567,6 @@ def plot_over_time(times, values, log_dir, name, scaling='linear',
     print('Saved plot to ' + filename + '.')
     plt.close()
 
-
-TRAIN_COLOR = 'black'
-AVG_EVAL_COLOR = 'tab:orange'
-ENV_COLORS = ['b', 'r', 'g', 'm', 'c', 'y']
-
 def crop_early_shift(ax, mode):
     """
     Crop a major change in the begining of the plot.
@@ -486,44 +607,22 @@ def crop_early_shift(ax, mode):
                     np.log10(-min_first) - np.log10(-low_percentile) > order_limit):
                 ax.set_ylim(bottom=(low_percentile * (10 ** order_limit)))
 
-def plot_reward_summary(csv_file, output_file, total_episodes, eval_env_names=None,
-        only_eval=False):
-    if not isinstance(csv_file, pd.DataFrame):
-        csv_df = pd.read_csv(csv_file, comment='#')
-    else:
-        csv_df = csv_file
+def plot_reward_summary(filename, episodes, total_episodes, eval_envs, eval_env_names,
+        avg_train=None, avg_eval=None):
 
-    # Assume new name format.
-    if eval_env_names is None:
-        eval_env_names = [re.fullmatch("eval_(.+)_reward", name).group(1)
-                    for name in list(csv_df) if re.fullmatch("eval_.+_reward", name)]
-        eval_env_prefixes = [f"eval_{name}" for name in eval_env_names]
-    # Check for new name format.
-    elif f"eval_{eval_env_names[0]}_reward" in csv_df:
-        eval_env_prefixes = [f"eval_{name}" for name in eval_env_names]
-    # Old name format. (Kept in case this function is being called from somewhere besides
-    # run() to update an old experiment.)
-    else:
-        eval_env_prefixes = [f"eval{num+1}" for num in range(len(eval_env_names))]
-
-    episodes = csv_df['episodes']
+    only_eval = (avg_train is None and avg_eval is None)
 
     reward_fig = plt.figure()
     ax = reward_fig.gca()
     
-    all_rewards = []
     if not only_eval:
-        if 'avg_train_total_reward' in csv_df:
-            train_reward = csv_df['avg_train_total_reward']
-            ax.plot(episodes, train_reward, color=TRAIN_COLOR, label="train")
-        if len(eval_env_prefixes) > 1 and 'avg_eval_total_reward' in csv_df:
-            avg_eval_reward = csv_df['avg_eval_total_reward']
-            ax.plot(episodes, avg_eval_reward, color=AVG_EVAL_COLOR, label="eval avg")
-    for i, (name, prefix) in enumerate(zip(eval_env_names, eval_env_prefixes)):
-        eval_reward = csv_df[f'{prefix}_reward']
+        if avg_train is not None:
+            ax.plot(episodes, avg_train, color=colors.TRAIN_COLOR, label="train")
+        if len(eval_envs) > 1 and avg_eval is not None:
+            ax.plot(episodes, avg_eval, color=colors.AVG_EVAL_COLOR, label="eval avg")
+    for i, (name, data) in enumerate(zip(eval_env_names, eval_envs)):
         linestyle = '-' if only_eval else '--'
-        ax.plot(episodes, eval_reward,
-                color=ENV_COLORS[i], ls=linestyle, label=name)
+        ax.plot(episodes, data, color=colors.EVAL_ENV_COLORS[i], ls=linestyle, label=name)
 
     reward_fig.legend(loc="lower right")
     ax.set_xlim((0, total_episodes))
@@ -535,45 +634,25 @@ def plot_reward_summary(csv_file, output_file, total_episodes, eval_env_names=No
     ax.set_yscale('symlog')
     crop_early_shift(ax, "flipped")
 
-    reward_fig.savefig(output_file)
+    reward_fig.savefig(filename)
     plt.close(reward_fig)
 
-def plot_l2_summary(csv_file, output_file, total_episodes, eval_env_names=None,
-        only_eval=False):
-    if not isinstance(csv_file, pd.DataFrame):
-        csv_df = pd.read_csv(csv_file, comment='#')
-    else:
-        csv_df = csv_file
+def plot_l2_summary(filename, episodes, total_episodes, eval_envs, eval_env_names,
+        avg_train=None, avg_eval=None):
 
-    # Assume new name format.
-    if eval_env_names is None:
-        eval_env_names = [re.fullmatch("eval_(.+)_end_l2", name).group(1)
-                    for name in list(csv_df) if re.fullmatch("eval_.+_end_l2", name)]
-        eval_env_prefixes = [f"eval_{name}" for name in eval_env_names]
-    # Check for new name format.
-    elif f"eval_{eval_env_names[0]}_end_l2" in csv_df:
-        eval_env_prefixes = [f"eval_{name}" for name in eval_env_names]
-    # Old name format. (Kept in case this function is being called from somewhere besides
-    # run() to update an old experiment.)
-    else:
-        eval_env_prefixes = [f"eval{num+1}" for num in range(len(eval_env_names))]
-
-    episodes = csv_df['episodes']
+    only_eval = (avg_train is None and avg_eval is None)
 
     l2_fig = plt.figure()
     ax = l2_fig.gca()
+
     if not only_eval:
-        if 'avg_train_end_l2' in csv_df:
-            train_l2 = csv_df['avg_train_end_l2']
-            ax.plot(episodes, train_l2, color=TRAIN_COLOR, label="train")
-        if len(eval_env_prefixes) > 1 and 'avg_eval_end_l2' in csv_df:
-            avg_eval_l2 = csv_df['avg_eval_end_l2']
-            ax.plot(episodes, avg_eval_l2, color=AVG_EVAL_COLOR, label="eval avg")
-    for i, (name, prefix) in enumerate(zip(eval_env_names, eval_env_prefixes)):
-        eval_l2 = csv_df[f'{prefix}_end_l2']
+        if avg_train is not None:
+            ax.plot(episodes, avg_train, color=colors.TRAIN_COLOR, label="train")
+        if len(eval_envs) > 1 and avg_eval is not None:
+            ax.plot(episodes, avg_eval, color=colors.AVG_EVAL_COLOR, label="eval avg")
+    for i, (name, data) in enumerate(zip(eval_env_names, eval_envs)):
         linestyle = '-' if only_eval else '--'
-        ax.plot(episodes, eval_l2,
-                color=ENV_COLORS[i], ls=linestyle, label=name)
+        ax.plot(episodes, data, color=colors.EVAL_ENV_COLORS[i], ls=linestyle, label=name)
 
     l2_fig.legend(loc="upper right")
     ax.set_xlim((0, total_episodes))
@@ -584,25 +663,13 @@ def plot_l2_summary(csv_file, output_file, total_episodes, eval_env_names=None,
     ax.set_yscale('log')
     crop_early_shift(ax, "normal")
 
-    l2_fig.savefig(output_file)
+    l2_fig.savefig(filename)
     plt.close(l2_fig)
 
-def plot_loss_summary(csv_file, output_file, total_episodes):
-    if not isinstance(csv_file, pd.DataFrame):
-        csv_df = pd.read_csv(csv_file, comment='#')
-    else:
-        csv_df = csv_file
-
-    episodes = csv_df['episodes']
+def plot_loss_summary(filename, episodes, total_episodes, loss):
 
     loss_fig = plt.figure()
     ax = loss_fig.gca()
-    if 'loss' in csv_df:
-        loss = csv_df['loss']
-    elif 'policy_loss' in csv_df:
-        loss = -csv_df['policy_loss']
-    else:
-        raise Exception("Can't find loss in progress.csv file.")
     ax.plot(episodes, loss, color='k')
     ax.set_xlim((0, total_episodes))
     ax.set_title("Loss Function")
@@ -612,7 +679,15 @@ def plot_loss_summary(csv_file, output_file, total_episodes):
     ax.set_yscale('log')
     crop_early_shift(ax, "normal")
 
-    loss_fig.savefig(output_file)
+    loss_fig.savefig(filename)
     plt.close(loss_fig)
 
-
+def legend_font_size(num_lines):
+    if num_lines < 6:
+        return 'medium'
+    elif num_lines < 12:
+        return 'small'
+    elif num_lines < 18:
+        return 'x-small'
+    else:
+        return 'xx-small'

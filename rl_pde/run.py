@@ -73,17 +73,35 @@ from util import action_snapshot
 from util.misc import human_readable_time_delta
 
 def write_summary_plots(log_dir, summary_plot_dir, total_episodes, eval_env_names):
-    #TODO This is a hack. Consider adapting the SB logger class to our own purposes
-    # so we can fetch this file name instead of hardcoding it here.
     csv_file = os.path.join(log_dir, "progress.csv")
     csv_df = pd.read_csv(csv_file, comment='#')
 
+    episodes = csv_df['episodes']
+
+    if f"eval_{eval_env_names[0]}_reward" in csv_df:
+        eval_env_prefixes = [f"eval_{name}" for name in eval_env_names]
+    else:
+        # Old name format for backwards compatability.
+        eval_env_prefixes = [f"eval{num+1}" for num in range(len(eval_env_names))]
+
     reward_filename = os.path.join(summary_plot_dir, "rewards.png")
-    plot_reward_summary(csv_df, reward_filename, total_episodes, eval_env_names)
+    plot_reward_summary(reward_filename, episodes, total_episodes,
+            eval_envs=[csv_df[f"{prefix}_reward"] for prefix in eval_env_prefixes],
+            eval_env_names=eval_env_names,
+            avg_train=csv_df['avg_train_total_reward'],
+            avg_eval=csv_df['avg_eval_total_reward'])
+
     l2_filename = os.path.join(summary_plot_dir, "l2.png")
-    plot_l2_summary(csv_df, l2_filename, total_episodes, eval_env_names)
+    plot_l2_summary(l2_filename, episodes, total_episodes,
+            eval_envs=[csv_df[f"{prefix}_end_l2"] for prefix in eval_env_prefixes],
+            eval_env_names=eval_env_names,
+            avg_train=csv_df['avg_train_end_l2'],
+            avg_eval=csv_df['avg_eval_end_l2'])
+
     loss_filename = os.path.join(summary_plot_dir, "loss.png")
-    plot_loss_summary(csv_df, loss_filename, total_episodes)
+    loss_data = (csv_df['loss'] if 'loss' in csv_df else csv_df['policy_loss'])
+    plot_loss_summary(loss_filename, episodes, total_episodes,
+            loss=csv_df['loss'])
 
     print(f"Summary plots updated in {summary_plot_dir}.")
 
@@ -92,12 +110,25 @@ def write_final_plots(log_dir, summary_plot_dir, total_episodes, eval_env_names)
     csv_file = os.path.join(log_dir, "progress.csv")
     csv_df = pd.read_csv(csv_file, comment='#')
 
-    reward_filename = os.path.join(summary_plot_dir, "final_rewards.png")
-    plot_reward_summary(csv_df, reward_filename, total_episodes, eval_env_names, only_eval=True)
-    l2_filename = os.path.join(summary_plot_dir, "final_l2.png")
-    plot_l2_summary(csv_df, l2_filename, total_episodes, eval_env_names, only_eval=True)
+    episodes = csv_df['episodes']
 
-    print("Final plots created in {}.".format(summary_plot_dir))
+    if f"eval_{eval_env_names[0]}_reward" in csv_df:
+        eval_env_prefixes = [f"eval_{name}" for name in eval_env_names]
+    else:
+        # Old name format for backwards compatability.
+        eval_env_prefixes = [f"eval{num+1}" for num in range(len(eval_env_names))]
+
+    reward_filename = os.path.join(summary_plot_dir, "final_rewards.png")
+    plot_reward_summary(reward_filename, episodes, total_episodes,
+            eval_envs=[csv_df[f"{prefix}_reward"] for prefix in eval_env_prefixes],
+            eval_env_names=eval_env_names)
+
+    l2_filename = os.path.join(summary_plot_dir, "final_l2.png")
+    plot_l2_summary(l2_filename, episodes, total_episodes,
+            eval_envs=[csv_df[f"{prefix}_end_l2"] for prefix in eval_env_prefixes],
+            eval_env_names=eval_env_names)
+
+    print(f"Final plots created in {summary_plot_dir}.")
 
 def train(env, eval_envs, emi, args):
 
@@ -200,12 +231,11 @@ def train(env, eval_envs, emi, args):
             logger.logkv("avg_train_end_l2", average_train_l2)
             logger.logkv("avg_eval_total_reward", average_eval_reward)
             logger.logkv("avg_eval_end_l2", average_eval_l2)
-            if len(eval_envs) > 1:
-                for i in range(len(eval_envs)):
-                    #logger.logkv("eval{}_reward".format(i+1), eval_rewards[i])
-                    #logger.logkv("eval{}_end_l2".format(i+1), eval_l2[i])
-                    logger.logkv(f"eval_{eval_env_names[i]}_reward".format(i+1), eval_rewards[i])
-                    logger.logkv(f"eval_{eval_env_names[i]}_end_l2".format(i+1), eval_l2[i])
+            for i in range(len(eval_envs)):
+                #logger.logkv("eval{}_reward".format(i+1), eval_rewards[i])
+                #logger.logkv("eval{}_end_l2".format(i+1), eval_l2[i])
+                logger.logkv(f"eval_{eval_env_names[i]}_reward".format(i+1), eval_rewards[i])
+                logger.logkv(f"eval_{eval_env_names[i]}_end_l2".format(i+1), eval_l2[i])
             logger.logkv('time_elapsed', int(time.time() - start_time))
             logger.logkv('proportion_training', training_ratio)
             logger.logkv('proportion_evalating', eval_ratio)
