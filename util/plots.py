@@ -9,6 +9,129 @@ import matplotlib.pyplot as plt
 
 import util.colors as colors
 
+
+def create_avg_plot(x_data, y_data, labels, kwargs_list, ci_type='range'):
+    """
+    Plot data where each line can be either a single line or an averaged mean line with a
+    confidence interval.
+
+    Parameters
+    ----------
+    x_data : [[float]]
+        Data on the x-axis. May be different for different series.
+    data : [[float] or [[float]]]
+        The data to plot. The data is a list of series. If a series is a list of floats, the series
+        itself will be plotted. If a series is a list of list of floats, the average with a
+        confidence interval will be plotted.
+    labels : [str]
+        Labels for each data series.
+    kwargs_list : [dict]
+        Arguments provided to the plot function e.g. color and linestyle.
+    ci_type : str
+        Type of confidence interval if one is plotted. Options are:
+        range: [min,max]
+        Xconf: [P(lower)=(1-X)/2,P(higher)=(1-X)/2] (T dist), X in [0,1]
+        Xsig: [-X std deviations,+X std deviations] (normal dist), X > 0
+        Nperc: [Nth percentile,100-Nth percentile], N in [0, 50]
+        none: (only plot the average, no confidence interval)
+
+    Returns
+    -------
+    fig : Figure
+        The matplotlib figure with the data plotted on it. Only the lines are plotted;
+        the figure still needs a legend, axis labels, etc.
+    """
+    fig = plt.figure()
+    ax = fig.gca()
+
+    for x, y, label, kwargs in zip(x_data, y_data, labels, kwargs_list):
+        try:
+            _ = iter(y[0])
+        except TypeError:
+            take_average = False
+        else:
+            take_average = True
+
+        if take_average:
+            add_average_with_ci(ax, x, y, label=label, plot_kwargs=kwargs,
+                    ci_type=ci_type)
+        else:
+            ax.plot(x, y, label=label, **kwargs)
+    return fig
+
+# float regex from https://stackoverflow.com/a/12929311/2860127
+FLOAT_REGEX = r'[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?'
+
+def add_average_with_ci(ax, x, ys, ci_type="range", label=None, plot_kwargs=None):
+    """
+    On an existing axis, plot the mean of multiple data series with a shaded region around it for a
+    confidence interval.
+
+    Parameters
+    ----------
+    ax : Axes
+        The axes to plot on.
+    x : [float]
+        The x values of the data.
+    y : [[float]]
+        The y values for each series of data.
+        Axes are [series, x].
+    ci_type : str
+        The type of confidence interval to plot. Options are:
+        range: [min,max]
+        Xconf: [P(lower)=(1-X)/2,P(higher)=(1-X)/2] (T dist), X in [0,1]
+        Xsig: [-X std deviations,+X std deviations] (normal dist), X > 0
+        Nperc: [Nth percentile,100-Nth percentile], N in [0, 50]
+        none: (only plot the average, no confidence interval)
+    label : str
+        Label of the average line.
+    plot_kwargs : dict
+        Kwargs to pass to the plot function, e.g. color and linestyle.
+    """
+    if plot_kwargs is None:
+        plot_kwargs = {}
+
+    y_data = np.array(ys)
+    y_mean = np.mean(y_data, axis=0)
+
+    if label is None:
+        mean_line = ax.plot(x, y_mean, **plot_kwargs)[0]
+    else:
+        mean_line = ax.plot(x, y_mean, label=label, **plot_kwargs)[0]
+
+    if ci_type is not None and ci_type != "none":
+        if ci_type == "range":
+            lower = np.min(y_data, axis=0)
+            upper = np.max(y_data, axis=0)
+        elif re.fullmatch(f"{float_regex}conf", ci_type):
+            confidence = float(re.fullmatch(f"({float_regex})conf", ci_type).group(1))
+            size = len(y_data)
+            if confidence < 0.0 or confidence > 1.0:
+                raise ValueError()
+            t_constant = float(scipy.stats.t.ppf((1.0 - confidence)/2.0, df=(size - 1)))
+            ci_size = t_constant * np.std(y_values, ddof=1, axis=0)/np.sqrt(size)
+            lower = y_mean - ci_size
+            upper = y_mean + ci_size
+        elif re.fullmatch(f"{float_regex}sig", ci_type):
+            num_sigmas = float(re.fullmatch(f"({float_regex})sig", ci_type).group(1))
+            if num_sigmas < 0.0:
+                raise ValueError()
+            ci_size = num_sigmas * np.std(y_values, axis=0)
+            lower = y_mean - ci_size
+            upper = y_mean + ci_size
+        elif re.fullmatch(f"{float_regex}perc", ci_type):
+            lower_percentile = float(re.fullmatch(f"({float_regex})perc", ci_type).group(1))
+            if lower_percentile < 0.0 or lower_percentile > 50.0:
+                raise ValueError()
+            upper_percentile = 100.0 - lower_percentile
+            lower = np.percentile(y_data, lower_percentile, axis=0)
+            upper = np.percentile(y_data, upper_percentile, axis=0)
+        else:
+            raise ValueError()
+
+        mean_color = mean_line.get_color()
+        ax.fill_between(x, lower, upper, color=mean_color, alpha=0.1)
+
 def generate_polynomial(order, grid_sizes, comparison_error):
     """
     Generate a curve to represent the order of error approximation in e.g. a convergence plot.
@@ -444,80 +567,6 @@ def plot_over_time(times, values, log_dir, name, scaling='linear',
     print('Saved plot to ' + filename + '.')
     plt.close()
 
-
-# float regex from https://stackoverflow.com/a/12929311/2860127
-FLOAT_REGEX = r'[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?'
-
-def add_average_with_ci(ax, x, ys, ci_type="range", label=None, plot_kwargs=None):
-    """
-    On an existing axis, plot the mean of multiple data series with a shaded region around it for a
-    confidence interval.
-
-    Parameters
-    ----------
-    ax : Axes
-        The axes to plot on.
-    x : [float]
-        The x values of the data.
-    y : [[float]]
-        The y values for each series of data.
-        Axes are [series, x].
-    ci_type : str
-        The type of confidence interval to plot. Options are:
-        range: [min,max]
-        Xconf: [P(lower)=(1-X)/2,P(higher)=(1-X)/2] (T dist), X in [0,1]
-        Xsig: [-X std deviations,+X std deviations] (normal dist), X > 0
-        Nperc: [Nth percentile,100-Nth percentile], N in [0, 50]
-        none: (only plot the average, no confidence interval)
-    label : str
-        Label of the average line.
-    plot_kwargs : dict
-        Kwargs to pass to the plot function, e.g. color and linestyle.
-    """
-    if plot_kwargs is None:
-        plot_kwargs = {}
-
-    y_data = np.array(ys)
-    y_mean = np.mean(y_data, axis=0)
-
-    if label is None:
-        mean_line = ax.plot(x, y_mean, **plot_kwargs)[0]
-    else:
-        mean_line = ax.plot(x, y_mean, label=label, **plot_kwargs)[0]
-
-    if ci_type is not None and ci_type != "none":
-        if ci_type == "range":
-            lower = np.min(y_data, axis=0)
-            upper = np.max(y_data, axis=0)
-        elif re.fullmatch(f"{float_regex}conf", ci_type):
-            confidence = float(re.fullmatch(f"({float_regex})conf", ci_type).group(1))
-            size = len(y_data)
-            if confidence < 0.0 or confidence > 1.0:
-                raise ValueError()
-            t_constant = float(scipy.stats.t.ppf((1.0 - confidence)/2.0, df=(size - 1)))
-            ci_size = t_constant * np.std(y_values, ddof=1, axis=0)/np.sqrt(size)
-            lower = y_mean - ci_size
-            upper = y_mean + ci_size
-        elif re.fullmatch(f"{float_regex}sig", ci_type):
-            num_sigmas = float(re.fullmatch(f"({float_regex})sig", ci_type).group(1))
-            if num_sigmas < 0.0:
-                raise ValueError()
-            ci_size = num_sigmas * np.std(y_values, axis=0)
-            lower = y_mean - ci_size
-            upper = y_mean + ci_size
-        elif re.fullmatch(f"{float_regex}perc", ci_type):
-            lower_percentile = float(re.fullmatch(f"({float_regex})perc", ci_type).group(1))
-            if lower_percentile < 0.0 or lower_percentile > 50.0:
-                raise ValueError()
-            upper_percentile = 100.0 - lower_percentile
-            lower = np.percentile(y_data, lower_percentile, axis=0)
-            upper = np.percentile(y_data, upper_percentile, axis=0)
-        else:
-            raise ValueError()
-
-        mean_color = mean_line.get_color()
-        ax.fill_between(x, lower, upper, color=mean_color, alpha=0.1)
-
 def crop_early_shift(ax, mode):
     """
     Crop a major change in the begining of the plot.
@@ -566,7 +615,6 @@ def plot_reward_summary(filename, episodes, total_episodes, eval_envs, eval_env_
     reward_fig = plt.figure()
     ax = reward_fig.gca()
     
-    all_rewards = []
     if not only_eval:
         if avg_train is not None:
             ax.plot(episodes, avg_train, color=colors.TRAIN_COLOR, label="train")
@@ -634,4 +682,12 @@ def plot_loss_summary(filename, episodes, total_episodes, loss):
     loss_fig.savefig(filename)
     plt.close(loss_fig)
 
-
+def legend_font_size(num_lines):
+    if num_lines < 6:
+        return 'medium'
+    elif num_lines < 12:
+        return 'small'
+    elif num_lines < 18:
+        return 'x-small'
+    else:
+        return 'xx-small'
