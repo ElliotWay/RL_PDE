@@ -27,6 +27,11 @@ def main():
 
     args = parser.parse_args()
 
+    if args.labels is not None:
+        if len(args.labels) != len(args.files):
+            raise Exception(f"Number of labels ({len(args.labels)}) must match"
+                    + f" number of files ({len(args.files)}).")
+
     time_values = []
     y_values = []
 
