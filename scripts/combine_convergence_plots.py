@@ -4,15 +4,11 @@ import pandas as pd
 import numpy as np
 
 from util import plots
+import util.colors as colors
 from util.misc import soft_link_directories
 from util.argparse import ExtendAction
 
-WENO_COLORS = [None, None, 'g', 'b', 'r', 'y', 'c', 'm']
-# Polynomial colors line up so that WENO color i is poly color 2i-1.
-# Even-indexed polynomial colors are the appropriate colors between the odd-indexed colors.
-POLY_COLORS = [None, 'grey', (0.4, 0.7, 0.0), 'g', 'c', 'b', 'm', 'r',
-        'tab:orange', 'y', (0.375, 0.75, 0.375), 'c', (0.375, 0.375, 0.75), 'm']
-
+# ActionClass stuff to get argparse to do what I want here.
 class ExtendTupleAction(ExtendAction):
     def __init__(self, name, *args, **kwargs):
         self.name = name
@@ -90,7 +86,7 @@ def main():
             error_list = csv_df['l2_error']
             if args.labels is not None:
                 args.labels.insert(index, f"WENO, r={order}")
-            kwargs_list.append({'color': WENO_COLORS[order], 'linestyle': '--'})
+            kwargs_list.append({'color': colors.WENO_ORDER_COLORS[order], 'linestyle': '--'})
         elif curve_type == "poly":
             if len(grid_sizes) == 0:
                 raise Exception("Polynomial cannot be the first curve in the plot.")
@@ -101,7 +97,7 @@ def main():
                                                     order, previous_sizes, previous_errors)
             if args.labels is not None:
                 args.labels.insert(index, poly_label)
-            kwargs_list.append({'color': POLY_COLORS[order], 'linestyle': ':'})
+            kwargs_list.append({'color': colors.POLY_COLORS[order], 'linestyle': ':'})
 
         grid_sizes.append(sizes)
         errors.append(error_list)

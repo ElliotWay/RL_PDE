@@ -7,6 +7,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+import util.colors as colors
+
 def generate_polynomial(order, grid_sizes, comparison_error):
     """
     Generate a curve to represent the order of error approximation in e.g. a convergence plot.
@@ -516,11 +518,6 @@ def add_average_with_ci(ax, x, ys, ci_type="range", label=None, plot_kwargs=None
         mean_color = mean_line.get_color()
         ax.fill_between(x, lower, upper, color=mean_color, alpha=0.1)
 
-
-TRAIN_COLOR = 'black'
-AVG_EVAL_COLOR = 'tab:orange'
-ENV_COLORS = ['b', 'r', 'g', 'm', 'c', 'y']
-
 def crop_early_shift(ax, mode):
     """
     Crop a major change in the begining of the plot.
@@ -590,15 +587,15 @@ def plot_reward_summary(csv_file, output_file, total_episodes, eval_env_names=No
     if not only_eval:
         if 'avg_train_total_reward' in csv_df:
             train_reward = csv_df['avg_train_total_reward']
-            ax.plot(episodes, train_reward, color=TRAIN_COLOR, label="train")
+            ax.plot(episodes, train_reward, color=colors.TRAIN_COLOR, label="train")
         if len(eval_env_prefixes) > 1 and 'avg_eval_total_reward' in csv_df:
             avg_eval_reward = csv_df['avg_eval_total_reward']
-            ax.plot(episodes, avg_eval_reward, color=AVG_EVAL_COLOR, label="eval avg")
+            ax.plot(episodes, avg_eval_reward, color=colors.AVG_EVAL_COLOR, label="eval avg")
     for i, (name, prefix) in enumerate(zip(eval_env_names, eval_env_prefixes)):
         eval_reward = csv_df[f'{prefix}_reward']
         linestyle = '-' if only_eval else '--'
         ax.plot(episodes, eval_reward,
-                color=ENV_COLORS[i], ls=linestyle, label=name)
+                color=colors.EVAL_ENV_COLORS[i], ls=linestyle, label=name)
 
     reward_fig.legend(loc="lower right")
     ax.set_xlim((0, total_episodes))
@@ -640,15 +637,15 @@ def plot_l2_summary(csv_file, output_file, total_episodes, eval_env_names=None,
     if not only_eval:
         if 'avg_train_end_l2' in csv_df:
             train_l2 = csv_df['avg_train_end_l2']
-            ax.plot(episodes, train_l2, color=TRAIN_COLOR, label="train")
+            ax.plot(episodes, train_l2, color=colors.TRAIN_COLOR, label="train")
         if len(eval_env_prefixes) > 1 and 'avg_eval_end_l2' in csv_df:
             avg_eval_l2 = csv_df['avg_eval_end_l2']
-            ax.plot(episodes, avg_eval_l2, color=AVG_EVAL_COLOR, label="eval avg")
+            ax.plot(episodes, avg_eval_l2, color=colors.AVG_EVAL_COLOR, label="eval avg")
     for i, (name, prefix) in enumerate(zip(eval_env_names, eval_env_prefixes)):
         eval_l2 = csv_df[f'{prefix}_end_l2']
         linestyle = '-' if only_eval else '--'
         ax.plot(episodes, eval_l2,
-                color=ENV_COLORS[i], ls=linestyle, label=name)
+                color=colors.EVAL_ENV_COLORS[i], ls=linestyle, label=name)
 
     l2_fig.legend(loc="upper right")
     ax.set_xlim((0, total_episodes))

@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 
 from util import plots
+import util.colors as colors
 from util.misc import soft_link_directories
 
 def main():
@@ -63,9 +64,6 @@ def main():
                             files[order][solution_name] = csv_file
                         else:
                             files[order] = {solution_name: csv_file}
-
-
-    colors = [None, None, 'g', 'b', 'r', 'y', 'c', 'm']
         
     grid_sizes = []
     errors = []
@@ -101,16 +99,16 @@ def main():
                 grid_sizes.append(poly_grid_sizes)
                 errors.append(poly_values)
                 labels.append(poly_label)
-                kwargs_list.append({'color': colors[order], 'linestyle': ':'})
+                kwargs_list.append({'color': colors.WENO_ORDER_COLORS[order], 'linestyle': ':'})
 
                 poly_added = True
 
             if sol_name == 'rl':
                 labels.append(f"RL, r={order}")
-                kwargs_list.append({'color': colors[order], 'linestyle': '-'})
+                kwargs_list.append({'color': colors.WENO_ORDER_COLORS[order], 'linestyle': '-'})
             else:
                 labels.append(f"WENO, r={order}")
-                kwargs_list.append({'color': colors[order], 'linestyle': '--'})
+                kwargs_list.append({'color': colors.WENO_ORDER_COLORS[order], 'linestyle': '--'})
 
             grid_sizes.append(sizes)
             errors.append(error_list)

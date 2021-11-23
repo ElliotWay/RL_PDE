@@ -12,22 +12,23 @@ from util.misc import soft_link_directories
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Plot the average of data from multiple CSV plots including a shaded"
-        + " confidence interval region.",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+        description="Plot the average of data from multiple CSV plots including"
+        + " a shaded confidence\ninterval region.",
+        formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('files', type=str, nargs='+',
             help="CSV files containing data.")
     parser.add_argument('--index-name', type=str, required=True,
-            help="Name of the column containing values for the x-axis."
-            + " Must be the same data for every file.")
+            help="Name of the column containing values for the x-axis.\n"
+            + "Must be the same data for every file.")
     parser.add_argument('--value-name', type=str, required=True,
             help="Name of the column containing the values for the y-axis.")
     parser.add_argument('--ci-type', type=str, default='range',
-            help = "The type of confidence interval to plot. Options are:\n"
-                + " range: [min,max]\n"
-                + " Xconf: [P(lower)=(1-X)/2,P(higher)=(1-X)/2] (T dist), X in [0,1]\n"
-                + " Xsig: [-X std deviations,+X std deviations] (normal dist), X > 0\n"
-                + " Nperc: [Nth percentile,100-Nth percentile], N in [0, 50]\n")
+            help = "The type of confidence interval to plot. (default: range)\n"
+                + " Options are:\n"
+                + "   range: [min,max]\n"
+                + "   Xconf: [P(lower)=(1-X)/2,P(higher)=(1-X)/2] (T dist), X in [0,1]\n"
+                + "   Xsig: [-X std deviations,+X std deviations] (normal dist), X > 0\n"
+                + "   Nperc: [Nth percentile,100-Nth percentile], N in [0, 50]\n")
     parser.add_argument("--title", type=str, default=None,
             help="Title to add to the plot. By default, no title is added.")
     parser.add_argument("--output", "-o", type=str, required=True,
