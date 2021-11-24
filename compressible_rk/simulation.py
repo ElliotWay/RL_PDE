@@ -11,7 +11,7 @@ class Simulation(compressible.Simulation):
     """The main simulation class for the method of lines compressible
     hydrodynamics solver"""
 
-    def substep(self, myd):
+    def substep(self, myd, agent=None):
         """
         take a single substep in the RK timestepping starting with the
         conservative state defined as part of myd
@@ -33,7 +33,7 @@ class Simulation(compressible.Simulation):
         k = myg.scratch_array(nvar=self.ivars.nvar)
 
         flux_x, flux_y = flx.fluxes(myd, self.rp,
-                                    self.ivars, self.solid, self.tc)
+                                    self.ivars, self.solid, self.tc, agent)
 
         for n in range(self.ivars.nvar):
             k.v(n=n)[:, :] = \
@@ -66,7 +66,7 @@ class Simulation(compressible.Simulation):
 
         self.dt = cfl*float(np.min(1.0/(xtmp + ytmp)))
 
-    def evolve(self):
+    def evolve(self, agent=None):
         """
         Evolve the equations of compressible hydrodynamics through a
         timestep dt.
@@ -85,7 +85,7 @@ class Simulation(compressible.Simulation):
         for s in range(rk.nstages()):
             ytmp = rk.get_stage_start(s)
             ytmp.fill_BC_all()
-            k = self.substep(ytmp)
+            k = self.substep(ytmp, agent)
             rk.store_increment(s, k)
 
         rk.compute_final_update()

@@ -70,7 +70,7 @@ def weno_ii(order, nvar, q):
 
     return qL
 
-def weno_states(idir, ng, qv, weno_order=2):
+def weno_states(idir, ng, qv, weno_order=2, agent=None):
     
     qx, qy, nvar = qv.shape
 
@@ -99,7 +99,7 @@ def weno_states(idir, ng, qv, weno_order=2):
 
     return q_l, q_r
 
-def fluxes(my_data, rp, ivars, solid, tc):
+def fluxes(my_data, rp, ivars, solid, tc, agent=None):
     """
     unsplitFluxes returns the fluxes through the x and y interfaces by
     doing an unsplit reconstruction of the interface values and then
@@ -144,7 +144,7 @@ def fluxes(my_data, rp, ivars, solid, tc):
     # left and right primitive variable states
     tm_states = tc.timer("interfaceStates")
     tm_states.begin()
-    U_xl, U_xr = weno_states(1, myg.ng, q, weno_order=weno_order)
+    U_xl, U_xr = weno_states(1, myg.ng, q, weno_order=weno_order, agent=agent)
     tm_states.end()
 
     # =========================================================================
