@@ -124,7 +124,6 @@ def main():
     #ax.set_yscale('log') # Add an arg to the parser for this if we need it.
     if args.title is not None:
         ax.set_title(title)
-
     plt.tight_layout()
 
     plt.savefig(args.output)

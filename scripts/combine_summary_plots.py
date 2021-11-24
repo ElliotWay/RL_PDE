@@ -5,19 +5,20 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from util import plots
+import util.plots as plots
 import util.colors as colors
 from util.misc import soft_link_directories
 from util.argparse import ExtendAction
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Combine summary data from training runs into a single plot."
-        + "\nIf files do not contain the same eval envs, the intersection of the"
-        + "\ngiven eval envs will be plotted."
-        + "\nThis script is not backwards compatible with old env names (e.g. eval1)"
-        + "\nand can only handle new env names (e.g. eval_smooth_sine)."
-        + "\nThe order of arguments affects the order of the legend.",
+        description="""\
+Combine summary data from training runs into a single plot. If files do not
+contain the same eval envs, the intersection of the given eval envs will be
+plotted.
+This script is not backwards compatible with old env names (e.g. eval1) and
+can only handle new env names (e.g. eval_smooth_sine).
+The order of arguments controls the order of the legend.""",
         formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument(type=str, nargs='*', action=ExtendAction, dest='curves',
             metavar='FILE',
@@ -27,22 +28,23 @@ def main():
             help="More CSV files containing training data.")
     parser.add_argument('--avg', type=str, nargs='+', action='append', dest='curves',
             metavar='FILE',
-            help="CSV files for which the mean with a confidence interval will be plotted.")
-    parser.add_argument('--ci-type', type=str, default='range',
-            help = "The type of confidence interval to plot. (default: range)\n"
-                + " Options are:\n"
-                + "   range: [min,max]\n"
-                + "   Xconf: [P(lower)=(1-X)/2,P(higher)=(1-X)/2] (T dist), X in [0,1]\n"
-                + "   Xsig: [-X std deviations,+X std deviations] (normal dist), X > 0\n"
-                + "   Nperc: [Nth percentile,100-Nth percentile], N in [0, 50]\n")
+            help="CSV files for which the mean with a confidence\ninterval will be plotted.")
+    parser.add_argument('--ci-type', type=str, default='range', help="""\
+The type of confidence interval to plot.
+Options are: (default: range)
+  range: [min,max]
+  Xconf: double-tailed CI (T dist), X in [0,1]
+  Xsig: [-X stddevs,+X stddevs] (normal dist), X > 0
+  Nperc: [Nth percentile,100-Nth], N in [0, 50]""")
     parser.add_argument("--labels", type=str, nargs='+', default=None,
-            help="Labels for each file/average. Required for >1 file/average.")
+            help="Labels for each file/average. Required for more\nthan one file/average.")
     parser.add_argument("--eval-only", default=False, action='store_true',
-            help="For reward and L2 plots, only plot the eval envs, do not plot the"
-            + "\ntraining average and eval average.")
+            help="For reward and L2 plots, only plot the eval envs,\n"
+            +    "do not plot the training average and eval average.")
     parser.add_argument("--output_dir", "--output-dir", type=str, required=True,
-            help="Directory to save the data to. 3 files will be saved to that directory:"
-            + "\nl2.png, reward.png, and loss.png.")
+            help="Directory to save the data to. 3 files will be\n"
+            +    "saved to that directory: l2.png, reward.png, and\n"
+            +    "loss.png.")
 
     args = parser.parse_args()
 
