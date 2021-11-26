@@ -56,7 +56,7 @@ The order of arguments controls the order of the legend.""",
     parser.add_argument("--files", type=str, nargs='+', action=ExtendTupleGen('file'),
             dest='curves', metavar='FILE',
             help="More CSV files containing convergence data.")
-    parser.add_argument('--avg', type=str, nargs='+', action=AppenTupleGen('avg'), dest='curves',
+    parser.add_argument('--avg', type=str, nargs='+', action=AppendTupleGen('avg'), dest='curves',
             metavar='FILE',
             help="CSV files for which the mean with a confidence\ninterval will be plotted.")
     parser.add_argument('--ci-type', type=str, default='range',
@@ -115,10 +115,10 @@ The order of arguments controls the order of the legend.""",
             names = curve_id
             dfs = [pd.read_csv(name, comment='#') for name in names]
             first_nx = None
-            for name, df in zip(names, df):
+            for name, df in zip(names, dfs):
                 if 'nx' not in df and 'num_cells' not in df:
                     raise Exception(f"Can't find nx values in {name}.")
-                nx_data = df[0]['nx' if 'nx' in df[0] else 'num_cells']
+                nx_data = dfs[0]['nx' if 'nx' in dfs[0] else 'num_cells']
                 if first_nx is None:
                     first_nx = nx_data
                 elif any(first_nx != nx_data):
@@ -174,13 +174,18 @@ The order of arguments controls the order of the legend.""",
     dir_name, file_name = os.path.split(args.output)
     if file_name == "":
         file_name = "convergence.png"
-    plots.convergence_plot(grid_sizes, errors, log_dir=dir_name, name=file_name,
-            labels=args.labels, kwargs_list=kwargs_list)
+        args.output = os.path.join(dir_name, file_name)
 
     plt.savefig(args.output)
     print(f"Saved plot to {args.output}.")
     plt.close()
-       print("Note: Failed to create \"last\" symlink.")
+
+    # Create symlink for convenience.
+    if len(dir_name) > 0:
+        log_link_name = "last"
+        error = soft_link_directories(dir_name, log_link_name, safe=True)
+        if error:
+            print("Note: Failed to create \"last\" symlink.")
 
 
 if __name__ == "__main__":
