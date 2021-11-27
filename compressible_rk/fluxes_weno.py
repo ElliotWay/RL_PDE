@@ -25,6 +25,8 @@ import mesh.reconstruction as reconstruction
 import mesh.array_indexer as ai
 import compressible_rk.weno_coefficients as weno_coefficients
 import numpy
+from util.misc import create_stencil_indexes
+from envs.weno_solution import weno_sub_stencils_nd
 
 from util import msg
 
@@ -62,7 +64,8 @@ def weno_ii(order, nvar, q):
             for l in range(order):
                 for m in range(l + 1):
                     beta[k] += sigma[k, l, m] * q[nv, order - 1 + k - l] * q[nv, order - 1 + k - m]
-            alpha[k] = C[k] / (epsilon + beta[k] ** 2)
+            # alpha[k] = C[k] / (epsilon + beta[k] ** 2)
+            alpha[k] = C[k] / (epsilon + abs(beta[k]) ** order)  # TODO: check this!
             for l in range(order):
                 q_stencils[k] += a[k, l] * q[nv, order - 1 + k - l]
         w[:] = alpha / numpy.sum(alpha)
@@ -89,13 +92,53 @@ def weno_states(idir, ng, qv, weno_order=2, agent=None):
         for j in range(jlo - 2, jhi + 2):
             
             if (idir == 1): # x-direction
-                q_l[i, j, :] = weno_ii(w_o, nvar, qv[i - w_o: i + w_o - 1, j, :].T)
-                q_r[i, j, :] = weno_ii(w_o, nvar, numpy.flip(qv[i - (w_o - 1):i + w_o, j, :], 0).T) #flip the x-direction
+                # q_l[i, j, :] = weno_ii(w_o, nvar, qv[i - w_o: i + w_o - 1, j, :].T)
+                # q_r[i, j, :] = weno_ii(w_o, nvar, numpy.flip(qv[i - (w_o - 1):i + w_o, j, :], 0).T) #flip the x-direction
                 # print(qv[i - w_o: i + w_o - 1, j, :], q_l[i,j,:])
                 # print(qv[i - (w_o - 1):i + w_o, j, :], q_r[i, j, :])
+
+                fp_stencil_indexes = create_stencil_indexes(stencil_size=weno_order * 2 - 1,
+                                                            num_stencils=1,
+                                                            offset=i - weno_order + 2)
+                fm_stencil_indexes = fp_stencil_indexes + 1
+                fp_stencils = [qv[:, j, :].T[ii][fp_stencil_indexes] for ii in range(nvar)]
+                fm_stencils = [numpy.flip(qv[:, j, :], 0).T[ii][fm_stencil_indexes] for ii in range(nvar)]
+
+                fm_stencils = numpy.flip(fm_stencils, axis=-1)
+                fp_stencils = numpy.stack(fp_stencils, axis=0)
+                state = numpy.array([fp_stencils, fm_stencils])
+                fp_substencils = weno_sub_stencils_nd(fp_stencils, weno_order)
+                fm_substencils = weno_sub_stencils_nd(fm_stencils, weno_order)
+
+                state = state.transpose((1, 2, 0, 3))
+                weights, _ = agent.predict(state, deterministic=True)
+                fp_weights = weights[:, :, 0, :]
+                fm_weights = weights[:, :, 1, :]
+                q_l[i, j, :] = numpy.squeeze(numpy.sum(fp_weights * fp_substencils, axis=-1))
+                q_r[i, j, :] = numpy.squeeze(numpy.sum(fm_weights * fm_substencils, axis=-1))
             else:
-                q_l[i, j, :] = weno_ii(w_o, nvar, qv[i, j - w_o: j + w_o - 1, :].T)
-                q_r[i, j, :] = weno_ii(w_o, nvar, numpy.flip(qv[i, j - (w_o - 1):j + w_o, :], 0).T) #flip the y-direction
+                # q_l[i, j, :] = weno_ii(w_o, nvar, qv[i, j - w_o: j + w_o - 1, :].T)
+                # q_r[i, j, :] = weno_ii(w_o, nvar, numpy.flip(qv[i, j - (w_o - 1):j + w_o, :], 0).T) #flip the y-direction
+
+                fp_stencil_indexes = create_stencil_indexes(stencil_size=weno_order * 2 - 1,
+                                                            num_stencils=1,
+                                                            offset=j - weno_order + 2)
+                fm_stencil_indexes = fp_stencil_indexes + 1
+                fp_stencils = [qv[i:, ii, :].T[ii][fp_stencil_indexes] for ii in range(nvar)]
+                fm_stencils = [numpy.flip(qv[i:, ii, :], 0).T[ii][fm_stencil_indexes] for ii in range(nvar)]
+
+                fm_stencils = numpy.flip(fm_stencils, axis=-1)
+                fp_stencils = numpy.stack(fp_stencils, axis=0)
+                state = numpy.array([fp_stencils, fm_stencils])
+                fp_substencils = weno_sub_stencils_nd(fp_stencils, weno_order)
+                fm_substencils = weno_sub_stencils_nd(fm_stencils, weno_order)
+
+                state = state.transpose((1, 2, 0, 3))
+                weights, _ = agent.predict(state, deterministic=True)
+                fp_weights = weights[:, :, 0, :]
+                fm_weights = weights[:, :, 1, :]
+                q_l[i, j, :] = numpy.squeeze(numpy.sum(fp_weights * fp_substencils, axis=-1))
+                q_r[i, j, :] = numpy.squeeze(numpy.sum(fm_weights * fm_substencils, axis=-1))
 
     return q_l, q_r
 
