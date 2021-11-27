@@ -123,8 +123,8 @@ def weno_states(idir, ng, qv, weno_order=2, agent=None):
                                                             num_stencils=1,
                                                             offset=j-jlo+3)
                 fm_stencil_indexes = fp_stencil_indexes + 1
-                fp_stencils = [qv[i:, ii, :].T[ii][fp_stencil_indexes] for ii in range(nvar)]
-                fm_stencils = [numpy.flip(qv[i:, ii, :], 0).T[ii][fm_stencil_indexes] for ii in range(nvar)]
+                fp_stencils = [qv[i, :, :].T[ii][fp_stencil_indexes] for ii in range(nvar)]
+                fm_stencils = [numpy.flip(qv[i, :, :], 0).T[ii][fm_stencil_indexes] for ii in range(nvar)]
 
                 fm_stencils = numpy.flip(fm_stencils, axis=-1)
                 fp_stencils = numpy.stack(fp_stencils, axis=0)
