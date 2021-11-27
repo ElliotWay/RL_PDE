@@ -90,7 +90,6 @@ def weno_states(idir, ng, qv, weno_order=2, agent=None):
     
     for i in range(ilo - 2, ihi + 2):
         for j in range(jlo - 2, jhi + 2):
-            
             if (idir == 1): # x-direction
                 # q_l[i, j, :] = weno_ii(w_o, nvar, qv[i - w_o: i + w_o - 1, j, :].T)
                 # q_r[i, j, :] = weno_ii(w_o, nvar, numpy.flip(qv[i - (w_o - 1):i + w_o, j, :], 0).T) #flip the x-direction
@@ -99,7 +98,7 @@ def weno_states(idir, ng, qv, weno_order=2, agent=None):
 
                 fp_stencil_indexes = create_stencil_indexes(stencil_size=weno_order * 2 - 1,
                                                             num_stencils=1,
-                                                            offset=i - weno_order + 2)
+                                                            offset=i-ilo+3)
                 fm_stencil_indexes = fp_stencil_indexes + 1
                 fp_stencils = [qv[:, j, :].T[ii][fp_stencil_indexes] for ii in range(nvar)]
                 fm_stencils = [numpy.flip(qv[:, j, :], 0).T[ii][fm_stencil_indexes] for ii in range(nvar)]
@@ -122,7 +121,7 @@ def weno_states(idir, ng, qv, weno_order=2, agent=None):
 
                 fp_stencil_indexes = create_stencil_indexes(stencil_size=weno_order * 2 - 1,
                                                             num_stencils=1,
-                                                            offset=j - weno_order + 2)
+                                                            offset=j-jlo+3)
                 fm_stencil_indexes = fp_stencil_indexes + 1
                 fp_stencils = [qv[i:, ii, :].T[ii][fp_stencil_indexes] for ii in range(nvar)]
                 fm_stencils = [numpy.flip(qv[i:, ii, :], 0).T[ii][fm_stencil_indexes] for ii in range(nvar)]
@@ -196,7 +195,7 @@ def fluxes(my_data, rp, ivars, solid, tc, agent=None):
 
     # left and right primitive variable states
     tm_states.begin()
-    U_yl, U_yr = weno_states(2, myg.ng, q, weno_order=weno_order)
+    U_yl, U_yr = weno_states(2, myg.ng, q, weno_order=weno_order, agent=agent)
     tm_states.end()
 
 
