@@ -2,7 +2,7 @@
 
 tmax = 0.2                 ; maximum simulation time to evolve
 max_steps = 10000          ; maximum number of steps to take
-fix_dt = 0.0002            ; set to -1.0 to use adaptive time stepping, and any positive number for fixed
+fix_dt = -1            ; set to -1.0 to use adaptive time stepping, and any positive number for fixed
 
 init_tstep_factor = 0.01   ; first timestep = init_tstep_factor * CFL timestep
 max_dt_change = 2.0        ; max amount the timestep can change between steps

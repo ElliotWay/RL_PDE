@@ -96,13 +96,9 @@ def weno_states(idir, ng, qv, weno_order=2, agent=None):
                 # print(qv[i - w_o: i + w_o - 1, j, :], q_l[i,j,:])
                 # print(qv[i - (w_o - 1):i + w_o, j, :], q_r[i, j, :])
 
-                fp_stencil_indexes = numpy.expand_dims(numpy.arange(i-w_o, i+w_o-1), 0)
-                fm_stencil_indexes = fp_stencil_indexes + 1
-                fp_stencils = [qv[:, j, :].T[ii][fp_stencil_indexes] for ii in range(nvar)]
-                fm_stencils = [numpy.flip(qv[:, j, :], 0).T[ii][fm_stencil_indexes] for ii in range(nvar)]
+                fp_stencils = numpy.expand_dims(qv[i - w_o: i + w_o - 1, j, :].T, -2)
+                fm_stencils = numpy.expand_dims(numpy.flip(qv[i - (w_o - 1):i + w_o, j, :], 0).T, -2)
 
-                fm_stencils = numpy.flip(fm_stencils, axis=-1)
-                fp_stencils = numpy.stack(fp_stencils, axis=0)
                 state = numpy.array([fp_stencils, fm_stencils])
                 fp_substencils = weno_sub_stencils_nd(fp_stencils, weno_order)
                 fm_substencils = weno_sub_stencils_nd(fm_stencils, weno_order)
@@ -117,13 +113,9 @@ def weno_states(idir, ng, qv, weno_order=2, agent=None):
                 # q_l[i, j, :] = weno_ii(w_o, nvar, qv[i, j - w_o: j + w_o - 1, :].T)
                 # q_r[i, j, :] = weno_ii(w_o, nvar, numpy.flip(qv[i, j - (w_o - 1):j + w_o, :], 0).T) #flip the y-direction
 
-                fp_stencil_indexes = numpy.expand_dims(numpy.arange(j - w_o, j + w_o - 1), 0)
-                fm_stencil_indexes = fp_stencil_indexes + 1
-                fp_stencils = [qv[i, :, :].T[ii][fp_stencil_indexes] for ii in range(nvar)]
-                fm_stencils = [numpy.flip(qv[i, :, :], 0).T[ii][fm_stencil_indexes] for ii in range(nvar)]
+                fp_stencils = numpy.expand_dims(qv[i, j - w_o: j + w_o - 1, :].T, -2)
+                fm_stencils = numpy.expand_dims(numpy.flip(qv[i, j - (w_o - 1):j + w_o, :], 0).T, -2)
 
-                fm_stencils = numpy.flip(fm_stencils, axis=-1)
-                fp_stencils = numpy.stack(fp_stencils, axis=0)
                 state = numpy.array([fp_stencils, fm_stencils])
                 fp_substencils = weno_sub_stencils_nd(fp_stencils, weno_order)
                 fm_substencils = weno_sub_stencils_nd(fm_stencils, weno_order)
