@@ -96,9 +96,7 @@ def weno_states(idir, ng, qv, weno_order=2, agent=None):
                 # print(qv[i - w_o: i + w_o - 1, j, :], q_l[i,j,:])
                 # print(qv[i - (w_o - 1):i + w_o, j, :], q_r[i, j, :])
 
-                fp_stencil_indexes = create_stencil_indexes(stencil_size=weno_order * 2 - 1,
-                                                            num_stencils=1,
-                                                            offset=i-ilo+3)
+                fp_stencil_indexes = numpy.expand_dims(numpy.arange(i-w_o, i+w_o-1), 0)
                 fm_stencil_indexes = fp_stencil_indexes + 1
                 fp_stencils = [qv[:, j, :].T[ii][fp_stencil_indexes] for ii in range(nvar)]
                 fm_stencils = [numpy.flip(qv[:, j, :], 0).T[ii][fm_stencil_indexes] for ii in range(nvar)]
@@ -119,9 +117,7 @@ def weno_states(idir, ng, qv, weno_order=2, agent=None):
                 # q_l[i, j, :] = weno_ii(w_o, nvar, qv[i, j - w_o: j + w_o - 1, :].T)
                 # q_r[i, j, :] = weno_ii(w_o, nvar, numpy.flip(qv[i, j - (w_o - 1):j + w_o, :], 0).T) #flip the y-direction
 
-                fp_stencil_indexes = create_stencil_indexes(stencil_size=weno_order * 2 - 1,
-                                                            num_stencils=1,
-                                                            offset=j-jlo+3)
+                fp_stencil_indexes = numpy.expand_dims(numpy.arange(j - w_o, j + w_o - 1), 0)
                 fm_stencil_indexes = fp_stencil_indexes + 1
                 fp_stencils = [qv[i, :, :].T[ii][fp_stencil_indexes] for ii in range(nvar)]
                 fm_stencils = [numpy.flip(qv[i, :, :], 0).T[ii][fm_stencil_indexes] for ii in range(nvar)]
