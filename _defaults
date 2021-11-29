@@ -20,7 +20,7 @@ do_io = 1                  ; do we output at all?
 [vis]
 
 dovis = 1                  ; runtime visualization? (1=yes, 0=no)
-store_images = 0           ; store vis images to files (1=yes, 0=no)
+store_images = 1           ; store vis images to files (1=yes, 0=no)
 
 
 [mesh]

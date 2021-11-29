@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import scipy.stats
 import matplotlib
-matplotlib.use("Agg")
+# matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 import util.colors as colors

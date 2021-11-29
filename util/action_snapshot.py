@@ -3,7 +3,7 @@ from argparse import Namespace
 import os
 import time
 import matplotlib
-matplotlib.use("Agg")
+# matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf

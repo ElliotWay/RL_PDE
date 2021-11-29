@@ -2,7 +2,7 @@ import os
 
 import matplotlib.pyplot as plt
 import matplotlib
-matplotlib.use("Agg")
+# matplotlib.use("Agg")
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 from matplotlib.ticker import LinearLocator

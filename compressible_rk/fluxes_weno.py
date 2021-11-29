@@ -25,7 +25,6 @@ import mesh.reconstruction as reconstruction
 import mesh.array_indexer as ai
 import compressible_rk.weno_coefficients as weno_coefficients
 import numpy
-from util.misc import create_stencil_indexes
 from envs.weno_solution import weno_sub_stencils_nd
 
 from util import msg
