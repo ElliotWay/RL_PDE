@@ -1,8 +1,8 @@
 [driver]
 
-tmax = 1.0                 ; maximum simulation time to evolve
+tmax = 0.2                 ; maximum simulation time to evolve
 max_steps = 10000          ; maximum number of steps to take
-fix_dt = -1.0
+fix_dt = 0.0002            ; set to -1.0 to use adaptive time stepping, and any positive number for fixed
 
 init_tstep_factor = 0.01   ; first timestep = init_tstep_factor * CFL timestep
 max_dt_change = 2.0        ; max amount the timestep can change between steps
@@ -13,7 +13,7 @@ verbose = 1.0              ; verbosity
 [io]
 
 basename = pyro_           ; basename for output files
-dt_out = 0.1               ; simulation time between writing output files
+dt_out = 0.01              ; simulation time between writing output files
 n_out = 10000              ; number of timesteps between writing output files
 do_io = 1                  ; do we output at all?
 

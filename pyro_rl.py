@@ -373,8 +373,8 @@ def load_rl_agent():
     parser.add_argument('--help-env', default=False, action='store_true',
                         help="Do not test and show the environment parameters not listed here.")
     parser.add_argument('--agent', '-a', type=str,
-                        default="log/weno_euler/full/211123_165505/best_1_model_20000.zip",  # order=2 RL agent
-                        # default="log/weno_euler/full/211123_165646/best_1_model_19990.zip",  # order=3 RL agent
+                        # default="log/weno_euler/full/211123_165505/best_1_model_20000.zip",  # order=2 RL agent
+                        default="log/weno_euler/full/211123_165646/best_1_model_19990.zip",  # order=3 RL agent
                         help="Agent to test. Either a file or a string for a standard agent."
                              + " Parameters are loaded from 'meta.[yaml|txt]' in the same directory as the"
                              + " agent file, but can be overriden."

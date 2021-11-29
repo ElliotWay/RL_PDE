@@ -1,0 +1,66 @@
+# log\weno_euler\full\211123_165505\meta.yaml
+# Experiment Parameter File
+# time started: 2021/11/23, 04:55:05 PM (Eastern Standard Time), Tue
+# time finished: 2021/11/27, 02:39:01 AM (Eastern Standard Time), Sat
+# status: finished cleanly
+# initiated by user: UNKNOWN (run on Windows machine)
+# git commit hash: 5e9316e8d9e3e5f0b859c008ce33acfea9664bbb
+# git status: clean
+# git branch: master
+# pid: 27144
+
+help_env: false
+help_model: false
+model: full
+env: weno_euler # (Explicit)
+emi: batch-global
+obs_scale: z_score_last
+action_scale: softmax
+eval_env: same # (Explicit)
+log_dir: log\weno_euler\full\211123_165505
+total_episodes: 20000 # (Explicit)
+log_freq: 10
+n_best_models: 5
+seed: 1
+repeat: null
+y: false
+n: false
+
+e: # Environment Parameters
+  num_cells: 128 # (Explicit)
+  min_value: -0.5 # (Explicit)
+  max_value: 0.5 # (Explicit)
+  order: 2 # (Explicit)
+  state_order: null
+  fixed_timesteps: true
+  timestep: 0.0002 # (Explicit)
+  C: null
+  time_max: 0.1
+  ep_length: 500
+  init_type: sod # (Explicit)
+  schedule: null
+  boundary: null
+  rk: euler
+  solution_rk: null
+  init_params: # (Explicit)
+    eos_gamma: 1.4
+    reconstruction: 1.0
+  nu: 0.0
+  srca: 0.0
+  analytical: false
+  precise_order: null
+  precise_scale: 1
+  reward_adjustment: 1000.0
+  reward_mode: one-step_adjacent_avg_arctansquash
+  memoize: false
+  follow_solution: false
+  
+m: # Model Parameters
+  layers:
+  - 32
+  - 32
+  layer_norm: false
+  learning_rate: 0.0003
+  batch_size: 1 # (Explicit)
+  optimizer: adam
+  
