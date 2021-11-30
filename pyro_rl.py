@@ -2,6 +2,7 @@ import argparse
 import importlib
 import os
 import sys
+import time
 
 import matplotlib.pyplot as plt
 import tensorflow as tf
@@ -122,7 +123,13 @@ class Pyro(object):
             self.rp.command_line_params(other_commands)
 
         # write out the inputs.auto
-        self.rp.print_paramfile()
+        timestamp = time.strftime("%y%m%d_%H%M%S")
+        self.default_log_dir = os.path.join("log/pyro_2", timestamp)
+        try:
+            os.makedirs(self.default_log_dir)
+        except:
+            print('create log dir error')
+        self.rp.print_paramfile(self.default_log_dir)
 
         self.verbose = self.rp.get_param("driver.verbose")
         self.dovis = self.rp.get_param("vis.dovis")
@@ -159,7 +166,7 @@ class Pyro(object):
 
         # output the 0th data
         basename = self.rp.get_param("io.basename")
-        self.sim.write("{}{:04d}".format(basename, self.sim.n))
+        self.sim.write(os.path.join(self.default_log_dir, "{}{:04d}".format(basename, self.sim.n)))
 
         if self.dovis:
             plt.figure(num=1, figsize=(8, 6), dpi=100, facecolor='w')
@@ -172,7 +179,7 @@ class Pyro(object):
         if self.verbose > 0:
             msg.warning("outputting...")
         basename = self.rp.get_param("io.basename")
-        self.sim.write("{}{:04d}".format(basename, self.sim.n))
+        self.sim.write(os.path.join(self.default_log_dir, "{}{:04d}".format(basename, self.sim.n)))
 
         tm_main.end()
         # -------------------------------------------------------------------------
@@ -212,7 +219,7 @@ class Pyro(object):
             if self.verbose > 0:
                 msg.warning("outputting...")
             basename = self.rp.get_param("io.basename")
-            self.sim.write("{}{:04d}".format(basename, self.sim.n))
+            self.sim.write(os.path.join(self.default_log_dir, "{}{:04d}".format(basename, self.sim.n)))
 
         # visualization
         if self.dovis:
@@ -224,7 +231,7 @@ class Pyro(object):
 
             if store == 1:
                 basename = self.rp.get_param("io.basename")
-                plt.savefig("{}{:04d}.png".format(basename, self.sim.n))
+                plt.savefig(os.path.join(self.default_log_dir, "{}{:04d}.png".format(basename, self.sim.n)))
 
             tm_vis.end()
 
@@ -373,8 +380,8 @@ def load_rl_agent():
     parser.add_argument('--help-env', default=False, action='store_true',
                         help="Do not test and show the environment parameters not listed here.")
     parser.add_argument('--agent', '-a', type=str,
-                        # default="log/weno_euler/full/211123_165505/best_1_model_20000.zip",  # order=2 RL agent
-                        default="log/weno_euler/full/211123_165646/best_1_model_19990.zip",  # order=3 RL agent
+                        default="log/weno_euler/full/211123_165505/best_1_model_20000.zip",  # order=2 RL agent
+                        # default="log/weno_euler/full/211123_165646/best_1_model_19990.zip",  # order=3 RL agent
                         help="Agent to test. Either a file or a string for a standard agent."
                              + " Parameters are loaded from 'meta.[yaml|txt]' in the same directory as the"
                              + " agent file, but can be overriden."

@@ -25,4 +25,4 @@ riemann = HLLC            ; HLLC or CGF
 
 well_balanced = 0         ; use a well-balanced scheme to keep the model in hydrostatic equilibrium
 
-weno_order = 3		  ; weno order
+weno_order = 2		  ; weno order

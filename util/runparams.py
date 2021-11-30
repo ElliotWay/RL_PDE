@@ -250,7 +250,7 @@ class RuntimeParameters(object):
 
         return ostr
 
-    def print_paramfile(self):
+    def print_paramfile(self, default_log_dir):
         """
         Create a file, inputs.auto, that has the structure of a pyro
         inputs file, with all known parameters and values
@@ -259,7 +259,7 @@ class RuntimeParameters(object):
         all_keys = list(self.params.keys())
 
         try:
-            f = open('inputs.auto', 'w')
+            f = open(os.path.join(default_log_dir, 'inputs.auto'), 'w')
         except IOError:
             msg.fail("ERROR: unable to open inputs.auto")
 
