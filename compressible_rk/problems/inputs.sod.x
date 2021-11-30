@@ -1,7 +1,7 @@
 # simple inputs files for the unsplit CTU hydro scheme
 
 [driver]
-max_steps = 2000
+max_steps = 10000
 tmax = 0.2
 
 [compressible]
