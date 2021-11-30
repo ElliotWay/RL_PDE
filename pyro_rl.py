@@ -7,6 +7,8 @@ import time
 import matplotlib.pyplot as plt
 import tensorflow as tf
 import yaml
+import matplotlib
+matplotlib.use("Agg")
 
 import compare
 from util import msg, profile, runparams, io
