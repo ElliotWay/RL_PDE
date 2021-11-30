@@ -17,10 +17,10 @@ def main():
         formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument(type=str, nargs='*', action=ExtendAction, dest='curves',
             metavar='FILE',
-            help="CSV files containing training data. (progress.csv)")
+            help="CSV files containing time data. (progress.csv)")
     parser.add_argument('--files', type=str, nargs='+', action=ExtendAction, dest='curves',
             metavar='FILE',
-            help="More CSV files containing training data.")
+            help="More CSV files containing training time data.")
     parser.add_argument('--avg', type=str, nargs='+', action='append', dest='curves',
             metavar='FILE',
             help="CSV files for which the mean with a confidence interval will be plotted.")
@@ -123,7 +123,7 @@ def main():
     ax.set_ylabel(args.ylabel)
     #ax.set_yscale('log') # Add an arg to the parser for this if we need it.
     if args.title is not None:
-        ax.set_title(title)
+        ax.set_title(args.title)
     plt.tight_layout()
 
     plt.savefig(args.output)
