@@ -11,7 +11,12 @@ def main():
     parser = argparse.ArgumentParser(
         description="Combine data from earlier runs into a single plot of error vs x. (1D only.)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--file", type=str, action='append', dest='files',
+    parser.add_argument(type=str, nargs='*', action=ExtendAction, dest='files',
+            metavar='FILE',
+            help="CSV files containing error data. Use --output-mode csv\n"
+            +    "to create these files.")
+    parser.add_argument("--files", type=str, nargs='+', action=ExtendAction, dest='files',
+            metavar='FILE',
             help="CSV file containing error data. Use --output-mode csv"
             + " to create these files. Specify multiple files with --file FILE1 --file FILE2.")
     parser.add_argument("--diff", type=str, nargs=2, action='append', dest='files',
