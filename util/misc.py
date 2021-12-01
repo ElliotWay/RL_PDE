@@ -3,7 +3,6 @@ import os
 import random
 import re
 import numpy as np
-import tensorflow as tf
 import subprocess
 
 # I've started using indexes instead of indices because it bothers me when people use "indice" as the singular.
@@ -46,6 +45,9 @@ def rescale(values, source, target):
     return rescaled
 
 def set_global_seed(seed):
+    # Lazy import tensorflow since it's a big package.
+    import tensorflow as tf
+
     # I still CANNOT get it to be deterministic.
     # I don't understand what the problem is; it used to give the same results every time,
     # but maybe it only seemed deterministic and was slightly different.

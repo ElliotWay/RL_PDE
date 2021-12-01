@@ -270,6 +270,8 @@ def main():
             # Original meta.txt format.
             metadata.load_to_namespace(args.repeat, arg_manager)
 
+    if 'png' in args.output_mode:
+        args.output_mode = [(mode if mode != 'png' else 'plot') for mode in args.output_mode]
     for mode in args.output_mode:
         if mode not in ['plot', 'csv']:
             raise Exception(f"{mode} output mode not recognized.")

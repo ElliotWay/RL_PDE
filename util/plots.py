@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import util.colors as colors
 
 
-def create_avg_plot(x_data, y_data, labels, kwargs_list, ci_type='range'):
+def create_avg_plot(x_data, y_data, labels=None, kwargs_list=None, ci_type='range'):
     """
     Plot data where each line can be either a single line or an averaged mean line with a
     confidence interval.
@@ -43,6 +43,11 @@ def create_avg_plot(x_data, y_data, labels, kwargs_list, ci_type='range'):
     """
     fig = plt.figure()
     ax = fig.gca()
+
+    if labels is None:
+        labels = [""] * len(x_data)
+    if kwargs_list is None:
+        kwargs_list = [{}] * len(x_data)
 
     for x, y, label, kwargs in zip(x_data, y_data, labels, kwargs_list):
         try:

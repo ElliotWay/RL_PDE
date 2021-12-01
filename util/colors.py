@@ -2,6 +2,13 @@
 # consistent across a variety of plots.
 import matplotlib.colors as colors
 
+WENO_COLOR = 'tab:blue'
+WENO_KWARGS = {'color':WENO_COLOR, 'linestyle':'', 'marker':'x'}
+RL_COLOR = 'tab:orange'
+RL_KWARGS = {'color':RL_COLOR, 'linestyle':'', 'marker':'+'}
+ANALYTICAL_COLOR = 'black' #'tab:pink'
+ANALYTICAL_KWARGS = {'color':ANALYTICAL_COLOR, 'linestyle':'-', 'marker':'', 'linewidth':0.75}
+
 TRAIN_COLOR = 'black'
 AVG_EVAL_COLOR = 'tab:orange'
 EVAL_ENV_COLORS = ['b', 'r', 'g', 'm', 'c', 'y']

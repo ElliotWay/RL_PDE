@@ -13,18 +13,127 @@ import threading
 from queue import Queue, Empty
 import time
 import argparse
+import itertools
+from collections import OrderedDict
 
-#import psutil # external library used for debugging, sorry, pip install psutil
-
+#TODO: Implement these locally to have a self-contained file?
 from util.git import git_commit_hash, git_is_clean
 from util.misc import human_readable_time_delta
-
-# Sometimes this enables colors on Windows terminals.
-os.system("")
 
 # Thanks to this SO answer for non-blocking queues.
 # https://stackoverflow.com/a/4896288/2860127
 
+########################################################################
+# Declare the base command here.                                       #
+# Any parameters that should be the same for every run should go here. #
+########################################################################
+base_command = "python run_train.py -n"
+
+###########################################
+# Declare your available parameters here. #
+###########################################
+# OrderedDict so order of arguments is preserved.
+# (Not actually necessary, dicts preserve initial order since 3.6 anyway.)
+values_table = OrderedDict()
+values_table["--order"] = [2, 3]
+values_table["--init-type"] = ["smooth_sine", "smooth_rare", "accelshock"]
+values_table["--seed"] = [1, 2, 3]
+# You can declare parameters with dependent parameters.
+# This will add "--eval_env custom" to the parameters when we are also using
+# "--init-type schedule".
+#values_table["--init-type"] = ["sine", ("schedule", "--eval_env custom")]
+
+###########################################################################
+# Declare the log directory and other special parameters here.            #
+# These parameters are configured based on the special_args dict below.   #
+# Instances of <PATH> in the string will be replaced by a path containing #
+# sub-directories for each of the arguments in special_args.              #
+###########################################################################
+experiment_name, _ = os.path.splitext(sys.argv[0]) # Optional, used as a default.
+special_params = {}
+special_params["--log-dir"] = os.path.join("log/weno_burgers/", experiment_name, "<PATH>")
+#special_params["--agent"] = os.path.join("log/weno_burgers", experiment_name, "<PATH>")
+
+##########################################################################
+# Declare which of the main parameters are used to configure the special #
+# parameters.                                                            #
+# 'all' will use all of them in the existing order.                      #
+# special_args['main'] can be changed if some of the parameters should   #
+# not be in the actual command, and only used to specify the log-dir     #
+# or other special params. For example, you may want to select an agent  #
+# that trained with a given parameter, but that parameter should not be  #
+# specified during testing.                                              #
+##########################################################################
+special_args = {}
+special_args['main'] = 'all'
+special_args['--log-dir'] = 'all'
+# This creates the log dir with opposite ordering:
+#special_args['--log-dir'] = ['--seed', '--init-type', '--order']
+#special_args['--agent'] = 'all'
+
+#############################################################
+# Adjust the maximum number of simultaneous processes here. #
+#############################################################
+MAX_PROCS = 3
+
+SLEEP_TIME = 0.25 # seconds
+
+ON_POSIX = 'posix' in sys.builtin_module_names
+
+def clean_name(value):
+    if not isinstance(value, str) and hasattr(value, '__iter__'):
+        return '_'.join(clean_name(subvalue) for subvalue in value)
+    else:
+        return ''.join(x if x not in "\0\ \t\n\\/:=.*\"\'<>|?" else '_'
+                            for x in str(value))
+
+arg_matrix = [] # Global value, constructed by build_command_list().
+def build_command_list(index, arg_dict):
+    if index == len(values_table):
+        final_special = {}
+        for name, value in special_params.items():
+            if "<PATH>" in value:
+                if special_args[name] == 'all':
+                    keys = values_table.keys()
+                else:
+                    keys = special_args[name]
+                clean_names = [clean_name(arg_dict[key]) for key in keys]
+                stripped_keys = [key.lstrip("-") for key in keys]
+                path = os.path.join(*[f"{key}_{name}"
+                            for key, name in zip(stripped_keys, clean_names)])
+                final_value = value.replace("<PATH>", path)
+            else:
+                final_value = value
+            final_special[name] = final_value
+        if special_args['main'] != 'all':
+            arg_dict = {key:value for key, value in arg_dict.items()
+                            if key in special_args['main']}
+        arg_list = []
+        for name, value in arg_dict.items():
+            arg_list += [name]
+            arg_list += value # The shlex split always returns a list.
+        for name, value in final_special.items():
+            arg_list += [name, value] # But special values are just strings.
+
+        arg_matrix.append(arg_list)
+    else:
+        keyword = list(values_table)[index]
+        value_list = values_table[keyword]
+        for value in value_list:
+            if isinstance(value, tuple):
+                value, extra = value
+            else:
+                extra = None
+            new_arg_dict = dict(arg_dict)
+            # shlex.split is like the usual .split method on string except
+            # it does not split on spaces contained inside quotes.
+            new_arg_dict[keyword] = shlex.split(str(value))
+            if extra is not None:
+                new_arg_dict[keyword] += shlex.split(extra)
+            build_command_list(index + 1, new_arg_dict)
+
+# Sometimes this enables colors on Windows terminals.
+os.system("")
 # Use BrainSlugs83's comment on https://stackoverflow.com/a/16799175/2860127
 # to enable these colors on the Windows console:
 # In HKCU\Console create a DWORD named VirtualTerminalLevel and set it to 0x1;
@@ -49,75 +158,8 @@ class colors:
             '\033[94m', #blue
             '\033[32m', #dark green
             ]
+assert MAX_PROCS <= len(colors.SEQUENCE), f"Not enough colors for {MAX_PROCS} processes."
 
-########################################################################
-# Declare the base command here.                                       #
-# Any parameters that should be the same for every run should go here. #
-########################################################################
-base_command = "python run_train.py -n"
-
-###########################################
-# Declare your available parameters here. #
-###########################################
-# This isn't a dictionary so we can preserve order. (Though as of 3.6, order is guaranteed.)
-values_table = []
-values_table.append(("--order", [2, 3]))
-values_table.append(("--init-type", ["smooth_sine", "smooth_rare", "accelshock"]))
-values_table.append(("--seed", [1, 2, 3]))
-# You can declare parameters with dependent parameters.
-# This will add "--eval_env custom" to the parameters when we are also using
-# "--init-type schedule".
-#values_table.append(("--init-type", ["sine", ("schedule", "--eval_env custom")]))
-
-########################################
-# Declare the base log directory here. #
-########################################
-base_log_dir = "log/param_sweep"
-
-#############################################################
-# Adjust the maximum number of simultaneous processes here. #
-#############################################################
-MAX_PROCS = 4
-assert MAX_PROCS <= len(colors.SEQUENCE)
-
-SLEEP_TIME = 0.25 # seconds
-
-ON_POSIX = 'posix' in sys.builtin_module_names
-
-arg_matrix = []
-def build_command_list(index, arg_list, log_dir):
-    if index == len(values_table):
-        arg_list += ["--log-dir", log_dir]
-        arg_matrix.append(arg_list)
-    else:
-        keyword, value_list = values_table[index]
-        stripped_keyword = keyword.lstrip("-")
-        for value in value_list:
-            #try:
-                #value, extra = value
-            #except (TypeError, ValueError):
-                #extra = None
-            if isinstance(value, tuple):
-                value, extra = value
-            else:
-                extra = None
-
-            new_arg_list = list(arg_list)
-            # shlex.split is like the usual .split method on string except
-            # it does not split on spaces contained inside quotes.
-            new_arg_list += [keyword]
-            new_arg_list += shlex.split(str(value))
-            if extra is not None:
-                new_arg_list += shlex.split(extra)
-            ####################################################################
-            # Some arguments, namely log_dir, need more careful manipulation.  #
-            # Right now the log_dir creates subdirectories for each parameter. #
-            # Make changes in here if you need such changes.                   #
-            ####################################################################
-            clean_value = ''.join(x if x not in "\0\ \t\n\\/:=.*\"\'<>|?" else '_'
-                                    for x in str(value))
-            new_log_dir = os.path.join(log_dir, "{}_{}".format(stripped_keyword, clean_value))
-            build_command_list(index + 1, new_arg_list, new_log_dir)
 
 def enqueue_output(out, q):
     for line in iter(out.readline, b''):
@@ -172,14 +214,15 @@ def main():
         description="Run copies of a command in parallel with varying parameters.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--run', default=False, action='store_true',
-                        help="Perform the actual run. The default is to do a dry run which only"
-                        " prints the commands instead of running them.")
+        help="Perform the actual run. The default is to do a dry run which only"
+        + " prints the commands instead of running them.")
     args = parser.parse_args()
 
     if not args.run:
-        print("{}Dry run. Look over the commands that will be run, then use --run to actually run the parameter sweep.{}".format(colors.OKBLUE, colors.ENDC))
+        print(f"{colors.OKBLUE}Dry run. Look over the commands that will be run,"
+        + f" then use --run to actually run the parameter sweep.{colors.ENDC}")
 
-    build_command_list(0, "", base_log_dir)
+    build_command_list(0, {})
 
     command_prefix = base_command
     command_prefix = shlex.split(command_prefix)

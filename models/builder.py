@@ -76,7 +76,8 @@ def set_contingent_model_defaults(main_args, model_args, test=False):
             if main_args.env in ["weno_euler", "weno_burgers_2d"]:
                 model_args.batch_size = 1
             else:
-                model_args.batch_size = 10
+                #model_args.batch_size = 10
+                model_args.batch_size = 1
         else:
             model_args.batch_size = 64
 
