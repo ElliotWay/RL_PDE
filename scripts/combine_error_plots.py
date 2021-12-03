@@ -91,6 +91,8 @@ def main():
                             for left_name, right_name in zip(left_names, right_names)])
 
     dir_name, file_name = os.path.split(args.output)
+    os.makedirs(dir_name, exist_ok=True)
+
     if file_name == "":
         file_name = "errors.png"
     plots.error_plot(x_locations, errors, labels=args.labels, log_dir=dir_name, name=file_name,

@@ -6,6 +6,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from util import plots
+import util.colors as colors
 from util.misc import soft_link_directories
 from util.argparse import ExtendAction
 
@@ -38,22 +39,31 @@ def main():
             + "\nif the files have only one non-time column.")
     parser.add_argument("--ylabel", type=str, default=None,
             help="Name of the y axis. Defaults to the name of the column with the data.")
+    parser.add_argument("--yscale", type=str, default='linear',
+            help="Scale of the y axis, e.g. linear vs log.")
     parser.add_argument("--title", type=str, default=None,
             help="Title to add to the plot. By default, no title is added.")
     parser.add_argument("--output", "-o", type=str, required=True,
             help="Path to save the combined plot to.")
+    parser.add_argument("--no-default", default=False, action='store_true',
+            help="Use the original styles instead of the paper\n"
+            +    "unified styles.")
 
     args = parser.parse_args()
 
-    if args.labels is not None:
+    create_legend = (args.labels is not None)
+    if args.labels is None:
+        args.labels = [""] * len(args.curves)
+    else:
         if len(args.labels) != len(args.curves):
             raise Exception(f"Number of labels ({len(args.labels)}) must match"
                     + f" number of curves to plot ({len(args.curves)}).")
 
     time_values = []
     y_values = []
+    kwargs_list = []
 
-    for curve in args.curves:
+    for curve, label in zip(args.curves, args.labels):
         if isinstance(curve, str):
             is_list = False
         else:
@@ -82,6 +92,12 @@ def main():
                 raise Exception(f"Cannot find '{args.ycol}' in {filename}.")
             y_values.append(csv_df[args.ycol])
 
+            if args.no_default:
+                kwargs = {}
+            else:
+                kwargs = colors.get_agent_kwargs(filename, label, just_color=True)
+            kwargs_list.append(kwargs)
+ 
         else:
             filenames = curve
             dfs = [pd.read_csv(name, comment='#') for name in filenames]
@@ -109,29 +125,39 @@ def main():
                     raise Exception(f"Cannot find '{args.ycol}' in {name}.")
             y_values.append([df[args.ycol] for df in dfs])
 
+            if args.no_default:
+                kwargs = {}
+            else:
+                kwargs = colors.get_agent_kwargs(filenames[0], label)
+            kwargs_list.append({})
+
     if args.ylabel is None:
         args.ylabel = args.ycol
 
     fig = plots.create_avg_plot(time_values, y_values,
-            labels=args.labels, kwargs_list=None, # Use default matplotlib colors.
+            labels=args.labels, kwargs_list=kwargs_list,
             ci_type=args.ci_type)
-    if args.labels is not None:
-        fig.legend(prop={'size': plots.legend_font_size(len(y_values))})
     ax = fig.gca()
+    if create_legend:
+        ax.legend(loc="upper right", bbox_to_anchor=(1.03, 1.05),
+                ncol=1, fancybox=True, shadow=True,
+                prop={'size': plots.legend_font_size(len(y_values))})
     ax.set_xlabel("time")
     ax.set_xmargin(0.0)
     ax.set_ylabel(args.ylabel)
-    #ax.set_yscale('log') # Add an arg to the parser for this if we need it.
+    ax.set_yscale(args.yscale)
     if args.title is not None:
         ax.set_title(args.title)
     plt.tight_layout()
+
+    dir_name, file_name = os.path.split(args.output)
+    os.makedirs(dir_name, exist_ok=True)
 
     plt.savefig(args.output)
     print(f"Saved plot to {args.output}.")
     plt.close()
 
     # Create symlink for convenience.
-    dir_name, file_name = os.path.split(args.output)
     if len(dir_name) > 0:
         log_link_name = "last"
         error = soft_link_directories(dir_name, log_link_name, safe=True)

@@ -346,8 +346,65 @@ def action_plot(x_vals, action_vals, x_label, labels, log_dir, name="actions.png
     for vector_index in range(vector_dimensions):
         axes[vector_index][0].set_ylabel(vector_parts[vector_index])
 
-    # And the legend in only the top right plot.
-    axes[-1][-1].legend()
+    # Add the legend in only the top right plot.
+    if any([label for label in labels if label != ""]):
+        axes[-1][-1].legend(loc="upper right", bbox_to_anchor=(1.03, 1.05),
+                ncol=1, fancybox=True, shadow=True,
+                prop={'size': legend_font_size(len(action_vals))})
+
+    if title is not None:
+        fig.suptitle(title)
+
+    fig.tight_layout()
+
+    filename = os.path.join(log_dir, name)
+    plt.savefig(filename)
+    print("Saved plot to " + filename + ".")
+    plt.close(fig)
+
+def action_comparison_plot(x_actions, y_actions, x_name, y_name,
+        log_dir, name, title, vector_parts=None, action_parts=None):
+
+    vector_dimensions = len(x_actions)
+    assert vector_dimensions == len(y_actions)
+    action_dimensions = len(x_actions[0])
+    assert action_dimensions == len(y_actions[0])
+
+    vertical_size = 5 * vector_dimensions
+    horizontal_size = 4 * action_dimensions
+    fig, axes = plt.subplots(vector_dimensions, action_dimensions, sharex=True, sharey=True,
+                             figsize=(horizontal_size, vertical_size), squeeze=False)
+
+    flat_x_actions = np.reshape(x_actions, (vector_dimensions, action_dimensions, -1))
+    flat_y_actions = np.reshape(y_actions, (vector_dimensions, action_dimensions, -1))
+
+    if vector_parts is None:
+        vector_parts = [f"$u_{i}$" for i in range(vector_dimensions)]
+    if action_parts is None:
+        action_parts = [f"$w_{i}$" for i in range(action_dimensions)]
+
+    for x_vector_actions, y_vector_actions, vector_axes in
+                    zip(flat_x_actions, flat_y_actions, axes):
+        for x_part_actions, y_part_actions, ax in
+                        zip(x_vector_actions, y_vector_actions, vector_axes):
+            ax.scatter(x_part_actions, y_part_actions, color='k', marker='.')
+
+    for ax in axes[0]:
+        ax.ylabel(y_name)
+    for ax in axes[:][0]:
+
+    # Only put the x label on the bottom row of plots
+    # and the action part title on the top row.
+    for action_index in range(action_dimensions):
+        axes[-1][action_index].set_xlabel(x_name)
+
+    # And the vector part label on the left column row.
+    for vector_index in range(vector_dimensions):
+        axes[vector_index][0].set_ylabel(y_name)
+
+    for vector_part, vector_axes in zip(vector_parts, axes):
+        for action_part, ax in zip(action_parts, vector_axes):
+            ax.set_title(f"{vector_part} {action_part}")
 
     if title is not None:
         fig.suptitle(title)

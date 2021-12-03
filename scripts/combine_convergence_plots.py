@@ -92,8 +92,22 @@ The order of arguments controls the order of the legend.""",
             help="Path to save the combined plot to. If an existing\n"
             +    "directory is passed, the file will be saved to\n"
             +    "'convergence.png' in that directory.")
+    parser.add_argument("--no-default", default=False, action='store_true',
+            help="Use the original styles instead of the paper\n"
+            +    "unified styles.")
 
     args = parser.parse_args()
+
+    create_legend = (args.labels is not None)
+    if args.labels is None:
+        args.labels = [""] * len(args.files)
+    else:
+        num_labeled_curves = sum((1 for (curve_type, _) in args.curves
+                                        if curve_type in ['file', 'avg']))
+        if len(args.labels) != num_labeled_curves:
+            raise Exception(f"Number of labels ({len(args.labels)}) must match"
+                    + f" number of curves to plot excluding curves that have"
+                    + f" default labels ({num_labeled_curves}).")
 
     grid_sizes = []
     errors = []
@@ -110,7 +124,12 @@ The order of arguments controls the order of the legend.""",
             else:
                 raise Exception()
             error_list = csv_df['l2_error']
-            kwargs_list.append({})
+
+            if args.no_default:
+                kwargs = {}
+            else:
+                kwargs = colors.get_agent_kwargs(file_name, args.labels[index], just_color=True)
+            kwargs_list.append(kwargs)
         elif curve_type == "avg":
             names = curve_id
             dfs = [pd.read_csv(name, comment='#') for name in names]
@@ -138,7 +157,7 @@ The order of arguments controls the order of the legend.""",
             else:
                 raise Exception()
             error_list = csv_df['l2_error']
-            if args.labels is not None:
+            if create_legend:
                 args.labels.insert(index, f"WENO, r={order}")
             kwargs_list.append({'color': colors.WENO_ORDER_COLORS[order], 'linestyle': '--'})
         elif curve_type == "poly":
@@ -149,7 +168,7 @@ The order of arguments controls the order of the legend.""",
             previous_errors = errors[-1]
             sizes, error_list, poly_label = plots.generate_polynomial(
                                                     order, previous_sizes, previous_errors)
-            if args.labels is not None:
+            if create_legend:
                 args.labels.insert(index, poly_label)
             kwargs_list.append({'color': colors.POLY_COLORS[order], 'linestyle': ':'})
 
@@ -159,9 +178,11 @@ The order of arguments controls the order of the legend.""",
     fig = plots.create_avg_plot(grid_sizes, errors,
             labels=args.labels, kwargs_list=kwargs_list,
             ci_type=args.ci_type)
-    if args.labels is not None:
-        fig.legend(loc="lower left", prop={'size': plots.legend_font_size(len(errors))})
-    ax = plt.gca()
+    ax = fig.gca()
+    if create_legend:
+        ax.legend(loc="upper right", bbox_to_anchor=(1.03, 1.05),
+                ncol=1, fancybox=True, shadow=True,
+                prop={'size': plots.legend_font_size(len(grid_sizes))})
     ax.set_xlabel("grid size")
     ax.set_xscale('log')
     #ax.set_xticks(grid_sizes) # Use the actual grid sizes as ticks instead of powers of 10.
@@ -172,6 +193,8 @@ The order of arguments controls the order of the legend.""",
     plt.tight_layout()
 
     dir_name, file_name = os.path.split(args.output)
+    os.makedirs(dir_name, exist_ok=True)
+
     if file_name == "":
         file_name = "convergence.png"
         args.output = os.path.join(dir_name, file_name)

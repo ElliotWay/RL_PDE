@@ -78,7 +78,9 @@ def do_test(env, agent, args):
                 if 'csv' in args.output_mode:
                     env.save_state(use_error=True)
         # Plot the action that leads to the plotted state.
-        if (args.animate or step == next_update + 1) and args.plot_actions:
+        if step == next_update + 1 and args.plot_actions:
+            # and args.animate) # I had a reason for plotting all of them with args.animate.
+            # Why was that? Does that no longer hold?
             if 'plot' in args.output_mode:
                 env.plot_action(**render_args)
             if 'csv' in args.output_mode:
@@ -164,10 +166,39 @@ def do_test(env, agent, args):
             plots.plot_over_time(times, tvs, log_dir=args.log_dir, name="total_variation.png",
                     title="Total Variation")
         if 'csv' in args.output_mode:
-            tv_df = pd.DataFrame({'t': times, 'tv': tvs})
-            tv_filename = os.path.join(args.log_dir, "total_variation.csv")
-            tv_df.to_csv(tv_filename, index=False)
-            print(f"Saved data to {tv_filename}.")
+            progress_filename = os.path.join(args.log_dir, "progress.csv")
+            try:
+                progress_df = pd.read_csv(progress_filename, comment='#')
+            except (FileNotFoundError, pd.errors.EmptyDataError):
+                progress_df = pd.DataFrame({'t': times, 'tv': tvs})
+            else:
+                if 't' in progress_df and not np.allclose(progress_df['t'], times):
+                    raise Exception("Can't save TV data, progress.csv does not"
+                            + " have matching times.")
+                progress_df['tv'] = tvs
+
+            progress_df.to_csv(progress_filename, index=False)
+            print(f"Saved TV data to {progress_filename}.")
+    if args.plot_l2:
+        times = env.timestep_history
+        l2s = env.compute_l2_error(timestep="all")
+        if 'plot' in args.output_mode:
+            plots.plot_over_time(times, l2s, log_dir=args.log_dir, name="l2_error.png",
+                    title="L2 Error")
+        if 'csv' in args.output_mode:
+            progress_filename = os.path.join(args.log_dir, "progress.csv")
+            try:
+                progress_df = pd.read_csv(progress_filename, comment='#')
+            except (FileNotFoundError, pd.errors.EmptyDataError):
+                progress_df = pd.DataFrame({'t':time, 'l2': l2s})
+            else:
+                if 't' in progress_df and not np.allclose(progress_df['t'], times):
+                    raise Exception("Can't save L2 data, progress.csv does not"
+                            + " have matching times.")
+                progress_df['l2'] = l2s
+
+            progress_df.to_csv(progress_filename, index=False)
+            print(f"Saved L2 data to {progress_filename}.")
 
     return error
 
@@ -214,6 +245,8 @@ def main():
                         help="Plot the error between the agent and the solution. Combines with evolution-plot.")
     parser.add_argument('--plot-tv', '--plot_tv', default=False, action='store_true',
                         help="Plot the total variation vs time for an episode.")
+    parser.add_argument('--plot-l2', '--plot_l2', default=False, action='store_true',
+                        help="Plot the L2 error vs time for an episode.")
     parser.add_argument('--evolution-plot', '--evolution_plot', default=False, action='store_true',
                         help="Instead of usual rendering create 'evolution plot' which plots several states on the"
                         + " same plot in increasingly dark color.")
@@ -504,7 +537,7 @@ def main():
     except KeyboardInterrupt:
         print("Test stopped by interrupt.")
         meta_file.log_finish_time(status="stopped by interrupt")
-        sys.exit(0)
+        sys.exit(1) # Should we return 1 or 0 here?
     except Exception as e:
         meta_file.log_finish_time(status="stopped by exception: {}".format(type(e).__name__))
         raise  # Re-raise so exception is also printed.

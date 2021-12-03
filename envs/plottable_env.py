@@ -425,6 +425,8 @@ class Plottable1DEnv(AbstractPDEEnv):
                     ax[i].set_xlim(xlim)
                     ax[i].set_ylim(ylim)
 
+        fig.tight_layout()
+
         log_dir = logger.get_dir()
         filename = "{}_{}{}.png".format(eqn_type, error_or_state, suffix)
         filename = os.path.join(log_dir, filename)
@@ -619,6 +621,8 @@ class Plottable1DEnv(AbstractPDEEnv):
             ax[i].set_xlabel('x')
             ax[i].set_ylabel(f'{ylabels[i]}')
 
+        fig.tight_layout()
+
         log_dir = logger.get_dir()
         error_or_state = "error" if plot_error else "state"
         filename = os.path.join(log_dir,
@@ -792,7 +796,8 @@ class Plottable1DEnv(AbstractPDEEnv):
         elif self.weno_solution is not None and self.weno_solution.is_recording_actions():
             weno_action_history = np.array(self.weno_solution.get_action_history())
             weno_color = self.weno_color
-            assert(action_history.shape == weno_action_history.shape)
+            assert action_history.shape == weno_action_history.shape, \
+                    f"{action_history.shape} != {weno_action_history.shape}"
         else:
             weno_action_history = None
 

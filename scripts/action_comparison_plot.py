@@ -10,9 +10,14 @@ from util.misc import soft_link_directories
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Combine data from earlier runs into a single plot of actions. (1D only.)",
+        description="Compare actions between 2 runs on one plot with one agent's actions on"
+        + " one axis and the other agent's actions on the other.")
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("files", type=str, nargs='+',
+    parser.add_argument("--first-actions", "--a1", type=str, nargs='+',
+            help="CSV files containing action data. Use --output-mode csv"
+            + " to create these files.")
+    parser.add_argument("--second-actions"
+    parser.add_argument("files", type=str, nargs='2',
             help="CSV file containing action data. Use --output-mode csv"
             + " to create these files.")
     parser.add_argument("--labels", type=str, nargs='+', required=True,

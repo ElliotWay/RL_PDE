@@ -102,6 +102,9 @@ Options are: (default: range)
         ax.set_title(args.title)
     plt.tight_layout()
 
+    dir_name, file_name = os.path.split(args.output)
+    os.makedirs(dir_name, exist_ok=True)
+
     plt.savefig(args.output)
     print(f"Saved plot to {args.output}.")
     plt.close()

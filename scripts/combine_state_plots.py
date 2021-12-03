@@ -38,6 +38,14 @@ def main():
 
     args = parser.parse_args()
 
+    create_legend = (args.labels is not None)
+    if args.labels is None:
+        args.labels = [""] * len(args.files)
+    else:
+        if len(args.labels) != len(args.curves):
+            raise Exception(f"Number of labels ({len(args.labels)}) must match"
+                    + f" number of curves to plot ({len(args.curves)}).")
+
     first_df = pd.read_csv(args.files[0], comment='#')
     if 'x' not in first_df:
         raise Exception(f"x column not found in {args.files[0]}; is this state data?")
@@ -57,30 +65,17 @@ def main():
         for name in component_names:
             state_data[name].append(csv_df[name])
 
-    if args.labels is None:
-        labels = [""] * len(args.files)
-    else:
-        labels = args.labels
-
     dir_name, output_file_name = os.path.split(args.output)
     file_short, file_ext = os.path.splitext(output_file_name)
+    os.makedirs(dir_name, exist_ok=True)
 
     for name in component_names:
         fig, ax = plt.subplots()
-        for x, state, label, filename in zip(x_data, state_data[name], labels, args.files):
+        for x, state, label, filename in zip(x_data, state_data[name], args.labels, args.files):
             if args.no_default:
                 kwargs = {}
-            elif 'weno' in filename.lower() or 'weno' in label.lower():
-                kwargs = colors.WENO_KWARGS
-            elif (any(name in filename.lower() for name in ['analytical', 'true'])
-                    or any(name in label.lower() for name in ['analytical', 'true'])):
-                kwargs = colors.ANALYTICAL_KWARGS
             else:
-                if not (any(name in filename.lower() for name in ['rl', 'agent'])
-                        or any(name in lable.lower() for name in ['rl', 'agent'])):
-                    print(f"Warning: can't determine type of {filename};"
-                            + " assuming it is from an RL agent.")
-                kwargs = colors.RL_KWARGS
+                kwargs = colors.get_agent_kwargs(filename, label)
             ax.plot(x, state, label=label, **kwargs)
 
         ax.set_xlabel('$x$')
@@ -94,12 +89,12 @@ def main():
         else:
             ax.set_ylabel(name)
 
-        if args.labels is not None:
+        if create_legend:
             ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.08),
                     ncol=len(x_data), fancybox=True, shadow=True,
                     prop={'size': plots.legend_font_size(len(x_data))})
         if args.title is not None:
-            if args.labels is not None:
+            if create_legend:
                 ax.set_title(args.title, pad=24.0)
             else:
                 ax.set_title(args.title)
@@ -120,7 +115,6 @@ def main():
         error = soft_link_directories(dir_name, log_link_name, safe=True)
         if error:
             print("Note: Failed to create \"last\" symlink.")
-
 
 
 if __name__ == "__main__":
