@@ -27,6 +27,7 @@ def main():
             +    "unified styles.")
 
     args = parser.parse_args()
+    assert len(args.output) > 0
 
     create_legend = (args.labels is not None)
     if args.labels is None:
@@ -99,7 +100,8 @@ def main():
         kwargs_list.append(kwargs)
 
     dir_name, file_name = os.path.split(args.output)
-    os.makedirs(dir_name, exist_ok=True)
+    if len(dir_name) > 0:
+        os.makedirs(dir_name, exist_ok=True)
 
     if file_name == "":
         file_name = "actions.png"

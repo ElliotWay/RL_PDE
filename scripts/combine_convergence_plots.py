@@ -97,6 +97,7 @@ The order of arguments controls the order of the legend.""",
             +    "unified styles.")
 
     args = parser.parse_args()
+    assert len(args.output) > 0
 
     create_legend = (args.labels is not None)
     if args.labels is None:
@@ -193,7 +194,8 @@ The order of arguments controls the order of the legend.""",
     plt.tight_layout()
 
     dir_name, file_name = os.path.split(args.output)
-    os.makedirs(dir_name, exist_ok=True)
+    if len(dir_name) > 0:
+        os.makedirs(dir_name, exist_ok=True)
 
     if file_name == "":
         file_name = "convergence.png"

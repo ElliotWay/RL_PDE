@@ -86,7 +86,8 @@ def main():
             raise Exception("Cannot use both --append and --output-dir.")
         else:
             new_log_dir = reeval_args.output_dir
-            os.makedirs(new_log_dir, exist_ok=True)
+            if len(new_log_dir) > 0:
+                os.makedirs(new_log_dir, exist_ok=True)
     else:
         new_log_dir = old_log_dir
     if reeval_args.copy and reeval_args.append:

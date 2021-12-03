@@ -22,6 +22,8 @@ def main():
     # interface.
 
     args = parser.parse_args()
+    assert len(args.output) > 0
+
     star_indexes = [i for i, c in enumerate(args.glob) if c == '*']
     num_stars = len(star_indexes)
     if num_stars > 2:

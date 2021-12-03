@@ -52,6 +52,7 @@ Options are: (default: range)
             help="Path to save the generated plot to.")
 
     args = parser.parse_args()
+    assert len(args.output) > 0
 
     x_values = []
     y_values = []
@@ -103,7 +104,8 @@ Options are: (default: range)
     plt.tight_layout()
 
     dir_name, file_name = os.path.split(args.output)
-    os.makedirs(dir_name, exist_ok=True)
+    if len(dir_name) > 0:
+        os.makedirs(dir_name, exist_ok=True)
 
     plt.savefig(args.output)
     print(f"Saved plot to {args.output}.")

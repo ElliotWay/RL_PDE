@@ -383,18 +383,13 @@ def action_comparison_plot(x_actions, y_actions, x_name, y_name,
     if action_parts is None:
         action_parts = [f"$w_{i}$" for i in range(action_dimensions)]
 
-    for x_vector_actions, y_vector_actions, vector_axes in
+    for x_vector_actions, y_vector_actions, vector_axes in \
                     zip(flat_x_actions, flat_y_actions, axes):
-        for x_part_actions, y_part_actions, ax in
+        for x_part_actions, y_part_actions, ax in \
                         zip(x_vector_actions, y_vector_actions, vector_axes):
             ax.scatter(x_part_actions, y_part_actions, color='k', marker='.')
 
-    for ax in axes[0]:
-        ax.ylabel(y_name)
-    for ax in axes[:][0]:
-
-    # Only put the x label on the bottom row of plots
-    # and the action part title on the top row.
+    # Only put the x label on the bottom row of plots.
     for action_index in range(action_dimensions):
         axes[-1][action_index].set_xlabel(x_name)
 

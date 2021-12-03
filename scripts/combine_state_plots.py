@@ -37,6 +37,7 @@ def main():
             + "util/colors.py")
 
     args = parser.parse_args()
+    assert len(args.output) > 0
 
     create_legend = (args.labels is not None)
     if args.labels is None:
@@ -67,7 +68,8 @@ def main():
 
     dir_name, output_file_name = os.path.split(args.output)
     file_short, file_ext = os.path.splitext(output_file_name)
-    os.makedirs(dir_name, exist_ok=True)
+    if len(dir_name) > 0:
+        os.makedirs(dir_name, exist_ok=True)
 
     for name in component_names:
         fig, ax = plt.subplots()

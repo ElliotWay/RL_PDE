@@ -25,6 +25,8 @@ def main():
     ORDER_FORMAT = "order_(\d+)"
 
     args = parser.parse_args()
+    assert len(args.output) > 0
+
     outer_dir = args.directory
 
     files = {}

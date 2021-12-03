@@ -33,6 +33,7 @@ def main():
             + " the plot will be saved to 'errors.png' in that directory.")
 
     args = parser.parse_args()
+    assert len(args.output) > 0
 
     x_locations = []
     errors = []
@@ -91,7 +92,8 @@ def main():
                             for left_name, right_name in zip(left_names, right_names)])
 
     dir_name, file_name = os.path.split(args.output)
-    os.makedirs(dir_name, exist_ok=True)
+    if len(dir_name) > 0:
+        os.makedirs(dir_name, exist_ok=True)
 
     if file_name == "":
         file_name = "errors.png"

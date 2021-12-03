@@ -48,7 +48,8 @@ Options are: (default: range)
 
     args = parser.parse_args()
 
-    os.makedirs(args.output_dir, exist_ok=True)
+    if len(args.output_dir) > 0:
+        os.makedirs(args.output_dir, exist_ok=True)
 
     episodes = []
     intersect_names = None
