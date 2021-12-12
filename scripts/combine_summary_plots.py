@@ -3,6 +3,7 @@ import argparse
 import re
 import numpy as np
 import pandas as pd
+import matplotlib
 import matplotlib.pyplot as plt
 
 import util.plots as plots
@@ -41,12 +42,18 @@ Options are: (default: range)
     parser.add_argument("--eval-only", default=False, action='store_true',
             help="For reward and L2 plots, only plot the eval envs,\n"
             +    "do not plot the training average and eval average.")
+    parser.add_argument("--std-only", default=False, action='store_true',
+            help="For reward and L2 plots, only plot the training\n"
+            +    "average and eval average, do not plot the eval envs.")
     parser.add_argument("--output_dir", "--output-dir", type=str, required=True,
             help="Directory to save the data to. 3 files will be\n"
             +    "saved to that directory: l2.png, reward.png, and\n"
             +    "loss.png.")
 
     args = parser.parse_args()
+
+    if args.eval_only and args.std_only:
+        raise Exception("Can't use both --eval-only and --std-only.")
 
     if len(args.output_dir) > 0:
         os.makedirs(args.output_dir, exist_ok=True)
@@ -99,6 +106,8 @@ Options are: (default: range)
             raise Exception("Must specify --labels for multiple curves.")
         args.labels = [""]
     else:
+        if len(args.curves) == 1:
+            print("Warning: with only one curve specified, --labels will be ignored.")
         args.labels = [label + " " for label in args.labels]
 
     reward_and_l2_episodes = []
@@ -123,14 +132,14 @@ Options are: (default: range)
             if not args.eval_only:
                 reward_data.append([df['avg_train_total_reward'] for df in dfs])
                 l2_data.append([df['avg_train_end_l2'] for df in dfs])
-                if len(intersect_names) > 1:
+                if len(intersect_names) > 1 or args.std_only:
                     reward_data.append([df['avg_eval_total_reward'] for df in dfs])
                     l2_data.append([df['avg_eval_end_l2'] for df in dfs])
-
-            reward_data.extend([[df[f"{prefix}_reward"] for df in dfs]
+            if not args.std_only:
+                reward_data.extend([[df[f"{prefix}_reward"] for df in dfs]
+                                        for prefix in eval_env_prefixes])
+                l2_data.extend([[df[f"{prefix}_end_l2"] for df in dfs]
                                     for prefix in eval_env_prefixes])
-            l2_data.extend([[df[f"{prefix}_end_l2"] for df in dfs]
-                                for prefix in eval_env_prefixes])
 
             loss_data.append([df['loss'] for df in dfs])
         else:
@@ -138,11 +147,12 @@ Options are: (default: range)
             if not args.eval_only:
                 reward_data.append(df['avg_train_total_reward'])
                 l2_data.append(df['avg_train_end_l2'])
-                if len(intersect_names) > 1:
+                if len(intersect_names) > 1 or args.std_only:
                     reward_data.append(df['avg_eval_total_reward'])
                     l2_data.append(df['avg_eval_end_l2'])
-            reward_data.extend([df[f"{prefix}_reward"] for prefix in eval_env_prefixes])
-            l2_data.extend([df[f"{prefix}_end_l2"] for prefix in eval_env_prefixes])
+            if not args.std_only:
+                reward_data.extend([df[f"{prefix}_reward"] for prefix in eval_env_prefixes])
+                l2_data.extend([df[f"{prefix}_end_l2"] for prefix in eval_env_prefixes])
             loss_data.append(df['loss'])
 
         if not args.eval_only:
@@ -150,7 +160,7 @@ Options are: (default: range)
             reward_and_l2_kwargs.append({
                 'color': colors.PERMUTATIONS[outer_index](colors.TRAIN_COLOR)})
             reward_and_l2_episodes.append(episodes[outer_index])
-            if len(intersect_names) > 1:
+            if len(intersect_names) > 1 or args.std_only:
                 reward_and_l2_labels.append(f"{outer_label}avg eval")
                 reward_and_l2_kwargs.append({
                     'color': colors.PERMUTATIONS[outer_index](colors.AVG_EVAL_COLOR)})
@@ -159,28 +169,42 @@ Options are: (default: range)
         else:
             eval_linestyle = '-'
 
-        reward_and_l2_labels.extend([f"{outer_label}{name}" for name in intersect_names])
-        reward_and_l2_kwargs.extend([
-            {'color': colors.PERMUTATIONS[outer_index](colors.EVAL_ENV_COLORS[eval_index]),
-                'linestyle': eval_linestyle} for eval_index, _ in enumerate(intersect_names)])
-        reward_and_l2_episodes.extend([episodes[outer_index] for _ in intersect_names])
+        if not args.std_only:
+            reward_and_l2_labels.extend([f"{outer_label}{name}" for name in intersect_names])
+            reward_and_l2_kwargs.extend([
+                {'color': colors.PERMUTATIONS[outer_index](colors.EVAL_ENV_COLORS[eval_index]),
+                    'linestyle': eval_linestyle} for eval_index, _ in enumerate(intersect_names)])
+            reward_and_l2_episodes.extend([episodes[outer_index] for _ in intersect_names])
 
         loss_labels.append(outer_label)
-        loss_kwargs.append({}) # Use matplotlib color cycle.
+        if len(args.curves) == 1:
+            loss_kwargs.append({'color': 'black'})
+        else:
+            loss_kwargs.append({}) # Use matplotlib color cycle.
         loss_episodes.append(episodes[outer_index])
 
     reward_fig = plots.create_avg_plot(reward_and_l2_episodes, reward_data,
             labels=reward_and_l2_labels, kwargs_list=reward_and_l2_kwargs,
             ci_type=args.ci_type)
-    reward_fig.legend(loc="lower right", prop={'size': plots.legend_font_size(len(reward_data))})
     ax = reward_fig.gca()
-    ax.set_title("Total Reward per Episode")
+    if len(reward_data) < 3:
+        ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.08),
+                ncol=len(reward_data), fancybox=True, shadow=True,
+                prop={'size': 'medium'})
+        ax.set_title("Total Reward per Episode", pad=24.0)
+    else:
+        ax.legend(loc="lower right", prop={'size': plots.legend_font_size(len(reward_data))})
+        ax.set_title("Total Reward per Episode")
     ax.set_xmargin(0.0)
     ax.set_xlabel('episodes')
     ax.set_ylabel('reward')
     ax.grid(True)
     # Use symlog as the rewards are negative.
-    ax.set_yscale('symlog')
+    # Ugh...
+    if matplotlib.__version__ == '3.2.2':
+        ax.set_yscale('symlog', linthreshy=1e-9, subsy=range(2,10))
+    else:
+        ax.set_yscale('symlog', linthresh=1e-9, subs=range(2,10))
     plots.crop_early_shift(ax, "flipped")
 
     reward_filename = os.path.join(args.output_dir, 'reward.png')
@@ -191,9 +215,15 @@ Options are: (default: range)
     l2_fig = plots.create_avg_plot(reward_and_l2_episodes, l2_data,
             labels=reward_and_l2_labels, kwargs_list=reward_and_l2_kwargs,
             ci_type=args.ci_type)
-    l2_fig.legend(loc="upper right", prop={'size': plots.legend_font_size(len(l2_data))})
     ax = l2_fig.gca()
-    ax.set_title("L2 Error with WENO at End of Episode")
+    if len(l2_data) < 3:
+        ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.08),
+                ncol=len(reward_data), fancybox=True, shadow=True,
+                prop={'size': 'medium'})
+        ax.set_title("L2 Error with WENO at End of Episode", pad=24.0)
+    else:
+        ax.legend(loc="upper right", prop={'size': plots.legend_font_size(len(l2_data))})
+        ax.set_title("L2 Error with WENO at End of Episode")
     ax.set_xmargin(0.0)
     ax.set_xlabel('episodes')
     ax.set_ylabel('L2 error')

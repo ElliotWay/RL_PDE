@@ -123,6 +123,7 @@ class AbstractBurgersEnv(AbstractPDEEnv):
             self.solution_label = "WENO (one-step)"
             self.weno_solution_label = "WENO (full)"
         else:
+            self.solution_label = "WENO"
             show_separate_weno = False
 
         if show_separate_weno:

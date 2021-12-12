@@ -21,3 +21,7 @@ sandbox/
 all_src/
 # Symlinks to important trained agents.
 agents/
+
+# Creating plots for paper.
+fig_test
+figures

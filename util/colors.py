@@ -37,7 +37,8 @@ def get_agent_kwargs(filename, label, just_color=False):
         else:
             return dict(RL_KWARGS)
 
-TRAIN_COLOR = 'black'
+TRAIN_COLOR = 'tab:gray' #'black'
+# avg eval color is the same as RL color because they both refer to the agent in test environments.
 AVG_EVAL_COLOR = 'tab:orange'
 EVAL_ENV_COLORS = ['b', 'r', 'g', 'm', 'c', 'y']
 

@@ -278,6 +278,35 @@ class Burgers1DGrid(GridBase):
             self.space[0] = np.full_like(self.x, u_L)
             self.space[0, index] = u_R * (self.x[index] - 1)
 
+        elif self.init_type == "shock":
+            if boundary is None:
+                self.boundary = "outflow"
+            offset = params['offset'] if 'offset' in params else 0.25
+            self.init_params['offset'] = offset
+            u_L = params['u_L'] if 'u_L' in params else 3.0
+            self.init_params['u_L'] = u_L
+            u_R = params['u_R'] if 'u_R' in params else 1.0
+            self.init_params['u_R'] = u_R
+
+            index = self.x > offset
+            self.space[0] = np.full_like(self.x, u_L)
+            self.space[0, index] = np.full_like(self.x[index], u_R)
+
+        elif self.init_type == "sawtooth":
+            if boundary is None:
+                self.boundary = "outflow"
+            start = params['start'] if 'start' in params else 0.333
+            self.init_params['start'] = start
+            end = params['end'] if 'end' in params else 0.666
+            self.init_params['end'] = end
+            A = params['A'] if 'A' in params else 2.0
+
+            self.space[0, :] = 0.0
+            index = np.logical_and(self.x >= 0.333,
+                                   self.x <= 0.666)
+            self.space[0, np.logical_and(self.x >= start, self.x <= end)] = \
+                    A * (self.x[index] - start) / (end - start)
+
         elif self.init_type == "tophat":
             if boundary is None:
                 self.boundary = "outflow"
@@ -328,6 +357,25 @@ class Burgers1DGrid(GridBase):
                 b = -0.1
             self.init_params['b'] = b
             self.space[0] = a + b * self.x
+        elif self.init_type == "para":
+            if boundary is None:
+                self.boundary = "outflow"
+            if 'a' in params:
+                a = params['a']
+            else:
+                a = 2.0
+            self.init_params['a'] = a
+            if 'b' in params:
+                b = params['b']
+            else:
+                b = 0.0
+            self.init_params['b'] = b
+            if 'c' in params:
+                c = params['c']
+            else:
+                c = -1.0
+            self.init_params['c'] = c
+            self.space[0] = a + b*self.x + c*self.x**2
         else:
             raise Exception("Initial condition type \"" + str(self.init_type) + "\" not recognized.")
 
@@ -340,6 +388,18 @@ class Burgers1DGrid(GridBase):
             self.space[0, 0:self.ilo] = (self.space[0, self.ilo] + (1 + np.arange(self.ng))*left_d)[::-1]
             right_d = self.space[0, self.ihi] - self.space[0, self.ihi-1]
             self.space[0, self.ihi+1:] = (self.space[0, self.ihi] + (1 + np.arange(self.ng))*right_d)
+        elif self.boundary == "second":
+            # This has weird behavior, probably don't use it.
+            left_2d = (self.space[0, self.ilo] - 2*self.space[0, self.ilo+1]
+                            + self.space[0, self.ilo+2])
+            left_d = ((self.space[0, self.ilo] - self.space[0, self.ilo+1]) 
+                    + (1 + np.arange(self.ng))*left_2d)
+            self.space[0, :self.ilo] = (self.space[0, self.ilo] + left_d)[::-1]
+            right_2d = (self.space[0, self.ihi] - 2*self.space[0, self.ihi-1]
+                            + self.space[0, self.ihi-2])
+            right_d = ((self.space[0, self.ihi] - self.space[0, self.ihi-1])
+                    + (1 + np.arange(self.ng))*right_2d)
+            self.space[0, self.ihi+1:] = (self.space[0, self.ihi] + right_d)
         else:
             super().update_boundary()
 

@@ -43,9 +43,9 @@ def main():
     if args.labels is None:
         args.labels = [""] * len(args.files)
     else:
-        if len(args.labels) != len(args.curves):
+        if len(args.labels) != len(args.files):
             raise Exception(f"Number of labels ({len(args.labels)}) must match"
-                    + f" number of curves to plot ({len(args.curves)}).")
+                    + f" number of curves to plot ({len(args.files)}).")
 
     first_df = pd.read_csv(args.files[0], comment='#')
     if 'x' not in first_df:
