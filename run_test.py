@@ -260,7 +260,8 @@ def main():
                         help="Type of output from the test. Default 'plot' creates the usual plot"
                         + " files. 'csv' puts the data that would be used for a plot in a csv"
                         + " file. Currently 'csv' is not implemented for evolution plots."
-                        + " Multiple modes can be used at once, e.g. --output-mode plot csv.")
+                        + " Multiple modes can be used at once, e.g. --output-mode plot csv."
+                        + " No file output (stdout only) can be specified with --output-mode none.")
     parser.add_argument('--repeat', type=str, default=None,
                         help="Load all of the parameters from a previous test's meta file to run a"
                         + " similar or identical test. Explicitly passed parameters override"
@@ -305,8 +306,11 @@ def main():
 
     if 'png' in args.output_mode:
         args.output_mode = [(mode if mode != 'png' else 'plot') for mode in args.output_mode]
+    if 'none' in args.output_mode:
+        if len(args.output_mode) > 1:
+            raise Exception("Invalid output modes:", args.output_mode)
     for mode in args.output_mode:
-        if mode not in ['plot', 'csv']:
+        if mode not in ['plot', 'csv', 'none']:
             raise Exception(f"{mode} output mode not recognized.")
 
     # Convergence plots have different defaults.
