@@ -7,17 +7,17 @@ ANALYTICAL_INITS=smooth_sine accelshock gaussian smooth_rare
 ANALYTICAL_EXCEPT_SMOOTH_SINE=accelshock gaussian smooth_rare
 OTHER_INITS=tophat rarefaction sine line shock para sawtooth random
 
-#ORDER=2
-#TEST_DIR=fig_test_order2
-#FIG_DIR=figures_order2
-#RL_AGENT="agents/order2/agent.zip"
-#TRAIN_DIR="agents/order2"
+ORDER=2
+TEST_DIR=fig_test_order2
+FIG_DIR=figures_order2
+RL_AGENT="agents/order2/agent.zip"
+TRAIN_DIR="agents/order2"
 
-ORDER=3
-TEST_DIR=fig_test_order3
-FIG_DIR=figures_order3
-RL_AGENT="agents/smooth_sine_order3/agent.zip"
-TRAIN_DIR="agents/smooth_sine_order3/"
+#ORDER=3
+#TEST_DIR=fig_test_order3
+#FIG_DIR=figures_order3
+#RL_AGENT="agents/smooth_sine_order3/agent.zip"
+#TRAIN_DIR="agents/smooth_sine_order3/"
 #TRAIN_DIR="log/weno_burgers/full/order3_arch_sweep_again/layers_32_32/"
 
 
@@ -107,7 +107,7 @@ L2_SCRIPT=scripts/combine_time_plots.py
 L2_AGENTS=rl weno
 
 $(FIG_DIR)/l2/%_l2.png: $(L2_SCRIPT) $(foreach agent,$(L2_AGENTS),$(TEST_DIR)/%/$(agent)/progress.csv)
-	python $^ --labels "RL" "WENO" --ycol l2 --title "L2 Error" --output $@
+	python $^ --labels "RL" "WENO" --ycol l2 --yscale log --title "L2 Error" --output $@
 
 
 action: action_plot action_comparison
