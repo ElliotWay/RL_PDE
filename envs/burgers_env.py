@@ -111,7 +111,7 @@ class AbstractBurgersEnv(AbstractPDEEnv):
 
         if self.analytical:
             show_separate_weno = True
-            self.solution_label = "Analytical"
+            self.solution_label = "True Solution"
             self.weno_solution_label = "WENO"
         elif self.precise_weno_order != self.weno_order or self.precise_scale != 1:
             show_separate_weno = True

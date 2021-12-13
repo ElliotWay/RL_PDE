@@ -109,7 +109,7 @@ def main():
 
         loaded_arg_manager = ArgTreeManager()
         loaded_arg_manager.init_from_dict(args_dict, children_names=['e', 'm'])
-    elif os.path.basename(filename) == metadata.OLD_META_FILE_NAME:
+    elif os.path.basename(reeval_args.meta) == metadata.OLD_META_FILE_NAME:
         env_args = vars(env_builder.get_env_arg_parser().parse_args(""))
         model_args = vars(model_builder.get_model_arg_parser().parse_args(""))
 

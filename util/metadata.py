@@ -284,6 +284,8 @@ def load_to_namespace(meta_filename, arg_manager, ignore_list=[], override_args=
                     continue
                 if arg == "output_mode":
                     continue
+                if arg == "convergence_plot":
+                    continue
                 arg = "--" + arg
                 arg_names = [arg]
                 # Allow for arguments with - instead of _.
@@ -310,6 +312,9 @@ def load_to_namespace(meta_filename, arg_manager, ignore_list=[], override_args=
                             + " files. 'csv' puts the data that would be used for a plot in a csv"
                             + " file. CURRENTLY 'csv' IS NOT IMPLEMENTED FOR ALL OUTPUTS."
                             + " Multiple modes can be used at once, e.g. --output-mode plot csv.")
+    if 'convergence_plot' in args:
+        no_default_parser.add_argument('--convergence-plot', '--convergence_plot', nargs='*', type=int,
+                            default=None)
     no_default_parser.add_argument('-y', '--y', default=False, action='store_true',
                         help="Choose yes for any questions, namely overwriting existing files. Useful for scripts.")
     no_default_parser.add_argument('-n', '--n', default=False, action='store_true',

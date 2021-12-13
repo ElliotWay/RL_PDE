@@ -22,6 +22,7 @@ from rl_pde.run import rollout
 from rl_pde.emi import BatchEMI, StandardEMI, TestEMI, DimensionalAdapterEMI, VectorAdapterEMI
 from rl_pde.agents import get_agent, ExtendAgent2D
 from envs import builder as env_builder
+import envs.solutions as solutions
 from envs import AbstractPDEEnv
 from envs import Plottable1DEnv, Plottable2DEnv
 from models import builder as model_builder
@@ -386,8 +387,12 @@ def main():
     else:
         env_manager_copy = env_arg_manager.copy()
         env_args = env_manager_copy.args
-        env_args.analytical = True # Compare to analytical solution (preferred)
-        #env_args.analytical = False # Compare to WENO (necessary when WENO isn't accurate either)
+        env_args.analytical = True
+        if (not args.env.endswith("burgers")
+                or not env_args.init_type in solutions.available_analtical_solutions):
+            env_args.analytical = False
+            print("No analytical solution available, showing convergence to WENO.")
+
         if env_args.reward_mode is not None and 'one-step' in env_args.reward_mode:
             print("Reward mode switched to 'full' instead of 'one-step' for convergence plots.")
             env_args.reward_mode = env_args.reward_mode.replace('one-step', 'full')
@@ -401,7 +406,8 @@ def main():
             #convergence_grid_range = [64, 128, 256, 512, 1024, 2048, 4096, 8192]
             #convergence_grid_range = (2**np.linspace(6.0, 8.0, 50)).astype(np.int)
         elif dims == 2:
-            convergence_grid_range = [32, 64, 128, 256]
+            #convergence_grid_range = [32, 64, 128, 256]
+            convergence_grid_range = [64, 82, 108, 128, 144, 192, 256]
 
         # Set ep_length and timestep based on number of cells and time_max.
         env_args.ep_length = None
