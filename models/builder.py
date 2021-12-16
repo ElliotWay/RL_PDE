@@ -3,6 +3,7 @@ import argparse
 import tensorflow as tf
 
 from util.argparse import positive_int, nonnegative_float, positive_float, proportion_float
+import envs.grid
 
 def get_model_arg_parser(model_type=None):
     parser = argparse.ArgumentParser(
@@ -77,7 +78,17 @@ def set_contingent_model_defaults(main_args, model_args, test=False):
                 model_args.batch_size = 1
             else:
                 #model_args.batch_size = 10
-                model_args.batch_size = 1
+                # If we're using the 'schedule' init type, we need to have a batch size equal to
+                # the number of inits, or the loss function will fluctuate wildly between batches.
+                if main_args.e.init_type == 'schedule':
+                    # Some rigamarole to get at the length of the schedule.
+                    if main_args.e.schedule is not None:
+                        schedule_length = len(main_args.e.schedule)
+                    else:
+                        schedule_length = len(envs.grid.get_default_schedule(main_args.env))
+                    model_args.batch_size = schedule_length
+                else:
+                    model_args.batch_size = 1
         else:
             model_args.batch_size = 64
 

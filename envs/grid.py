@@ -195,12 +195,16 @@ class GridBase(AbstractGrid):
     A GridBase uses a Numpy ndarray to represent the phyiscal space. This allows for default
     implementations of set(), get_real() and get_full().
 
-    The reset() method must still be implemented in the base class, as the potential varieties of
+    The reset() method must still be implemented in the subclass, as the potential varieties of
     parameters with which to initialize the grid typically depend on the dimension.
 
     set() calls self.update_boundary(). update_boundary() should be overriden in a base class if
     other boundary conditions are required.
     """
+
+    # Default schedule for the 'schedule' init. Define in a concrete subclass to be compatible with
+    # the get_default_schedule() function.
+    DEFAULT_SCHEDULE = None
 
     def __init__(self, num_cells, num_ghosts, min_value, max_value, vec_len, boundary="outflow"):
         super().__init__(num_cells, num_ghosts, min_value, max_value, vec_len)
@@ -420,3 +424,22 @@ def create_grid(num_dimensions, num_cells, num_ghosts, min_value, max_value, eqn
             raise NotImplementedError()
     else:
         raise NotImplementedError()
+
+
+def get_default_schedule(env_name):
+    """
+    Find the default schedule for the 'schedule' initial condition based on the environment name.
+
+    This is found in each concrete Grid class, and each environment name has a Grid class
+    associated with it.
+    """
+    # Kind of a hack - I'm creating this function so batch size can default properly to include at
+    # least every init in the schedule.
+    if env_name == "weno_burgers":
+        return Burgers1DGrid.DEFAULT_SCHEDULE
+    elif env_name == "weno_burgers_2d":
+        return Burgers2DGrid.DEFAULT_SCHEDULE
+    elif env_name == "weno_euler":
+        return Euler1DGrid.DEFAULT_SCHEDULE
+    else:
+        raise Exception(f"Need to extend 'get_default_schedule()' for {env_name}.")

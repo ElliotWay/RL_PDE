@@ -30,6 +30,8 @@ class Burgers1DGrid(GridBase):
     grid.x - The location values associated with each index in grid.u.
     """
 
+    DEFAULT_SCHEDULE = ["smooth_sine", "smooth_rare", "accelshock"]
+
     def __init__(self, nx, ng, xmin=0.0, xmax=1.0,
                  init_type="sine", boundary=None,
                  schedule=None, deterministic_init=False):
@@ -75,7 +77,7 @@ class Burgers1DGrid(GridBase):
         self._init_schedule_index = 0
         #self._init_schedule = ["smooth_rare", "smooth_sine", "random", "rarefaction", "accelshock"]
         if schedule is None:
-            self._init_schedule = ["smooth_sine", "smooth_rare", "accelshock"]
+            self._init_schedule = self.DEFAULT_SCHEDULE
         else:
             self._init_schedule = schedule
         self._init_sample_types = self._init_schedule
@@ -427,6 +429,8 @@ class Euler1DGrid(GridBase):
     grid.x - The location values associated with each index in grid.u.
     """
 
+    DEFAULT_SCHEDULE = ["sod", "shock_tube"]  # sod2 leads to NaNs during training
+
     def __init__(self, nx, ng, xmin=0.0, xmax=1.0, eos_gamma=1.4, init_type="double_rarefaction",
                  boundary=None, schedule=None,
                  deterministic_init=False):
@@ -471,7 +475,7 @@ class Euler1DGrid(GridBase):
         self.deterministic_init = deterministic_init
         self._init_schedule_index = 0
         if schedule is None:
-            self._init_schedule = ["sod", "shock_tube"]  # sod2 leads to NaNs during training
+            self._init_schedule = self.DEFAULT_SCHEDULE
         else:
             self._init_schedule = schedule
         self._init_sample_types = self._init_schedule

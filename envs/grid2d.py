@@ -5,6 +5,10 @@ from envs.grid import GridBase
 from envs.grid1d import Burgers1DGrid
 
 class Burgers2DGrid(GridBase):
+    
+    # Not really a schedule.
+    DEFAULT_SCHEDULE = ["gaussian"]
+
     def __init__(self, num_cells, num_ghosts, min_value, max_value, boundary=None,
             init_type="gaussian", schedule=None, deterministic_init=False):
         vec_len = 1
@@ -18,7 +22,7 @@ class Burgers2DGrid(GridBase):
         self.deterministic_init = deterministic_init
         self._init_schedule_index = 0
         if schedule is None:
-            self._init_schedule = ["gaussian"]
+            self._init_schedule = self.DEFAULT_SCHEDULE
         else:
             self._init_schedule = schedule
         self._init_sample_types = self._init_schedule
