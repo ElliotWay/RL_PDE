@@ -157,21 +157,22 @@ def main():
             eval_args.init_type = "accelshock"
             eval_envs.append(env_builder.build_env(args.env, eval_args, test=True))
 
+            # Not currently using Gaussian environment.
             # The aim of the Gaussian environment is to compare to the Gaussian convergence curve,
             # so we need to adjust the parameters to those used by convergence plots.
-            eval_args = eval_env_arg_manager.parse_args([])
-            eval_args.order = args.e.order
-            eval_args.init_type = "gaussian"
-            eval_args.time_max = 0.05
-            eval_args.C = 0.5
-            eval_args.rk = "rk4"
-            eval_args.num_cells = 128
-            eval_args.fixed_timesteps = False
-            eval_args.analytical = True
-            eval_args.reward_mode = "full"
-            env_builder.set_contingent_env_defaults(args, eval_args, test=True,
-                    print_prefix="eval (gaussian): ")
-            eval_envs.append(env_builder.build_env(args.env, eval_args, test=True))
+            #eval_args = eval_env_arg_manager.parse_args([])
+            #eval_args.order = args.e.order
+            #eval_args.init_type = "gaussian"
+            #eval_args.time_max = 0.05
+            #eval_args.C = 0.5
+            #eval_args.rk = "rk4"
+            #eval_args.num_cells = 128
+            #eval_args.fixed_timesteps = False
+            #eval_args.analytical = True
+            #eval_args.reward_mode = "full"
+            #env_builder.set_contingent_env_defaults(args, eval_args, test=True,
+                    #print_prefix="eval (gaussian): ")
+            #eval_envs.append(env_builder.build_env(args.env, eval_args, test=True))
 
         elif args.env == "weno_burgers_2d":
             eval_envs = []
