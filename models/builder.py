@@ -10,10 +10,23 @@ def get_model_arg_parser(model_type=None):
             add_help=False,
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
-    parser.add_argument('--layers', type=positive_int, nargs='+', default=[32, 32],
-            help="Size of network layers.")
-    parser.add_argument('--layer-norm', '--layer_norm', default=False, action='store_true',
-            help="Use layer normalization between network layers.")
+    # Current models are full, sac, ddpg, pg, fixed-1step, and test.
+    # If the model type is specified, only the parameters relevant to that model are available.
+
+    if model_type in [None, 'full', 'sac', 'ddpg', 'pg']:
+        parser.add_argument('--layers', type=positive_int, nargs='+', default=[32, 32],
+                help="Size of network layers.")
+
+    if model_type in [None, 'full', 'pg']:
+        parser.add_argument('--activation', type=str, default="relu",
+                help="Network activation function.")
+        parser.add_argument('--optimizer', type=str, default="adam",
+                help="Gradient Descent algorithm to use for training. SAC ignores this parameter"
+                + " and always uses Adam.")
+
+    if model_type in [None, 'full', 'sac', 'ddpg', 'pg']:
+        parser.add_argument('--layer-norm', '--layer_norm', default=False, action='store_true',
+                help="Use layer normalization between network layers.")
 
     # One could make a sound argument that gamma is an environment parameter.
     # In practice, it primarily affects the model.
@@ -57,10 +70,6 @@ def get_model_arg_parser(model_type=None):
                 + " This also forces --emi marl and increases batch size to be a multiple of the"
                 + " spatial dimension.")
 
-    if model_type in [None, 'full', 'pg']:
-        parser.add_argument('--optimizer', type=str, default="adam",
-                help="Gradient Descent algorithm to use for training. SAC ignores this parameter"
-                + " and always uses Adam.")
 
     if model_type in [None, 'pg']:
         parser.add_argument('--return-style', '--return_style', type=str, default=None,

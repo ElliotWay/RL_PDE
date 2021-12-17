@@ -13,6 +13,7 @@ from util.misc import create_stencil_indexes
 from util.serialize import save_to_zip, load_from_zip
 from util.function_dict import tensorflow_fn
 from util.serialize import save_to_zip, load_from_zip
+from util.lookup import get_activation
 
 SUPPORTED_BOUNDARIES = ["outflow", "periodic"]
 
@@ -199,12 +200,12 @@ class GlobalBackpropModel(GlobalModel):
             # this part?
             action_shape = self.env.action_space.shape[1:]
 
-            #TODO Use ReLU? A field in args with ReLU as the default might make sense.
             # Note: passing a name to the constructor of a Keras Layer has the effect
             # of putting everything in that layer in the scope of that name.
             # tf.variable_scope does not play well with Keras.
+            a_fn = get_activation(self.args.m.activation)
             self.policy = PolicyNet(layers=self.args.m.layers, action_shape=action_shape,
-                    activation_fn=tf.nn.relu, name="policy", dtype=self.dtype)
+                    activation_fn=a_fn, name="policy", dtype=self.dtype)
 
             # Direct policy input and output used in predict() method during testing.
             self.policy_input_ph = tf.placeholder(dtype=self.dtype,

@@ -1,7 +1,11 @@
+import tensorflow as tf
 
-from models import SACModel, PolicyGradientModel, TestModel
-from models.full import GlobalBackpropModel
-from models.fixed import FixedOneStepModel
+#import models.model.TestModel as TestModel
+#import models.full.GlobalBackpropModel as GlobalBackpropModel
+#import models.sac.sac_wrapper as SACModel
+#import models.pg.PolicyGradientModel as PolicyGradientModel
+#import models.fixed.FixedOneStepModel as FixedOneStepModel
+import models
 
 from rl_pde.emi import BatchEMI, HomogenousMARL_EMI, BatchGlobalEMI, StandardEMI, TestEMI
 
@@ -19,13 +23,13 @@ from rl_pde.emi import BatchEMI, HomogenousMARL_EMI, BatchGlobalEMI, StandardEMI
 
 def get_model_class(model_name):
     if model_name == 'full':
-        return GlobalBackpropModel
+        return models.full.GlobalBackpropModel
     elif model_name == 'sac':
-        return SACModel
+        return models.SACModel
     elif model_name == 'pg': # Policy Gradient
-        return PolicyGradientModel
+        return models.PolicyGradientModel
     elif model_name == "fixed-1step":
-        return FixedOneStepModel
+        return models.fixed.FixedOneStepModel
     elif model_name == 'test':
         return TestModel
     elif model_name == "ddpg":
@@ -55,3 +59,12 @@ def get_emi_class(emi_name):
         return TestEMI
     else:
         raise Exception("Unrecognized EMI: \"{}\"".format(emi_name))
+
+def get_activation(activation_name):
+    if activation_name == 'relu':
+        return tf.nn.relu
+    elif activation_name == 'sigmoid':
+        return tf.nn.sigmoid
+    elif activation_name == 'tanh':
+        return tf.nn.tanh
+

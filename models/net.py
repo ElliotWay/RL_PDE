@@ -1,15 +1,12 @@
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.layers import Layer, Dense
+from tensorflow.keras.layers import Layer, Dense, LayerNormalization
 
-# I found these too useful to avoid using them, but too complex to justify copying.
-# Copy them over anyway if you need to modify the network internals further
-# (or to remove external dependencies).
-# One change to make to that code is to allow for float64 size weights, though that's probably
-# unnecessary.
+# Note that these are only used in models that are not global backprop.
+# If you really need them, consider copying the SB files (and adding float64 support).
 from stable_baselines.common.tf_layers import mlp, linear
 
-def gaussian_policy_net(state_tensor, action_shape, layers, activation_fn,
+def gaussian_policy_net(state_tensor, action_shape, layers, activation_fn, layer_norm,
         scope="policy", reuse=False):
     """
     Construct a Gaussian policy network.
@@ -38,7 +35,8 @@ def gaussian_policy_net(state_tensor, action_shape, layers, activation_fn,
     with tf.variable_scope(scope, reuse):
         flat_state = tf.reshape(state_tensor, (-1, flattened_state_size))
         # TODO Could use layer normalization - that might be a good idea, esp. with ReLU.
-        policy_latent = mlp(flat_state, layers=layers, activ_fn=activation_fn, layer_norm=False)
+        policy_latent = mlp(flat_state, layers=layers, activ_fn=activation_fn,
+                layer_norm=layer_norm)
 
         # Not sure why the sqrt(2) hyperparameter for initialization. StableBaselines uses it.
         flat_mean = linear(policy_latent, "mean", flattened_action_size, init_scale=np.sqrt(2))
@@ -50,44 +48,30 @@ def gaussian_policy_net(state_tensor, action_shape, layers, activation_fn,
 
     return mean, log_std
 
-#TODO delete or rewrite this function. This was the original version, but I
-# realized I needed it as a Layer. (I could have made use of reuse=True instead.)
-def policy_net(state_tensor, action_shape, layers, activation_fn,
-        scope="policy", reuse=False):
-    """
-    Construct a deterministic policy network.
-
-    The input of the network is the state, and the output is the action.
-    (Or rather, batches thereof.)
-    """
-
-    flattened_state_size = np.prod(state_tensor.shape[1:])
-    flattened_action_size = np.prod(action_shape)
-
-    with tf.variable_scope(scope, reuse):
-        flat_state = tf.reshape(state_tensor, (-1, flattened_state_size))
-        # TODO Could use layer normalization - that might be a good idea, esp. with ReLU.
-        policy_latent = mlp(flat_state, layers=layers, activ_fn=activation_fn, layer_norm=False)
-
-        # Not sure why the sqrt(2) hyperparameter for initialization. StableBaselines uses it.
-        flat_action = linear(policy_latent, "action", flattened_action_size, init_scale=np.sqrt(2))
-
-        action = tf.reshape(flat_action, (-1,) + action_shape)
-
-    return action
-
 class PolicyNet(Layer):
-    def __init__(self, layers, action_shape, activation_fn=tf.nn.relu, name=None, dtype=None):
+    def __init__(self, layers, action_shape, activation_fn=tf.nn.relu, layer_norm=False,
+                    name=None, dtype=None):
         self.action_shape = action_shape
+        self.activation_fn = activation_fn
         self.data_type = dtype
+        self.layer_norm = layer_norm
         flattened_action_shape = np.prod(action_shape)
 
         self.hidden_layers = []
         for i, size in enumerate(layers):
-            fc_layer = Dense(size, activation=activation_fn, name=("fc" + str(i)), dtype=self.data_type)
+            # LayerNorm happens between the fully connected layer and the activation function.
+            # (I think. I don't have a good grasp of why that is.)
+            a_fn = None if args.layer_norm else self.activation_fn
+            fc_layer = Dense(size, activation=a_fn, name=("fc" + str(i)), dtype=self.data_type)
             self.hidden_layers.append(fc_layer)
 
-        # TODO SB uses orth_init for this layer. Is that necessary?
+        if self.layer_norm:
+            self.norm_layers = []
+            for i, size in enumerate(layers):
+                norm_layer = LayerNormalization("layernorm"+str(i), dtype=self.data_type)
+                self.norm_layers.append(norm_layer)
+
+        # SB uses orth_init for this layer. Is that necessary?
         self.output_layer = Dense(flattened_action_shape, name="action", dtype=self.data_type)
 
         super().__init__(name=name)
@@ -103,9 +87,14 @@ class PolicyNet(Layer):
         flat_state = tf.reshape(state, (-1, flattened_state_size))
 
         output = flat_state
-        for layer in self.hidden_layers:
-            output = layer(output)
-            #TODO Could use layer normalization - that might be a good idea, esp. with ReLU.
+        if self.layer_norm:
+            for fc_layer, norm_layer in zip(self.hidden_layers, self.norm_layers):
+                output = fc_layer(output)
+                output = norm_layer(output)
+                output = self.activation_fn(output)
+        else:
+            for layer in self.hidden_layers:
+                output = layer(output)
         flat_action = self.output_layer(output)
 
         action = tf.reshape(flat_action, (-1,) + self.action_shape)
