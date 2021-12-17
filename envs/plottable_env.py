@@ -29,6 +29,7 @@ class Plottable1DEnv(AbstractPDEEnv):
         super().__init__(*args, **kwargs)
 
         self._state_axes = None
+        self._error_axes = None
         self._action_axes = None
         self._action_labels = None
 
@@ -326,8 +327,11 @@ class Plottable1DEnv(AbstractPDEEnv):
                 raise Exception("Cannot plot error if solution state is not available.")
 
             state_history = np.abs(solution_state_history - state_history)
+
+            if weno_state_history is not None:
+                weno_state_history = np.abs(solution_state_history - weno_state_history)
+
             solution_state_history = None
-            weno_state_history = None
 
         if eqn_type == 'euler':
             state_history = self.euler_state_conversion(state_history)
@@ -389,14 +393,19 @@ class Plottable1DEnv(AbstractPDEEnv):
                 ax[i].plot(x_values, solution_state_history[i], ls='-', color=self.true_color,
                            label=self.solution_label)
         if weno_state_history is not None:
+            if plot_error:
+                weno_label = f"|{self.weno_solution_label} - {self.solution_label}|"
+            else:
+                weno_label = self.weno_solution_label
             for i in range(vec_len):
                 ax[i].plot(x_values, weno_state_history[i], ls='-', color=self.weno_color,
-                           label=self.weno_solution_label)
+                           label=weno_label)
 
-        # Plot this one last so it is on the top.
-        agent_label = "RL"
+        # Plot the agent line last so it is on the top.
         if plot_error:
-            agent_label = "|error|"
+            agent_label = f"|RL - {self.solution_label}|"
+        else:
+            agent_label = "RL"
         for i in range(vec_len):
             ax[i].plot(x_values, state_history[i], ls='-', color=self.agent_color, label=agent_label)
             ax[i].legend()
@@ -411,19 +420,32 @@ class Plottable1DEnv(AbstractPDEEnv):
         # Can't have negative, cut off extreme errors.
         if plot_error:
             extreme_cutoff = 3.0
-            max_not_extreme = np.max(state_history[state_history < extreme_cutoff])
-            ymax = max_not_extreme*1.05 if max_not_extreme > 0.0 else 0.01
             for i in range(vec_len):
+                max_not_extreme = np.max(state_history[i][state_history[i] < extreme_cutoff])
+                ymax = max_not_extreme*1.05 if max_not_extreme > 0.0 else 0.01
                 ax[i].set_ylim((0.0, ymax))
+                if matplotlib.__version__ == '3.2.2':
+                    ax[i].set_yscale('symlog', linthreshy=1e-9, subsy=range(2,10))
+                else:
+                    ax[i].set_yscale('symlog', linthresh=1e-9, subs=range(2,10))
 
         if fixed_axes:
-            if self._state_axes is None:
-                self._state_axes = (ax[0].get_xlim(), ax[0].get_ylim())
+            if not plot_error:
+                if self._state_axes is None:
+                    self._state_axes = (ax[0].get_xlim(), ax[0].get_ylim())
+                else:
+                    xlim, ylim = self._state_axes
+                    for i in range(vec_len):
+                        ax[i].set_xlim(xlim)
+                        ax[i].set_ylim(ylim)
             else:
-                xlim, ylim = self._state_axes
-                for i in range(vec_len):
-                    ax[i].set_xlim(xlim)
-                    ax[i].set_ylim(ylim)
+                if self._error_axes is None:
+                    self._error_axes = (ax[0].get_xlim(), ax[0].get_ylim())
+                else:
+                    xlim, ylim = self._error_axes
+                    for i in range(vec_len):
+                        ax[i].set_xlim(xlim)
+                        ax[i].set_ylim(ylim)
 
         fig.tight_layout()
 
@@ -620,6 +642,20 @@ class Plottable1DEnv(AbstractPDEEnv):
             ax[i].set_xmargin(0.0)
             ax[i].set_xlabel('x')
             ax[i].set_ylabel(f'{ylabels[i]}')
+
+        # Restrict y-axis if plotting abs error.
+        # Can't have negative, cut off extreme errors.
+        if plot_error:
+            extreme_cutoff = 3.0
+            for i in range(vec_len):
+                max_not_extreme = np.max(state_history[i][state_history[i] < extreme_cutoff])
+                ymax = max_not_extreme*1.05 if max_not_extreme > 0.0 else 0.01
+                ax[i].set_ylim((0.0, ymax))
+                if matplotlib.__version__ == '3.2.2':
+                    ax[i].set_yscale('symlog', linthreshy=1e-9, subsy=range(2,10))
+                else:
+                    ax[i].set_yscale('symlog', linthresh=1e-9, subs=range(2,10))
+
 
         fig.tight_layout()
 

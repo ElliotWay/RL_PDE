@@ -13,12 +13,18 @@ OTHER_INITS=tophat rarefaction sine line shock para sawtooth random
 #RL_AGENT="agents/order2/agent.zip"
 #TRAIN_DIR="agents/order2"
 
-ORDER=3
-TEST_DIR=fig_test_order3
-FIG_DIR=figures_order3
-RL_AGENT="agents/smooth_sine_order3/agent.zip"
-TRAIN_DIR="agents/smooth_sine_order3/"
+#ORDER=3
+#TEST_DIR=fig_test_order3
+#FIG_DIR=figures_order3
+#RL_AGENT="agents/smooth_sine_order3/agent.zip"
+#TRAIN_DIR="agents/smooth_sine_order3/"
 #TRAIN_DIR="log/weno_burgers/full/order3_arch_sweep_again/layers_32_32/"
+
+ORDER=3
+TEST_DIR=fig_test_o3sched
+FIG_DIR=figures_o3sched
+RL_AGENT=log/weno_burgers/full/schedule_test/order_3/model_best.zip
+TRAIN_DIR=log/weno_burgers/full/schedule_test/order_3/
 
 
 RUN_TEST=python run_test.py -y --animate --output-mode csv plot $\

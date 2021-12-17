@@ -389,7 +389,7 @@ def main():
         env_args = env_manager_copy.args
         env_args.analytical = True
         if (not args.env.endswith("burgers")
-                or not env_args.init_type in solutions.available_analtical_solutions):
+                or not env_args.init_type in solutions.available_analytical_solutions):
             env_args.analytical = False
             print("No analytical solution available, showing convergence to WENO.")
 
