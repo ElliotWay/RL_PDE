@@ -419,9 +419,13 @@ class Plottable1DEnv(AbstractPDEEnv):
         # Restrict y-axis if plotting abs error.
         # Can't have negative, cut off extreme errors.
         if plot_error:
-            extreme_cutoff = 3.0
+            extreme_cutoff = 50.0
             for i in range(vec_len):
                 max_not_extreme = np.max(state_history[i][state_history[i] < extreme_cutoff])
+                if weno_state_history is not None:
+                    max_weno = np.max(weno_state_history[i][weno_state_history[i] <
+                        extreme_cutoff])
+                    max_not_extreme = max(max_weno, max_not_extreme)
                 ymax = max_not_extreme*1.05 if max_not_extreme > 0.0 else 0.01
                 ax[i].set_ylim((0.0, ymax))
                 if matplotlib.__version__ == '3.2.2':
@@ -439,13 +443,14 @@ class Plottable1DEnv(AbstractPDEEnv):
                         ax[i].set_xlim(xlim)
                         ax[i].set_ylim(ylim)
             else:
-                if self._error_axes is None:
-                    self._error_axes = (ax[0].get_xlim(), ax[0].get_ylim())
-                else:
-                    xlim, ylim = self._error_axes
-                    for i in range(vec_len):
-                        ax[i].set_xlim(xlim)
-                        ax[i].set_ylim(ylim)
+                pass # Fixed axes don't look as good on error plots.
+                #if self._error_axes is None:
+                    #self._error_axes = (ax[0].get_xlim(), ax[0].get_ylim())
+                #else:
+                    #xlim, ylim = self._error_axes
+                    #for i in range(vec_len):
+                        #ax[i].set_xlim(xlim)
+                        #ax[i].set_ylim(ylim)
 
         fig.tight_layout()
 
