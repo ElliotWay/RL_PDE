@@ -133,14 +133,14 @@ class AbstractBurgersEnv(AbstractPDEEnv):
                             'boundary':self.grid.boundary},
                         precise_scale=1, precise_order=self.weno_order,
                         flux_function=self.burgers_flux, source=self.source,
-                        nu=nu, eqn_type='burgers', vec_len=1)
+                        nu=nu, eqn_type='burgers', vec_len=1, rk_method=self.rk_method)
             elif self.grid.ndim == 2:
                 self.weno_solution = PreciseWENOSolution2D(
                         self.grid, {'init_type':self.grid.init_type,
                             'boundary':self.grid.boundary},
                         precise_scale=1, precise_order=self.weno_order,
                         flux_function=self.burgers_flux, source=self.source,
-                        nu=nu, eqn_type='burgers', vec_len=1)
+                        nu=nu, eqn_type='burgers', vec_len=1, rk_method=self.rk_method)
 
             if memoize:
                 self.weno_solution = MemoizedSolution(self.weno_solution, self.episode_length, vec_len=1)

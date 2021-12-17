@@ -559,6 +559,7 @@ class PreciseWENOSolution(WENOSolution):
 
         self.record_actions = record_actions
         self.action_history = []
+        self.previous_action = None
 
     def is_recording_actions(self):
         return (self.record_actions is not None)
@@ -610,7 +611,7 @@ class PreciseWENOSolution(WENOSolution):
             action_weights = np.stack([plus_weights, minus_weights], axis=2)
 
             if self.record_actions == "weno":
-                self.action_history.append(action_weights)
+                self.previous_action = action_weights
             elif self.record_actions == "coef":
                 order = self.order
                 a_mat = weno_coefficients.a_all[order]
@@ -627,7 +628,7 @@ class PreciseWENOSolution(WENOSolution):
                 for sub_stencil_index in range(order):
                     i = sub_stencil_index
                     flux_weights[:, :, :, i:i + order] += combined_weights[:, :, :, i, :]
-                self.action_history.append(flux_weights)
+                self.previous_action = flux_weights
             else:
                 raise Exception("Unrecognized action type: '{}'".format(self.record_actions))
 
@@ -645,9 +646,14 @@ class PreciseWENOSolution(WENOSolution):
         if self.rk_method is RKMethod.EULER:
             full_step = dt * self.rk_substep()
             self.precise_grid.set(u_start + full_step)
+            if self.record_actions:
+                self.action_history.append(self.previous_action)
         elif self.rk_method is RKMethod.RK4:
             k1 = dt * self.rk_substep()
             self.precise_grid.set(u_start + (k1 / 2))
+            # Only record the first stage action.
+            if self.record_actions:
+                self.action_history.append(self.previous_action)
 
             k2 = dt * self.rk_substep()
             self.precise_grid.set(u_start + (k2 / 2))
@@ -661,6 +667,8 @@ class PreciseWENOSolution(WENOSolution):
         elif self.rk_method is RKMethod.SSP_RK3:
             u1 = u_start + dt * self.rk_substep()
             self.precise_grid.set(u1)
+            if self.record_actions:
+                self.action_history.append(self.previous_action)
 
             u2 = (3 * u_start + u1 + dt * self.rk_substep()) / 4
             self.precise_grid.set(u2)
