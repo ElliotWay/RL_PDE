@@ -20,6 +20,10 @@ from collections import OrderedDict
 from util.git import git_commit_hash, git_is_clean
 from util.misc import human_readable_time_delta
 
+boolean_flag = object()
+flag_true = object()
+flag_false = object()
+
 # Thanks to this SO answer for non-blocking queues.
 # https://stackoverflow.com/a/4896288/2860127
 
@@ -29,9 +33,10 @@ from util.misc import human_readable_time_delta
 ########################################################################
 base_command = "python run_train.py -n"
 
-###########################################
-# Declare your available parameters here. #
-###########################################
+##############################################
+# Declare your available parameters here.    #
+# Note: tuples are not acceptable arguments. #
+##############################################
 # OrderedDict so order of arguments is preserved.
 # (Not actually necessary, dicts preserve initial order since 3.6 anyway.)
 values_table = OrderedDict()
@@ -42,6 +47,10 @@ values_table["--seed"] = [1, 2, 3]
 # This will add "--eval_env custom" to the parameters when we are also using
 # "--init-type schedule".
 #values_table["--init-type"] = ["sine", ("schedule", "--eval_env custom")]
+# Boolean flags like --variable-timesteps can be varied. Use syntax like this:
+#values_table["--variable-timesteps"] = boolean_flag
+# Unfortunately I haven't worked out the right way to give boolean flags dependent
+# parameters.
 
 ###########################################################################
 # Declare the log directory and other special parameters here.            #
@@ -81,14 +90,23 @@ SLEEP_TIME = 0.25 # seconds
 ON_POSIX = 'posix' in sys.builtin_module_names
 
 def clean_name(value):
-    if not isinstance(value, str) and hasattr(value, '__iter__'):
+    if value is flag_true:
+        return 'true'
+    elif value is flag_false:
+        return 'false'
+    elif not isinstance(value, str) and hasattr(value, '__iter__'):
         return '_'.join(clean_name(subvalue) for subvalue in value)
     else:
         return ''.join(x if x not in "\0\ \t\n\\/:=.*\"\'<>|?" else '_'
                             for x in str(value))
 
 arg_matrix = [] # Global value, constructed by build_command_list().
-def build_command_list(index, arg_dict):
+def build_command_list(index=0, arg_dict=None, extra_dict=None):
+    if arg_dict is None:
+        arg_dict = {}
+    if extra_dict is None:
+        extra_dict = {}
+
     if index == len(values_table):
         final_special = {}
         for name, value in special_params.items():
@@ -109,28 +127,52 @@ def build_command_list(index, arg_dict):
             arg_dict = {key:value for key, value in arg_dict.items()
                             if key in special_args['main']}
         arg_list = []
-        for name, value in arg_dict.items():
-            arg_list += [name]
-            arg_list += value # The shlex split always returns a list.
+        for name in arg_dict:
+            # Setting a flag to false means not adding the flag.
+            if arg_dict[name] is flag_false:
+                pass
+            elif arg_dict[name] is flag_true:
+                arg_list += [name]
+            else:
+                arg_list += [name]
+                arg_list += arg_dict[name] # arg value is always a list, though often a singleton.
+            arg_list += extra_dict[name]
         for name, value in final_special.items():
-            arg_list += [name, value] # But special values are just strings.
+            arg_list += [name, value] # But special values are always strings.
 
         arg_matrix.append(arg_list)
     else:
         keyword = list(values_table)[index]
         value_list = values_table[keyword]
-        for value in value_list:
-            if isinstance(value, tuple):
-                value, extra = value
-            else:
-                extra = None
-            new_arg_dict = dict(arg_dict)
-            # shlex.split is like the usual .split method on string except
-            # it does not split on spaces contained inside quotes.
-            new_arg_dict[keyword] = shlex.split(str(value))
-            if extra is not None:
-                new_arg_dict[keyword] += shlex.split(extra)
-            build_command_list(index + 1, new_arg_dict)
+        if value_list is boolean_flag:
+            false_arg_dict = dict(arg_dict)
+            false_arg_dict[keyword] = flag_false
+            false_extra_dict = dict(extra_dict)
+            false_extra_dict[keyword] = []
+            build_command_list(index + 1, false_arg_dict, false_extra_dict)
+
+            true_arg_dict = dict(arg_dict)
+            true_arg_dict[keyword] = flag_true
+            true_extra_dict = dict(extra_dict)
+            true_extra_dict[keyword] = []
+            build_command_list(index + 1, true_arg_dict, true_extra_dict)
+        else:
+            for value in value_list:
+                if isinstance(value, tuple):
+                    value, extra = value
+                else:
+                    extra = None
+                new_arg_dict = dict(arg_dict)
+                # shlex.split is like the usual .split method on string except
+                # it does not split on spaces contained inside quotes.
+                new_arg_dict[keyword] = shlex.split(str(value))
+
+                new_extra_dict = dict(extra_dict)
+                if extra is not None:
+                    new_extra_dict[keyword] = shlex.split(extra)
+                else:
+                    new_extra_dict[keyword] = []
+                build_command_list(index + 1, new_arg_dict, new_extra_dict)
 
 # Sometimes this enables colors on Windows terminals.
 os.system("")
@@ -222,7 +264,7 @@ def main():
         print(f"{colors.OKBLUE}Dry run. Look over the commands that will be run,"
         + f" then use --run to actually run the parameter sweep.{colors.ENDC}")
 
-    build_command_list(0, {})
+    build_command_list()
 
     command_prefix = base_command
     command_prefix = shlex.split(command_prefix)
