@@ -61,7 +61,7 @@ class PolicyNet(Layer):
         for i, size in enumerate(layers):
             # LayerNorm happens between the fully connected layer and the activation function.
             # (I think. I don't have a good grasp of why that is.)
-            a_fn = None if args.layer_norm else self.activation_fn
+            a_fn = None if self.layer_norm else self.activation_fn
             fc_layer = Dense(size, activation=a_fn, name=("fc" + str(i)), dtype=self.data_type)
             self.hidden_layers.append(fc_layer)
 
