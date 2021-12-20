@@ -191,7 +191,7 @@ def do_test(env, agent, args):
             try:
                 progress_df = pd.read_csv(progress_filename, comment='#')
             except (FileNotFoundError, pd.errors.EmptyDataError):
-                progress_df = pd.DataFrame({'t':time, 'l2': l2s})
+                progress_df = pd.DataFrame({'t':times, 'l2': l2s})
             else:
                 if 't' in progress_df and not np.allclose(progress_df['t'], times):
                     raise Exception("Can't save L2 data, progress.csv does not"
