@@ -688,7 +688,10 @@ def plot_reward_summary(filename, episodes, total_episodes, eval_envs, eval_env_
     ax.set_ylabel('reward')
     ax.grid(True)
     # Use symlog as the rewards are negative.
-    ax.set_yscale('symlog')
+    if matplotlib.__version__ == '3.2.2':
+        ax.set_yscale('symlog', linthreshy=1e-9, subsy=range(2,10))
+    else:
+        ax.set_yscale('symlog', linthresh=1e-9, subs=range(2,10))
     crop_early_shift(ax, "flipped")
 
     reward_fig.savefig(filename)
