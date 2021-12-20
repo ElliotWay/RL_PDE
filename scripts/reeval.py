@@ -1,3 +1,4 @@
+import sys
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = "2"
 os.environ['CUDA_VISIBLE_DEVICES'] = "-1" #Block GPU for now.
@@ -36,7 +37,7 @@ def main():
             + " since training."
             + " Note that this does not update the average eval values in existing files.",
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("meta", type=str,
+    parser.add_argument("--meta", type=str,
                         help="Path to the meta file of the original training run."
                         + " The directory of the meta file must contain the other experiment files.")
     parser.add_argument('--help-env', default=False, action='store_true',

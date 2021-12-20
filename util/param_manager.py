@@ -20,6 +20,7 @@ class ArgTreeManager:
       This assumption is part of a precaution to avoid executing arbitrary code from the yaml file.
       We can probably trust these files, but the precaution doesn't cost much since parameters are
       probably simple anyway.
+    - Parameters are all keyword arguments, e.g. --foo FOO, not positional arguments.
     """
  
     sentinel = _ExplicitArgSentinel()
