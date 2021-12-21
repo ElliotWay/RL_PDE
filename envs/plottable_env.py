@@ -10,6 +10,7 @@ import matplotlib.animation as animation
 import numpy as np
 
 from util import sb_logger as logger
+from util import plots
 
 from envs.abstract_pde_env import AbstractPDEEnv
 from envs.solutions import OneStepSolution
@@ -82,7 +83,7 @@ class Plottable1DEnv(AbstractPDEEnv):
             suffix=None,
             show_ghost=False,
             state_history=None, solution_state_history=None,
-            history_includes_ghost=True):
+            history_includes_ghost=True, silent=False):
         """
         Save the environment state to a csv file. Only the main RL state is saved, not the solution
         state.
@@ -105,6 +106,8 @@ class Plottable1DEnv(AbstractPDEEnv):
         history_includes_ghost : bool
             Whether the overriding state history includes ghost cells. history_includes_ghost=False
             overrides show_ghost to False.
+        silent : bool
+            If False, print a message saying where the data was saved to.
         """
         assert (timestep is None or location is None), "Can't save state at both a timestep and a location."
 
@@ -202,7 +205,8 @@ class Plottable1DEnv(AbstractPDEEnv):
                 csv_file.write(f",{state_history[component_index, x_index]}")
             csv_file.write('\n')
         csv_file.close()
-        print('Saved data to ' + filename + '.')
+        if not silent:
+            print('Saved data to ' + filename + '.')
         return filename
 
     def plot_state(self,
@@ -211,7 +215,8 @@ class Plottable1DEnv(AbstractPDEEnv):
             suffix=None, title=None,
             fixed_axes=False, no_borders=False, show_ghost=True,
             state_history=None, solution_state_history=None, weno_state_history=None,
-            history_includes_ghost=True):
+            history_includes_ghost=True,
+            silent=False):
         """
         Plot environment state at either a timestep or a specific location.
 
@@ -249,6 +254,8 @@ class Plottable1DEnv(AbstractPDEEnv):
         history_includes_ghost : bool
             Whether the overriding histories include the ghost cells. history_includes_ghost=False
             overrides show_ghost to False.
+        silent : bool
+            If False, print a message saying where the data was saved to.
         """
 
         assert (timestep is None or location is None), "Can't plot state at both a timestep and a location."
@@ -458,7 +465,8 @@ class Plottable1DEnv(AbstractPDEEnv):
         filename = "{}_{}{}.png".format(eqn_type, error_or_state, suffix)
         filename = os.path.join(log_dir, filename)
         plt.savefig(filename)
-        print('Saved plot to ' + filename + '.')
+        if not silent:
+            print('Saved plot to ' + filename + '.')
 
         plt.close(fig)
         return filename
@@ -467,7 +475,7 @@ class Plottable1DEnv(AbstractPDEEnv):
             num_states=10, full_true=False, no_true=False, plot_error=False, plot_weno=False,
             suffix="", title=None,
             state_history=None, solution_state_history=None, weno_state_history=None,
-            ):
+            silent=False):
         """
         Plot the evolution of the state over time on a single plot.
         Ghost cells are not plotted.
@@ -503,6 +511,8 @@ class Plottable1DEnv(AbstractPDEEnv):
         state_history [, solution_state_history, weno_state_history] : ndarray
             Override the current state histories with a different set. Useful if, for example, you
             copied the history from an earlier episode.
+        silent : bool
+            If False, print a message saying where the data was saved to.
         """
         self.set_colors()
 
@@ -669,7 +679,8 @@ class Plottable1DEnv(AbstractPDEEnv):
         filename = os.path.join(log_dir,
                 "{}_evolution_{}{}.png".format(eqn_type, error_or_state, suffix))
         plt.savefig(filename)
-        print('Saved plot to ' + filename + '.')
+        if not silent:
+            print('Saved plot to ' + filename + '.')
 
         plt.close(fig)
         return filename
@@ -1161,7 +1172,8 @@ class Plottable2DEnv(AbstractPDEEnv):
     def plot_state_evolution(self, plot_error=False,
             show_ghost=False, no_true=False,
             suffix="", title=None, num_frames=50,
-            state_history=None, history_includes_ghost=False):
+            state_history=None, history_includes_ghost=False,
+            silent=False):
 
         if self.animation_writer is None:
             raise Exception("No familiar image libraries avilable to render evolution." + 
@@ -1239,10 +1251,12 @@ class Plottable2DEnv(AbstractPDEEnv):
         filename = os.path.join(log_dir,
                 "evolution{}{}".format(suffix, self.animation_extension))
 
-        print("Saving animation to {}".format(filename), end='')
+        if not silent:
+            print("Saving animation to {}".format(filename), end='')
         ani.save(filename, writer,
                 progress_callback = lambda i, n: print('.', end='', flush=True))
-        print('Saved.')
+        if not silent:
+            print('Saved.')
 
         plt.close(fig)
         ani = None

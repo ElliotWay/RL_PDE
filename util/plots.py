@@ -506,7 +506,8 @@ def error_plot(x_vals, error_vals, labels, log_dir, name="error_over_x.png", tit
 #TODO, possibly: should this handle vectors? I.e. plot some value for each vector component over
 # time?
 def plot_over_time(times, values, log_dir, name, scaling='linear',
-        ylabel=None, labels=None, kwargs_list=None, title=None):
+        ylabel=None, labels=None, kwargs_list=None, title=None,
+        silent=False):
     """
     Plot some scalar over the time of an episode.
 
@@ -621,7 +622,8 @@ def plot_over_time(times, values, log_dir, name, scaling='linear',
 
     filename = os.path.join(log_dir, name)
     plt.savefig(filename)
-    print('Saved plot to ' + filename + '.')
+    if not silent:
+        print('Saved plot to ' + filename + '.')
     plt.close()
 
 def crop_early_shift(ax, mode):

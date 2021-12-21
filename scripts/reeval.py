@@ -15,10 +15,11 @@ tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 from rl_pde.run import rollout
 from envs import builder as env_builder
+from envs import Plottable1DEnv, Plottable2DEnv
 from models import builder as model_builder
 from util import metadata
 from util import sb_logger as logger
-from util.plots import plot_reward_summary, plot_l2_summary
+from util import plots
 from util.function_dict import numpy_fn
 from util.param_manager import ArgTreeManager
 from util.lookup import get_model_class, get_emi_class, get_model_dims
@@ -49,6 +50,8 @@ def main():
                         + " depend on the model. Those can be controlled with this.")
     parser.add_argument('--output-dir', '--output_dir', '-o', default=None, type=str,
                         help="Directory to save the output to, if --append is not specified.")
+    parser.add_argument('--plot-l2', '--plot_l2', default=False, action='store_true',
+                        help="Plot the L2 error vs time for each episode.")
     parser.add_argument('--append', default=False, action='store_true',
                         help="Update the experiment files with the new data, instead of"
                         + " creating/updating files in --output-dir.")
@@ -201,6 +204,7 @@ def main():
  
         _, _, rewards, _, _ = rollout(env, agent, deterministic=True)
 
+        ep_string = ("{:0" + str(ep_precision) + "}").format(ep_num)
         if 'csv' in reeval_args.output_mode:
             reward_parts = list(zip(*rewards))
             avg_total_reward = np.mean([np.mean(np.sum(reward_part, axis=0))
@@ -208,22 +212,33 @@ def main():
             reward_data.append(avg_total_reward)
             l2_data.append(env.compute_l2_error())
 
+            if reeval_args.plot_l2:
+                times = env.timestep_history
+                l2s = env.compute_l2_error(timestep="all")
+                episode_filename = os.path.join(new_log_dir, f"ep_{ep_string}_progress.csv")
+                progress_df = pd.DataFrame({'t':times, 'l2': l2s})
+                progress_df.to_csv(episode_filename, index=False)
+
         if 'plot' in reeval_args.output_mode:
-            ep_string = ("{:0" + str(ep_precision) + "}").format(ep)
-            suffix = f"_eval_{reeval_args.env_name}_ep_{ep_string}"
-            if len(eval_envs) > 1:
-                eval_suffix = "_eval{}".format(eval_index) + eval_suffix
+            ep_string = ("{:0" + str(ep_precision) + "}").format(ep_num)
+            suffix = f"_{reeval_args.env_name}_ep_{ep_string}"
             if isinstance(env, Plottable1DEnv):
-                env.plot_state_evolution(num_states=10, full_true=False, no_true=False, plot_weno=False)
+                env.plot_state_evolution(num_states=10, full_true=False, no_true=False,
+                        plot_weno=False, suffix=suffix, silent=True)
             elif isinstance(env, Plottable2DEnv):
-                env.plot_state_evolution(num_frames=20)
+                env.plot_state_evolution(num_frames=20, suffix=suffix, silent=True)
             else:
                 raise Exception()
-        if 'plot' not in reeval_args.output_mode:
-            if index % 10 == 9:
-                print(ep_num, flush=True)
-            else:
-                print('.', end='', flush=True)
+            if reeval_args.plot_l2:
+                times = env.timestep_history
+                l2s = env.compute_l2_error(timestep="all")
+                filename = f"ep_{ep_string}_l2.png"
+                plots.plot_over_time(times, l2s, log_dir=new_log_dir, name=filename,
+                        title="L2 Error", silent=False)
+        if index % 10 == 9:
+            print(ep_num, flush=True)
+        else:
+            print('.', end='', flush=True)
 
     if 'csv' in reeval_args.output_mode:
         if reeval_args.append or reeval_args.copy:
@@ -309,13 +324,13 @@ def main():
 
             if 'avg_train_total_reward' in output_df:
                 reward_filename = os.path.join(summary_plot_dir, "rewards.png")
-                plot_reward_summary(output_df, reward_filename, total_episodes)
+                plots.plot_reward_summary(output_df, reward_filename, total_episodes)
                 l2_filename = os.path.join(summary_plot_dir, "l2.png")
-                plot_l2_summary(output_df, l2_filename, total_episodes)
+                plots.plot_l2_summary(output_df, l2_filename, total_episodes)
             reward_filename = os.path.join(summary_plot_dir, "final_rewards.png")
-            plot_reward_summary(output_df, reward_filename, total_episodes, only_eval=True)
+            plots.plot_reward_summary(output_df, reward_filename, total_episodes, only_eval=True)
             l2_filename = os.path.join(summary_plot_dir, "final_l2.png")
-            plot_l2_summary(output_df, l2_filename, total_episodes, only_eval=True)
+            plots.plot_l2_summary(output_df, l2_filename, total_episodes, only_eval=True)
             print(f"Updated plots in {summary_plot_dir}.")
 
     # Create symlink for convenience.
