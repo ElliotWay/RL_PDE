@@ -25,7 +25,7 @@ class ArgTreeManager:
  
     sentinel = _ExplicitArgSentinel()
 
-    def __init__(self, parent=None, parser=None):
+    def __init__(self, parent=None, name=None, parser=None):
         if callable(parser):
             self._parser_constructor = parser
             self.argparser = None
@@ -33,6 +33,7 @@ class ArgTreeManager:
             self._parser_constructor = None
             self.argparser = parser
         self.parent = parent
+        self.name = name
         self.children = {}
         self.children_long_names = {}
         self.explicit = {}
@@ -70,7 +71,7 @@ class ArgTreeManager:
         self.argparser.print_help()
 
     def create_child(self, name, long_name=None, parser=None):
-        new_child = ArgTreeManager(parent=self, parser=parser)
+        new_child = ArgTreeManager(parent=self, name=name, parser=parser)
         self.children[name] = new_child
         self.children_long_names[name] = long_name
         return new_child
@@ -231,6 +232,10 @@ class ArgTreeManager:
             self.args, _ = self.argparser.parse_known_args(self.loaded_arg_string)
         else:
             self.args, _ = self.argparser.parse_known_args(self.loaded_arg_string)
+        # Relink parent args to our args.
+        if self.parent is not None:
+            parent_args_dict = vars(self.parent.args)
+            parent_args_dict[self.name] = self.args
 
         args_dict = vars(self.args)
         my_params = set(args_dict.keys())
