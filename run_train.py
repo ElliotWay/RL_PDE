@@ -218,6 +218,21 @@ def main():
                     + " evaluation environment will be identical to training environment.")
             eval_env_args = eval_env_arg_manager.args
             eval_envs = [env_builder.build_env(args.env, eval_env_args, test=True)]
+    elif args.eval_env == "schedule":
+
+        if args.e.init_type not in ['schedule', 'random']:
+            raise Exception("Can't use schedule eval if not using schedule.")
+        init_types = env.grid._init_schedule # A bit of a hack, how else do we know the schedule?
+        eval_envs = []
+
+        # Load default parameters.
+        for init in init_types:
+            eval_args = eval_env_arg_manager.parse_args([])
+            eval_args.order = args.e.order
+            eval_args.init_type = init
+            env_builder.set_contingent_env_defaults(args, eval_args, test=True,
+                    print_prefix=f"eval ({init}): ")
+            eval_envs.append(env_builder.build_env(args.env, eval_args, test=True))
 
     elif args.eval_env == "long":
         eval_env_args = eval_env_arg_manager.args
