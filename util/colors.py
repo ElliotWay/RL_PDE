@@ -29,7 +29,7 @@ def get_agent_kwargs(filename, label, just_color=False):
             return dict(ANALYTICAL_KWARGS)
     else:
         if not (any(name in filename.lower() for name in ['rl', 'agent'])
-                or any(name in lable.lower() for name in ['rl', 'agent'])):
+                or any(name in label.lower() for name in ['rl', 'agent'])):
             print(f"Warning: can't determine type of {filename};"
                     + " assuming it is from an RL agent.")
         if just_color:
