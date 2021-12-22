@@ -21,10 +21,10 @@ OTHER_INITS=tophat rarefaction sine line shock para sawtooth random
 #TRAIN_DIR="log/weno_burgers/full/order3_arch_sweep_again/layers_32_32/"
 
 ORDER=3
-TEST_DIR=fig_test_o3sched
-FIG_DIR=figures_o3sched
-RL_AGENT=log/weno_burgers/full/schedule_test/order_3/model_best.zip
-TRAIN_DIR=log/weno_burgers/full/schedule_test/order_3/
+TEST_DIR=fig_test_raresched
+FIG_DIR=figures_raresched
+RL_AGENT=log/weno_burgers/full/rare_schedule/model_best.zip
+TRAIN_DIR=log/weno_burgers/full/rare_schedule/
 
 
 RUN_TEST=python run_test.py -y --animate --output-mode csv plot $\
