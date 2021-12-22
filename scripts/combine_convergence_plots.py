@@ -101,7 +101,7 @@ The order of arguments controls the order of the legend.""",
 
     create_legend = (args.labels is not None)
     if args.labels is None:
-        args.labels = [""] * len(args.files)
+        args.labels = [""] * len(args.curves)
     else:
         num_labeled_curves = sum((1 for (curve_type, _) in args.curves
                                         if curve_type in ['file', 'avg']))

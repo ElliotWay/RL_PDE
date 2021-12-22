@@ -694,9 +694,6 @@ class AbstractPDEEnv(gym.Env):
     def get_solution_state(self, timestep=None, location=None, full=True):
         assert timestep is None or location is None
 
-        #TODO: Does it make sense to return the self.weno_solution state instead if using a
-        # one-step reward? (That is, a OneStepSolution?)
-
         if timestep is None and location is None:
             state = self.solution.get_full() if full else self.solution.get_real()
         elif timestep is not None:
@@ -709,8 +706,27 @@ class AbstractPDEEnv(gym.Env):
             state = np.array(self.solution.get_state_history())[slice(None,) + location]
         return state
 
+    def get_weno_state(self, timestep=None, location=None, full=True):
+        assert timestep is None or location is None
+
+        if timestep is None and location is None:
+            state = self.weno_solution.get_full() if full else self.weno_solution.get_real()
+        elif timestep is not None:
+            state = np.array(self.weno_solution.get_state_history())[timestep]
+            if not full:
+                state = state[self.grid.real_slice]
+        else:
+            if type(location) is int:
+                location = (location,)
+            state = np.array(self.weno_solution.get_state_history())[slice(None,) + location]
+        return state
+
     def get_error(self, timestep=None, location=None, full=True):
         return (self.get_state(timestep, location, full) 
+                - self.get_solution_state(timestep, location, full))
+
+    def get_weno_error(self, timestep=None, location=None, full=True):
+        return (self.get_weno_state(timestep, location, full) 
                 - self.get_solution_state(timestep, location, full))
 
     def compute_l2_error(self, timestep=None):
@@ -738,6 +754,42 @@ class AbstractPDEEnv(gym.Env):
 
         else:
             error = self.get_error(timestep=timestep, full=False)
+            combined_cell_size = np.prod(self.grid.cell_size)
+            l2_error = np.sqrt(combined_cell_size * np.sum(np.square(error)))
+            return l2_error
+
+    def compute_weno_l2_error(self, timestep=None):
+        """
+        If weno_solution is defined, compute the L2 error between the main solution and
+        the state of weno_solution at a given timestep.
+
+        The weno_solution is defined when the main solution is something else, namely an analytical
+        solution.
+
+        Parameters
+        ----------
+        timestep : int (or string)
+            Timestep for which to compute the L2 error. The most recent timestep by default.
+            Passing "all" for timestep will instead calculate the L2 error at every timestep,
+            and return them as a list.
+
+
+        Returns
+        -------
+        l2_error : float (or list of floats)
+            The L2 error, or list of errors if "all" is passed to timestep.
+        """
+        if self.weno_solution is None:
+            raise Exception("Cannot use compute_weno_l2_error() if separate"
+                    + " WENO solution does not exist.")
+        if timestep == "all":
+            l2_errors = []
+            for step in range(len(self.weno_solution.get_state_history())):
+                l2_errors.append(self.compute_weno_l2_error(step))
+            return l2_errors
+
+        else:
+            error = self.get_weno_error(timestep=timestep, full=False)
             combined_cell_size = np.prod(self.grid.cell_size)
             l2_error = np.sqrt(combined_cell_size * np.sum(np.square(error)))
             return l2_error

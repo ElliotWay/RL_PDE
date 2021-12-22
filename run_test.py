@@ -29,6 +29,7 @@ from models import builder as model_builder
 from models import SACModel, PolicyGradientModel, TestModel
 from util import plots
 from util import metadata
+from util import colors
 from util.param_manager import ArgTreeManager
 from util.function_dict import numpy_fn
 from util.lookup import get_model_class, get_emi_class, get_model_dims
@@ -184,8 +185,14 @@ def do_test(env, agent, args):
         times = env.timestep_history
         l2s = env.compute_l2_error(timestep="all")
         if 'plot' in args.output_mode:
-            plots.plot_over_time(times, l2s, log_dir=args.log_dir, name="l2_error.png",
-                    title="L2 Error")
+            if env.weno_solution is not None:
+                plots.plot_over_time(times, [l2s, env.compute_weno_l2_error(timestep="all")],
+                        log_dir=args.log_dir, name="l2_error.png", labels=["RL","WENO"],
+                        kwargs_list=[{'color':colors.RL_COLOR},{'color':colors.WENO_COLOR}],
+                        scaling='log', title="L2 Error")
+            else:
+                plots.plot_over_time(times, l2s, log_dir=args.log_dir, name="l2_error.png",
+                        scaling='log', title="L2 Error")
         if 'csv' in args.output_mode:
             progress_filename = os.path.join(args.log_dir, "progress.csv")
             try:
