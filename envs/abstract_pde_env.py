@@ -119,7 +119,7 @@ class AbstractPDEEnv(gym.Env):
         else:
             dims = len(num_cells)
 
-        deterministic_init = self.test or (type(init_type) is str and "rand" in init_type)
+        deterministic_init = self.test and (type(init_type) is str and "rand" not in init_type)
         self.grid = create_grid(dims, eqn_type=eqn_type,
                                 num_cells=num_cells, min_value=min_value, max_value=max_value,
                                 num_ghosts=self.ng,
