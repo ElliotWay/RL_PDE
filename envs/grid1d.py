@@ -175,8 +175,10 @@ class Burgers1DGrid(GridBase):
             elif self.deterministic_init:
                 b = 0.5
             else:
-                #b = float(np.random.uniform(-1.0, 1.0))
-                b_size = np.random.choice(np.linspace(0.2, 1.0, 9))
+                if 'random' in params and params['random'] == 'cont':
+                    b_size = np.random.uniform(0.2, 1.0)
+                else:
+                    b_size = np.random.choice(np.linspace(0.2, 1.0, 9))
                 b_sign = np.random.randint(2) * 2 - 1
                 b = b_sign * b_size
             self.init_params['b'] = b
@@ -203,7 +205,10 @@ class Burgers1DGrid(GridBase):
             elif self.deterministic_init:
                 b = 0.5
             else:
-                b_size = np.random.choice(np.linspace(0.2, 1.0, 9))
+                if 'random' in params and params['random'] == 'cont':
+                    b_size = np.random.uniform(0.2, 1.0)
+                else:
+                    b_size = np.random.choice(np.linspace(0.2, 1.0, 9))
                 b_sign = np.random.randint(2) * 2 - 1
                 b = b_sign * b_size
             self.init_params['b'] = b
@@ -212,7 +217,10 @@ class Burgers1DGrid(GridBase):
             elif self.deterministic_init:
                 a = 0.0
             else:
-                a = np.random.choice(np.linspace(-2.0, 2.0, 9))
+                if 'random' in params and params['random'] == 'cont':
+                    a = np.random.uniform(-2.0, 2.0)
+                else:
+                    a = np.random.choice(np.linspace(-2.0, 2.0, 9))
             self.init_params['a'] = a
             self.space[0] = a + b * np.sin(k * np.pi * self.x)
 
@@ -274,6 +282,45 @@ class Burgers1DGrid(GridBase):
             u_L = params['u_L'] if 'u_L' in params else 3.0
             self.init_params['u_L'] = u_L
             u_R = params['u_R'] if 'u_R' in params else 3.0
+            self.init_params['u_R'] = u_R
+
+            index = self.x > offset
+            self.space[0] = np.full_like(self.x, u_L)
+            self.space[0, index] = u_R * (self.x[index] - 1)
+
+        elif self.init_type == "accelshock_random":
+            if boundary is None:
+                self.boundary = "outflow"
+
+            if 'offset' in params:
+                offset = params['offset']
+            elif self.deterministic_init:
+                offset = 0.25
+            else:
+                if 'random' in params and params['random'] == 'cont':
+                    offset = np.random.uniform(0.0, 0.5)
+                else:
+                    offset = np.random.choice(np.linspace(0.0, 0.5, 9))
+            self.init_params['offset'] = offset
+            if 'u_L' in params:
+                u_L = params['u_L']
+            elif self.deterministic_init:
+                u_L = 3.0
+            else:
+                if 'random' in params and params['random'] == 'cont':
+                    u_L = np.random.uniform(0.5, 5.0)
+                else:
+                    u_L = np.random.choice(np.linspace(0.5, 5.0, 9))
+            self.init_params['u_L'] = u_L
+            if 'u_R' in params:
+                u_R = params['u_R']
+            elif self.deterministic_init:
+                u_R = 3.0
+            else:
+                if 'random' in params and params['random'] == 'cont':
+                    u_R = np.random.uniform(0.0, 5.0)
+                else:
+                    u_R = np.random.choice(np.linspace(0.0, 5.0, 9))
             self.init_params['u_R'] = u_R
 
             index = self.x > offset
