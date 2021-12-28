@@ -185,7 +185,7 @@ class Burgers1DGrid(GridBase):
             else:
                 a = float(3.5 - np.abs(b))
             self.init_params['a'] = a
-            self.space[0] = a + b * np.sin(k * np.pi * self.x / (self.xmax - self.xmin))
+            self.space[0] = a + b * np.sin(k * np.pi * self.x)
 
         elif self.init_type == "random-many-shocks":
             if boundary is None:
@@ -214,7 +214,7 @@ class Burgers1DGrid(GridBase):
             else:
                 a = np.random.choice(np.linspace(-2.0, 2.0, 9))
             self.init_params['a'] = a
-            self.space[0] = a + b * np.sin(k * np.pi * self.x / (self.xmax - self.xmin))
+            self.space[0] = a + b * np.sin(k * np.pi * self.x)
 
         elif self.init_type == "smooth_rare":
             if boundary is None:

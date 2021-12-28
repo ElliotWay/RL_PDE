@@ -259,6 +259,13 @@ class AnalyticalSolution(SolutionBase):
             try:
                 updated_u = fixed_point(iterate_func, self.grid.get_real(), args=(time,),
                         maxiter=3000)
+                #func = (params['a'] + params['b'] * np.sin(params['k'] * np.pi
+                    #* (x_values - updated_u * time)))
+                #diff = np.abs(updated_u - func)
+                #print("Diff: mean = {:g}, min = {:g} @ {}, max = {:g} @ {}".format(
+                        #np.mean(diff),
+                        #np.amin(diff), np.argmin(diff),
+                        #np.amax(diff), np.argmax(diff)))
                 self.grid.set(updated_u)
             except Exception:
                 print("failed to converge")
