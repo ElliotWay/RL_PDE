@@ -68,7 +68,7 @@ class PolicyNet(Layer):
         if self.layer_norm:
             self.norm_layers = []
             for i, size in enumerate(layers):
-                norm_layer = LayerNormalization("layernorm"+str(i), dtype=self.data_type)
+                norm_layer = LayerNormalization(name="layernorm"+str(i), dtype=self.data_type)
                 self.norm_layers.append(norm_layer)
 
         # SB uses orth_init for this layer. Is that necessary?
@@ -89,9 +89,9 @@ class PolicyNet(Layer):
         output = flat_state
         if self.layer_norm:
             for fc_layer, norm_layer in zip(self.hidden_layers, self.norm_layers):
-                output = fc_layer(output)
-                output = norm_layer(output)
-                output = self.activation_fn(output)
+                fc_output = fc_layer(output)
+                normalized_output = norm_layer(fc_output)
+                output = self.activation_fn(normalized_output)
         else:
             for layer in self.hidden_layers:
                 output = layer(output)

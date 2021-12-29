@@ -205,6 +205,7 @@ class GlobalBackpropModel(GlobalModel):
             # tf.variable_scope does not play well with Keras.
             a_fn = get_activation(self.args.m.activation)
             self.policy = PolicyNet(layers=self.args.m.layers, action_shape=action_shape,
+                    layer_norm=self.args.m.layer_norm,
                     activation_fn=a_fn, name="policy", dtype=self.dtype)
 
             # Direct policy input and output used in predict() method during testing.
