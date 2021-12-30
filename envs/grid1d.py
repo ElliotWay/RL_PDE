@@ -234,13 +234,15 @@ class Burgers1DGrid(GridBase):
             self.init_params['A'] = A
             if 'k' in params:
                 k = params['k']
-            elif self.deterministic_init:
-                k = 60
             else:
-                #k = np.random.uniform(20, 100)
-                k = int(np.random.choice(np.arange(20, 100, 5)))
+                k = 60
             self.init_params['k'] = k
-            self.space[0] = A * np.tanh(k * (self.x - 0.5))
+            if 'C' in params:
+                C = params['C']
+            else:
+                C = 0.0
+            self.init_params['C'] = C
+            self.space[0] = C + A * np.tanh(k * (self.x - 0.5))
 
         elif self.init_type == "smooth_rare_periodic":
             self.boundary = "periodic"
@@ -251,13 +253,51 @@ class Burgers1DGrid(GridBase):
             self.init_params['A'] = A
             if 'k' in params:
                 k = params['k']
+            else:
+                k = 60
+            self.init_params['k'] = k
+            if 'C' in params:
+                C = params['C']
+            else:
+                C = 0.0
+            self.init_params['C'] = C
+            self.space[0] = C + A * np.tanh(k * (self.x - 0.5))
+
+        elif self.init_type == "smooth_rare_random":
+            if boundary is None:
+                self.boundary = "outflow"
+            if 'A' in params:
+                A = params['A']
+            elif self.deterministic_init:
+                A = 1.0
+            else:
+                if 'random' in params and params['random'] == 'cont':
+                    A = np.random.uniform(0.25, 1.5)
+                else:
+                    A = np.random.choice(np.linspace(0.25, 1.5, 9))
+            self.init_params['A'] = A
+            if 'k' in params:
+                k = params['k']
             elif self.deterministic_init:
                 k = 60
             else:
-                #k = np.random.uniform(20, 100)
-                k = int(np.random.choice(np.arange(20, 100, 5)))
+                if 'random' in params and params['random'] == 'cont':
+                    k = np.random.uniform(20, 100)
+                else:
+                    k = int(np.random.choice(np.linspace(20, 100, 9)))
             self.init_params['k'] = k
-            self.space[0] = A * np.tanh(k * (self.x - 0.5))
+            if 'C' in params:
+                C = params['C']
+            elif self.deterministic_init:
+                C = 0.0
+            else:
+                if 'random' in params and params['random'] == 'cont':
+                    C = np.random.uniform(-1.0, 1.0)
+                else:
+                    C = np.random.choice(np.linspace(-1.0, 1.0, 9))
+            self.init_params['C'] = C
+
+            self.space[0] = C + A * np.tanh(k * (self.x - 0.5))
 
         elif self.init_type == "accelshock":
             if boundary is None:

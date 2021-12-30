@@ -214,12 +214,17 @@ class OneStepSolution(SolutionBase):
         return getattr(self.inner_solution, attr)
 
 #TODO Handle ND analytical solutions. (Also non-Burgers solutions?)
-available_analytical_solutions = ["smooth_sine", "smooth_sine_shift", "smooth_rare", "accelshock",
-        "gaussian", "random", "random-many-shocks"]
+implicit_analytical_solutions = [
+        "smooth_sine", "smooth_sine_shift", "random", "random-many-shocks",
+        "smooth_rare", "smooth_rare_random",
+        ]
+explicit_analytical_solutions = [
+        "accelshock", "accelshock_random",
+        "gaussian",
+        ]
+available_analytical_solutions = implicit_analytical_solutions + explicit_analytical_solutions
 #TODO account for xmin, xmax in case they're not 0 and 1.
 class AnalyticalSolution(SolutionBase):
-    implicit_solutions = ["smooth_sine", "smooth_rare", "smooth_sine_shift", "random",
-            "random-many-shocks"]
 
     def __init__(self, nx, ng, xmin, xmax, vec_len=1, init_type="schedule"):
         super().__init__(nx, ng, xmin, xmax, vec_len=vec_len)
@@ -237,7 +242,7 @@ class AnalyticalSolution(SolutionBase):
 
         x_values = self.grid.real_x
 
-        if init_type in self.implicit_solutions:
+        if init_type in implicit_analytical_solutions:
             if init_type == "smooth_sine":
                 iterate_func = (lambda old_u, time:
                         params['A'] * np.sin(2 * np.pi * (x_values - old_u * time)))
@@ -250,8 +255,11 @@ class AnalyticalSolution(SolutionBase):
                         params['a'] 
                         + params['b'] * np.sin(params['k'] * np.pi 
                             * (x_values - old_u * time)))
-            elif init_type == "smooth_rare":
-                iterate_func = lambda old_u, time: params['A'] * np.tanh(params['k'] * (x_values - 0.5 - old_u*time))
+            elif init_type == "smooth_rare" or init_type == "smooth_rare_random":
+                iterate_func = (lambda old_u, time: 
+                        params['C']
+                        + params['A'] * np.tanh(params['k'] 
+                            * (x_values - 0.5 - old_u*time)))
 
             else:
                 raise Exception(f"implicit solution for {init_type} not implemented")
@@ -272,7 +280,7 @@ class AnalyticalSolution(SolutionBase):
                 #TODO handle this better
         else:
 
-            if init_type == "accelshock":
+            if init_type == "accelshock" or init_type == "accelshock_random":
                 offset = params['offset']
                 u_L = params['u_L']
                 u_R = params['u_R']
