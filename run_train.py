@@ -343,7 +343,7 @@ def main():
 
     # Create symlink for convenience.
     log_link_name = "last"
-    error = soft_link_directories(args.log_dir, log_link_name)
+    error = soft_link_directories(args.log_dir, log_link_name, safe=True)
     if error:
         print("Failed to create \"last\" symlink. Continuing without it.")
 
