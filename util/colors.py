@@ -1,11 +1,24 @@
+import matplotlib as mpl
 # This file is a standard list of colors. Multiple files can refer to these so colors are
 # consistent across a variety of plots.
 import matplotlib.colors as colors
 
+INIT_COLOR = 'black'
+INIT_KWARGS = {'color':INIT_COLOR, 'linestyle':'--'}
 WENO_COLOR = 'tab:blue'
 WENO_KWARGS = {'color':WENO_COLOR, 'linestyle':'', 'marker':'x'}
+# Second WENO kwargs for WENO that should be similar but different.
+WENO_COLOR2 = [0.51, 0.68, 0.80]
+# Intentionally use the original WENO color if using WENO_KWARGS2, as the markers will distinguish
+# the difference.
+WENO_KWARGS2 = {'color':WENO_COLOR, 'linestyle':'', 'marker':'+',
+        'markersize':1.5*mpl.rcParams['lines.markersize']}
 RL_COLOR = 'tab:orange'
 RL_KWARGS = {'color':RL_COLOR, 'linestyle':'', 'marker':'.'}
+# Second RL kwargs for RL that should be similar but different.
+#RL_COLOR2 = [0.95, 0.70, 0.48]
+RL_COLOR2 = [1.0, 0.67, 0.25]
+RL_KWARGS2= {'color':RL_COLOR2, 'linestyle':'', 'marker':'.'}
 ANALYTICAL_COLOR = 'black' #'tab:pink'
 ANALYTICAL_KWARGS = {'color':ANALYTICAL_COLOR, 'linestyle':'-', 'marker':'', 'linewidth':0.75}
 
