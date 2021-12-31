@@ -142,7 +142,7 @@ def main():
             
         if args.title is not None:
                 ax.set_title(args.title)
-        plt.tight_layout()
+        fig.tight_layout()
 
         if len(component_names) == 1:
             file_name = output_file_name

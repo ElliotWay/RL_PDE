@@ -41,27 +41,64 @@ STATE_SHORTCUTS=$(ALL_INITS:%=%_state)
 $(STATE_SHORTCUTS): %_state: $(FIG_DIR)/states/%.png
 
 END_STATE=burgers_state_step500.csv
-STATE_SCRIPT=scripts/combine_state_plots.py
+HALF_STATE=burgers_state_step250.csv
+INIT_STATE=burgers_state_step000.csv
 
 ALL_AGENTS=analytical weno rl
-A_AGENTS=analytical rl
+#A_AGENTS=analytical rl
+A_AGENTS=analytical weno rl
 O_AGENTS=weno rl
 
+# The original state plot was only the final state and used these rules:
+#STATE_SCRIPT=scripts/combine_state_plots.py
+
+#$(FIG_DIR)/states/smooth_sine.png: $(STATE_SCRIPT) $(ALL_AGENTS:%=$(TEST_DIR)/smooth_sine/%/$(END_STATE))
+	#python $^ --labels "true solution" "WENO solution" "RL solution" \
+		#--title "RL solution at t=0.2" --output $@
+#
+#define A_STATE_RULE
+#$$(FIG_DIR)/states/$(init).png: $$(STATE_SCRIPT) $$(A_AGENTS:%=$$(TEST_DIR)/$(init)/%/$$(END_STATE))
+	#python $$^ --labels "true solution" "RL solution" \
+		#--title "RL solution at t=0.2" --output $$(FIG_DIR)/states/$(init).png
+#endef
+#$(foreach init,$(ANALYTICAL_EXCEPT_SMOOTH_SINE), $(eval $(A_STATE_RULE)))
+#
+#define O_STATE_RULE
+#$$(FIG_DIR)/states/$(init).png: $$(STATE_SCRIPT) $$(O_AGENTS:%=$$(TEST_DIR)/$(init)/%/$$(END_STATE))
+	#python $$^ --labels "WENO solution" "RL solution" \
+		#--title "RL solution at t=0.2" --output $(FIG_DIR)/states/$(init).png
+#endef
+#$(foreach init,$(OTHER_INITS), $(eval $(O_STATE_RULE)))
+
+STATE_SCRIPT=scripts/half_evolution_plot.py
+
 $(FIG_DIR)/states/smooth_sine.png: $(STATE_SCRIPT) $(ALL_AGENTS:%=$(TEST_DIR)/smooth_sine/%/$(END_STATE))
-	python $^ --labels "true solution" "WENO solution" "RL solution" \
-		--title "RL solution at t=0.2" --output $@
+	python $< --init $(TEST_DIR)/smooth_sine/rl/$(INIT_STATE) \
+		--rl $(TEST_DIR)/smooth_sine/rl/$(HALF_STATE) \
+			$(TEST_DIR)/smooth_sine/rl/$(END_STATE) \
+		--weno $(TEST_DIR)/smooth_sine/weno/$(HALF_STATE) \
+			$(TEST_DIR)/smooth_sine/weno/$(END_STATE) \
+		--true $(TEST_DIR)/smooth_sine/analytical/$(HALF_STATE) \
+			$(TEST_DIR)/smooth_sine/analytical/$(END_STATE) \
+		--output $@
 
 define A_STATE_RULE
 $$(FIG_DIR)/states/$(init).png: $$(STATE_SCRIPT) $$(A_AGENTS:%=$$(TEST_DIR)/$(init)/%/$$(END_STATE))
-	python $$^ --labels "true solution" "RL solution" \
-		--title "RL solution at t=0.2" --output $$(FIG_DIR)/states/$(init).png
+	python $$< --init $$(TEST_DIR)/$(init)/rl/$$(INIT_STATE) \
+		--rl $$(TEST_DIR)/$(init)/rl/$$(HALF_STATE) $$(TEST_DIR)/$(init)/rl/$$(END_STATE) \
+		--weno $$(TEST_DIR)/$(init)/weno/$$(HALF_STATE) $$(TEST_DIR)/$(init)/weno/$$(END_STATE) \
+		--true $$(TEST_DIR)/$(init)/analytical/$$(HALF_STATE) \
+			$$(TEST_DIR)/$(init)/analytical/$$(END_STATE) \
+		--no-legend --output $$@
 endef
 $(foreach init,$(ANALYTICAL_EXCEPT_SMOOTH_SINE), $(eval $(A_STATE_RULE)))
 
 define O_STATE_RULE
 $$(FIG_DIR)/states/$(init).png: $$(STATE_SCRIPT) $$(O_AGENTS:%=$$(TEST_DIR)/$(init)/%/$$(END_STATE))
-	python $$^ --labels "WENO solution" "RL solution" \
-		--title "RL solution at t=0.2" --output $(FIG_DIR)/states/$(init).png
+	python $$< --init $$(TEST_DIR)/$(init)/rl/$$(INIT_STATE) \
+		--rl $$(TEST_DIR)/$(init)/rl/$$(HALF_STATE) $$(TEST_DIR)/$(init)/rl/$$(END_STATE) \
+		--weno $$(TEST_DIR)/$(init)/weno/$$(HALF_STATE) $$(TEST_DIR)/$(init)/weno/$$(END_STATE) \
+		--no-legend --output $$@
 endef
 $(foreach init,$(OTHER_INITS), $(eval $(O_STATE_RULE)))
 
@@ -83,7 +120,7 @@ states=$(OTHER_INITS:%=$(TEST_DIR)/%/weno/$(END_STATE))
 $(states): $(TEST_DIR)/%/weno/$(END_STATE):
 	$(RUN_TEST) --init-type $* --agent weno --log-dir $(TEST_DIR)/$*/weno
 
-# All other test files are considered to depend on the end state files.
+# All files for a given experiment are considered to depend on the end state files.
 # If end state files change then all other files for that test run have also changed.
 # It's simpler to do it this way than to add multiple targets for the above rules.
 STATE_DIRS=$(foreach init,$(ANALYTICAL_INITS),$(foreach agent,$(ALL_AGENTS),$(TEST_DIR)/$(init)/$(agent)))$\
