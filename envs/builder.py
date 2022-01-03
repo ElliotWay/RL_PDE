@@ -2,7 +2,7 @@ import argparse
 import sys
 import re
 
-from util.argparse import positive_int, nonnegative_float, positive_float, float_dict
+from util.argparse import positive_int, nonnegative_float, positive_float, misc_dict
 from envs.abstract_pde_env import AbstractPDEEnv
 from envs import WENOBurgersEnv, SplitFluxBurgersEnv, FluxBurgersEnv
 from envs.burgers_2d_env import WENOBurgers2DEnv
@@ -77,7 +77,7 @@ def get_env_arg_parser():
     parser.add_argument('--solution-rk', '--solution_rk', type=str, default=None,
                         help="RK method for the solution. By default use the same RK method as"
                         + " the environment.")
-    parser.add_argument('--init-params',  '--init_params', type=float_dict, default=None,
+    parser.add_argument('--init-params',  '--init_params', type=misc_dict, default=None,
                         help="Some initial conditions accept parameters. For example, smooth_sine"
                         + " accepts A for the amplitude of the wave. Pass these parameters as a"
                         + " comma-separated list, e.g. \"a=1.0,b=2.5\". Note that this overrides"

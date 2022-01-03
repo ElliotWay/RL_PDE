@@ -35,6 +35,10 @@ def main():
     args = parser.parse_args()
     assert len(args.output) > 0
 
+    if len(args.x_error) != len(args.y_error):
+        raise Exception("Each file for the x-axis should correspond to a file for the y-axis,"
+                + f" but there are {len(args.x_error)} for x and {len(args.y_error)} for y.")
+
     x_errors = []
     final_times = []
     y_errors = []

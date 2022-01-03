@@ -33,7 +33,7 @@ RUN_TEST=python run_test.py -y --animate --output-mode csv plot $\
 		--order $(ORDER)
 
 all: plots
-plots: state conv tv l2 action animation training
+plots: state conv tv l2 action animation training error_comparison
 
 state: $(ALL_INITS:%=%_state)
 
@@ -251,3 +251,44 @@ $(TRAINING_PLOTS): $(TRAIN_PLOT_SCRIPT)
 # Do this instead to plot average with confidence interval (if TRAIN_DIR contains a bunch of seeds):
 #python $(TRAIN_PLOT_SCRIPT) --avg $(TRAIN_DIR)/*/progress.csv \
 #--std-only --output-dir $(FIG_DIR)/training
+
+
+ERROR_COMPARISON_PLOT=$(FIG_DIR)/error_comparison/comparison.png
+error_comparison: $(ERROR_COMPARISON_PLOT)
+
+ERROR_COMPARISON_SCRIPT=scripts/error_comparison_plot.py
+RANDOM_ENVS=random accelshock_random smooth_rare_random
+NUM_SEEDS=100
+SEEDS=$(shell seq 1 $(NUM_SEEDS))
+
+$(ERROR_COMPARISON_PLOT): $(ERROR_COMPARISON_SCRIPT) \
+		$(foreach env,$(RANDOM_ENVS),\
+			$(foreach seed,$(SEEDS),\
+				$(TEST_DIR)/error_comparison/rl/$(env)/seed_$(seed)/progress.csv)) \
+		$(foreach env,$(RANDOM_ENVS),\
+			$(foreach seed,$(SEEDS),\
+				$(TEST_DIR)/error_comparison/weno/$(env)/seed_$(seed)/progress.csv))
+	python $< \
+		--xname WENO --x-error $(TEST_DIR)/error_comparison/weno/*/*/progress.csv \
+		--yname RL --y-error $(TEST_DIR)/error_comparison/rl/*/*/progress.csv \
+		--output $@
+
+RUN_RANDOM_TEST=python run_test.py -y --analytical --output-mode csv --plot-l2 \
+		--order 3 --init-params random=cont
+
+define RANDOM_WENO_RULE
+$$(TEST_DIR)/error_comparison/weno/$(env)/seed_$(seed)/progress.csv:
+	echo $$@;\
+	$$(RUN_RANDOM_TEST) --agent weno --init-type $(env) --seed $(seed) --log-dir $$(@D)
+endef
+$(foreach env,$(RANDOM_ENVS), \
+	$(foreach seed,$(SEEDS), \
+		$(eval $(RANDOM_WENO_RULE))))
+define RANDOM_RL_RULE
+$$(TEST_DIR)/error_comparison/rl/$(env)/seed_$(seed)/progress.csv:
+	echo $$@;\
+	$$(RUN_RANDOM_TEST) --agent $$(RL_AGENT) --init-type $(env) --seed $(seed) --log-dir $$(@D)
+endef
+$(foreach env,$(RANDOM_ENVS), \
+	$(foreach seed,$(SEEDS), \
+		$(eval $(RANDOM_RL_RULE))))

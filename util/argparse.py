@@ -48,6 +48,29 @@ def float_dict(string_dict):
             output_dict[key] = value
     return output_dict
 
+def destring_value(string):
+    try:
+        return eval(string)
+    except Exception:
+        return string
+
+def misc_dict(string_dict):
+    pairs = string_dict.split(sep=',')
+    # empty string return empty dict
+    if len(pairs) <= 1 and len(pairs[0]) == 0:
+        return {}
+    output_dict = {}
+    for pair in pairs:
+        match = re.fullmatch("([^=]+)=([^=]+)", pair)
+        if not match:
+            raise argparse.ArgumentTypeError("In \"{}\", \'{}\' must be key=value.".format(
+                string_dict, pair))
+        else:
+            key = match.group(1)
+            value = destring_value(match.group(2))
+            output_dict[key] = value
+    return output_dict
+
 # 3.8 has the 'extend' action, but we're in 3.7.
 class ExtendAction(argparse.Action):
     def __init__(self, option_strings, dest, nargs=None, **kwargs):
