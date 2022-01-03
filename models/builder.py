@@ -23,6 +23,9 @@ def get_model_arg_parser(model_type=None):
         parser.add_argument('--optimizer', type=str, default="adam",
                 help="Gradient Descent algorithm to use for training. SAC ignores this parameter"
                 + " and always uses Adam.")
+        parser.add_argument('--momentum', type=float, default=None,
+                help="Momentum parameter used by some optimizers ('rmsprop' and 'momentum')."
+                + " The default depends on the optimizer.")
 
     if model_type in [None, 'full', 'sac', 'ddpg', 'pg']:
         parser.add_argument('--layer-norm', '--layer_norm', default=False, action='store_true',
@@ -135,9 +138,13 @@ def get_optimizer(model_args):
     elif model_args.optimizer == "adam":
         optimizer = tf.train.AdamOptimizer(learning_rate=model_args.learning_rate)
     elif model_args.optimizer == "momentum":
+        if model_args.momentum is None:
+            model_args.momentum = 0.9
         optimizer = tf.train.MomentumOptimizer(learning_rate=model_args.learning_rate,
-                momemntum=model_args.momentum)
+                momentum=model_args.momentum)
     elif model_args.optimizer == "rmsprop":
+        if model_args.momentum is None:
+            model_args.momentum = 0.0
         optimizer = tf.train.RMSPropOptimizer(learning_rate=model_args.learning_rate,
                 decay=0.99, momentum=model_args.momentum, epsilon=1e-5)
     else:
