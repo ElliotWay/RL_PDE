@@ -8,6 +8,7 @@ import signal
 import sys
 import time
 import subprocess
+import traceback
 import gc # manual garbage collection
 
 import yaml
@@ -557,7 +558,19 @@ def main():
         sys.exit(1) # Should we return 1 or 0 here?
     except Exception as e:
         meta_file.log_finish_time(status="stopped by exception: {}".format(type(e).__name__))
-        raise  # Re-raise so exception is also printed.
+        exception_filename = os.path.join(args.log_dir, "exception.txt")
+        exc_tup = sys.exc_info()
+        try:
+            with open(exception_filename) as exception_file:
+                traceback.print_exception(*exc_tup, file=exception_file)
+        except Exception:
+            print("Could not log an exception. :(")
+            print("This exception:")
+            traceback.print_exception(*sys.exc_info(), chain=False)
+            print("Prevented logging the following exception:")
+        else:
+            print(f"The following exception was logged to {exception_filename}.")
+        raise  # Re-raise to print the exception.
 
     print("Done.")
     meta_file.log_finish_time(status="finished cleanly")
