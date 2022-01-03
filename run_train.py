@@ -369,7 +369,7 @@ def main():
         exception_filename = os.path.join(args.log_dir, "exception.txt")
         exc_tup = sys.exc_info()
         try:
-            with open(exception_filename) as exception_file:
+            with open(exception_filename, 'w') as exception_file:
                 traceback.print_exception(*exc_tup, file=exception_file)
         except Exception:
             print("Could not log an exception. :(")
