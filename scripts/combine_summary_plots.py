@@ -51,6 +51,10 @@ Options are: (default: range)
             help="Directory to save the data to. 3 files will be\n"
             +    "saved to that directory: l2.png, reward.png, and\n"
             +    "loss.png.")
+    parser.add_argument("--paper-mode", dest='paper_mode', default=True, action='store_true',
+            help="Use paper style. Bigger text and specific tweaks.")
+    parser.add_argument("--std-mode", dest='paper_mode', action='store_false',
+            help="Use standard style. Smaller text, but generalize better to arbitrary data.")
 
     args = parser.parse_args()
 
@@ -201,13 +205,20 @@ Options are: (default: range)
                 loss_kwargs.append({}) # Use matplotlib color cycle.
             loss_episodes.append(episodes[outer_index])
 
+    if args.paper_mode:
+        plt.rcParams.update({'font.size':15})
+
     if 'reward' in args.parts:
         reward_fig = plots.create_avg_plot(reward_and_l2_episodes, reward_data,
                 labels=reward_and_l2_labels, kwargs_list=reward_and_l2_kwargs,
                 ci_type=args.ci_type)
         ax = reward_fig.gca()
         if len(reward_data) < 3:
-            ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.08),
+            if args.paper_mode:
+                bbta=(0.5, 1.11)
+            else:
+                bbta=(0.5, 1.08)
+            ax.legend(loc='upper center', bbox_to_anchor=bbta,
                     ncol=len(reward_data), fancybox=True, shadow=True,
                     prop={'size': 'medium'})
             ax.set_title("Total Reward per Episode", pad=24.0)
@@ -216,7 +227,10 @@ Options are: (default: range)
             ax.set_title("Total Reward per Episode")
         ax.set_xmargin(0.0)
         ax.set_xlabel('episodes')
-        ax.set_ylabel('reward')
+        if args.paper_mode:
+            ax.set_ylabel('reward', labelpad=-8.0)
+        else:
+            ax.set_ylabel('reward')
         ax.grid(True)
         # Use symlog as the rewards are negative.
         # Ugh...
@@ -225,6 +239,7 @@ Options are: (default: range)
         else:
             ax.set_yscale('symlog', linthresh=1e-9, subs=range(2,10))
         plots.crop_early_shift(ax, "flipped")
+        reward_fig.tight_layout()
 
         reward_filename = os.path.join(args.output_dir, 'reward.png')
         reward_fig.savefig(reward_filename)
@@ -237,7 +252,11 @@ Options are: (default: range)
                 ci_type=args.ci_type)
         ax = l2_fig.gca()
         if len(l2_data) < 3:
-            ax.legend(loc='upper center', bbox_to_anchor=(0.5, 1.08),
+            if args.paper_mode:
+                bbta=(0.5, 1.11)
+            else:
+                bbta=(0.5, 1.08)
+            ax.legend(loc='upper center', bbox_to_anchor=bbta,
                     ncol=len(reward_data), fancybox=True, shadow=True,
                     prop={'size': 'medium'})
             ax.set_title("L2 Error with WENO at End of Episode", pad=24.0)
@@ -250,6 +269,7 @@ Options are: (default: range)
         ax.grid(True)
         ax.set_yscale('log')
         plots.crop_early_shift(ax, "normal")
+        l2_fig.tight_layout()
 
         l2_filename = os.path.join(args.output_dir, 'l2.png')
         l2_fig.savefig(l2_filename)
@@ -266,10 +286,14 @@ Options are: (default: range)
         ax.set_title("Loss Function")
         ax.set_xmargin(0.0)
         ax.set_xlabel('episodes')
-        ax.set_ylabel('loss')
+        if args.paper_mode:
+            ax.set_ylabel('loss', labelpad=-8.0)
+        else:
+            ax.set_ylabel('loss')
         ax.grid(True)
         ax.set_yscale('log')
         plots.crop_early_shift(ax, "normal")
+        loss_fig.tight_layout()
 
         loss_filename = os.path.join(args.output_dir, 'loss.png')
         loss_fig.savefig(loss_filename)

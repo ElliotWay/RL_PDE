@@ -192,8 +192,8 @@ $(FIG_DIR)/animation/%.gif: $(TEST_DIR)/%/rl/$(END_STATE)
 		-set delay '%[fx:t==(n-1) || t==0 ? 100 : 10]' $@
 
 
-convergence: conv
-conv: smooth_sine_conv gaussian_conv
+convergence: conv_short conv_long
+conv_short: smooth_sine_conv gaussian_conv
 
 CONV_SCRIPT=scripts/combine_convergence_plots.py
 CONV_AGENTS=rl weno
@@ -237,6 +237,10 @@ $(TEST_DIR)/convergence/gaussian_0_1/rl/progress.csv:
 	$(RUN_CONV) --agent $(RL_AGENT) --init-type gaussian --C 0.5 --time-max 0.1 --log-dir $(@D)
 $(TEST_DIR)/convergence/gaussian_0_1/weno/progress.csv:
 	$(RUN_CONV) --agent weno --init-type gaussian --C 0.5 --time-max 0.1 --log-dir $(@D)
+
+CONV_INITS=smooth_sine rarefaction accelshock random gaussian tophat
+conv_long: $(CONV_SCRIPT) $(CONV_INITS:%=$(FIG_DIR)/convergence/%.png)
+	python $^ --labels "RL" "WENO" --title "Average L2 Error"
 
 
 TRAINING_PLOTS=$(FIG_DIR)/training/loss.png $(FIG_DIR)/training/reward.png $(FIG_DIR)/training/l2.png

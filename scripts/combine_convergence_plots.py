@@ -92,9 +92,10 @@ The order of arguments controls the order of the legend.""",
             help="Path to save the combined plot to. If an existing\n"
             +    "directory is passed, the file will be saved to\n"
             +    "'convergence.png' in that directory.")
-    parser.add_argument("--no-default", default=False, action='store_true',
-            help="Use the original styles instead of the paper\n"
-            +    "unified styles.")
+    parser.add_argument("--paper-mode", dest='paper_mode', default=True, action='store_true',
+            help="Use paper style. Bigger text and specific tweaks.")
+    parser.add_argument("--std-mode", dest='paper_mode', action='store_false',
+            help="Use standard style. Smaller text, but generalize better to arbitrary data.")
 
     args = parser.parse_args()
     assert len(args.output) > 0
@@ -126,7 +127,7 @@ The order of arguments controls the order of the legend.""",
                 raise Exception()
             error_list = csv_df['l2_error']
 
-            if args.no_default:
+            if not args.paper_mode:
                 kwargs = {}
             else:
                 kwargs = colors.get_agent_kwargs(file_name, args.labels[index], just_color=True)
@@ -175,6 +176,9 @@ The order of arguments controls the order of the legend.""",
 
         grid_sizes.append(sizes)
         errors.append(error_list)
+
+    if args.paper_mode:
+        plt.rcParams.update({'font.size':15})
 
     fig = plots.create_avg_plot(grid_sizes, errors,
             labels=args.labels, kwargs_list=kwargs_list,
