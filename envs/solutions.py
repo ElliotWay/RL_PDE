@@ -216,10 +216,13 @@ class OneStepSolution(SolutionBase):
 #TODO Handle ND analytical solutions. (Also non-Burgers solutions?)
 implicit_analytical_solutions = [
         "smooth_sine", "smooth_sine_shift", "random", "random-many-shocks",
-        "smooth_rare", "smooth_rare_random",
+        "smooth_rare", "smooth_rare_random", "other_sine"
         ]
 explicit_analytical_solutions = [
         "accelshock", "accelshock_random",
+        "shock", 
+        "rarefaction",
+        "tophat",
         "gaussian",
         ]
 available_analytical_solutions = implicit_analytical_solutions + explicit_analytical_solutions
@@ -234,6 +237,8 @@ class AnalyticalSolution(SolutionBase):
             raise Exception("Invalid analytical type \"{}\", available options are {}.".format(init_type, available_analytical_solutions))
 
         self.grid = Burgers1DGrid(nx, ng, xmin, xmax, init_type)
+
+        self._constant = None
 
     def _update(self, dt, time):
         # Assume that Burgers1DGrid.reset() is still setting the correct parameters.
@@ -250,7 +255,8 @@ class AnalyticalSolution(SolutionBase):
                 iterate_func = (lambda old_u, time:
                         params['A'] * np.sin(2 * np.pi * (x_values - old_u * time)
                         + params['phi']))
-            elif init_type == "random" or init_type == "random-many-shocks":
+            elif (init_type == "random" or init_type == "random-many-shocks" 
+                            or init_type == "other_sine"):
                 iterate_func = (lambda old_u, time:
                         params['a'] 
                         + params['b'] * np.sin(params['k'] * np.pi 
@@ -291,6 +297,83 @@ class AnalyticalSolution(SolutionBase):
                 new_u[index] = (u_R*(x_values[index] - 1)) / (1 + u_R*time)
                 self.grid.set(new_u)
 
+            elif init_type == "shock":
+                offset = params['offset']
+                u_L = params['u_L']
+                u_R = params['u_R']
+                shock_location = offset + ((u_L + u_R)/2)*time
+                new_u = np.full_like(x_values, u_L)
+                index = x_values > shock_location
+                new_u[index] = u_R
+                self.grid.set(new_u)
+            
+            elif init_type == "rarefaction":
+                offset = params['offset']
+                u_L = params['u_L']
+                u_R = params['u_R']
+
+                flat_left_location = offset + u_L*time
+                flat_right_location = offset + u_R*time
+            
+                new_u = np.full_like(x_values, u_L)
+                
+                right_index = x_values >= flat_right_location
+                new_u[right_index] = u_R
+
+                if time > 0.0:
+                    fan_index = np.logical_and(flat_left_location < x_values,
+                                                    x_values < flat_right_location)
+                    new_u[fan_index] = (x_values[fan_index] - offset) / time
+                # If time == 0, nothing is covered by fan_index.
+
+                self.grid.set(new_u)
+
+            elif init_type == "tophat":
+                x1 = params['x1']
+                x2 = params['x2']
+                u_L = params['u_L']
+                u_M = params['u_M']
+                u_R = params['u_R']
+
+                flat_left_location = x1 + u_L*time
+                flat_middle_location = x1 + u_M*time
+                shock_location = x2 + ((u_M + u_R)/2)*time
+
+                new_u = np.empty_like(x_values)
+                new_u[x_values <= flat_left_location] = u_L
+
+                # This point is always reached, but I can't readily figure out the solution.
+                # Wolfram Alpha suggests the shock location changes to something like
+                # x=u_R*t-x2+c_1*sqrt(t), for some c_1, but that doesn't look right.
+                if shock_location < flat_middle_location:
+                    #if self._constant is None:
+                        #intersect_time = (2/(u_M-u_R))*(x2-x1)
+                        #intersect_x = x1 + u_M*intersect_time
+                        #self._constant = (intersect_x - u_R*intersect_time + x2)/np.sqrt(intersect_time)
+
+                        #check_x = (u_R * intersect_time - x2 +
+                                    #self._constant*np.sqrt(intersect_time))
+
+                    #shock_location = u_R * time - x2 + self._constant*np.sqrt(time)
+                    #fan_index = np.logical_and(flat_left_location < x_values,
+                                                #x_values < shock_location)
+                    #new_u[fan_index] = (x_values[fan_index] - x1) / time
+                    raise Exception("The current analytical solution for tophat does not handle"
+                            + " times after the rarefaction collides with the shock correctly.")
+                else:
+
+                    top_index = np.logical_and(flat_middle_location <= x_values,
+                                                x_values <= shock_location)
+                    new_u[top_index] = u_M
+                    
+                    if time > 0.0:
+                        fan_index = np.logical_and(flat_left_location < x_values,
+                                                    x_values < flat_middle_location)
+                        new_u[fan_index] = (x_values[fan_index] - x1) / time
+                new_u[x_values > shock_location] = u_R
+
+                self.grid.set(new_u)
+
             elif init_type == "gaussian":
                 # Copied from
                 # github.com/python-hydro/hydro_examples/blob/master/burgers/weno_burgers.py#burgers_sin_exact
@@ -312,6 +395,8 @@ class AnalyticalSolution(SolutionBase):
     def _reset(self, params):
         if 'init_type' in params and not params['init_type'] in available_analytical_solutions:
                 raise Exception("Invalid analytical type \"{}\", available options are {}.".format(init_type, available_analytical_solutions))
+
+        self._constant = None
 
         self.grid.reset(params)
 

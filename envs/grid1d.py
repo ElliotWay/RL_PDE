@@ -154,10 +154,23 @@ class Burgers1DGrid(GridBase):
                 phi = 0.0
             self.space[0] = A*np.sin(2 * np.pi * self.x + phi)
 
+        elif self.init_type == "other_sine":
+            # "random" initialized with k=4, b=1.0, a=2.5.
+            if self.boundary is None:
+                self.boundary = "periodic"
+            k = 4
+            self.init_params['k'] = 4
+            b = 0.5
+            self.init_params['b'] = 0.5
+            a = 2.5
+            self.init_params['a'] = 2.5
+            self.space[0] = a + b * np.sin(k * np.pi * self.x)
+
         elif self.init_type == "gaussian":
             if boundary is None:
                 self.boundary = "outflow"
             self.space[0] = 1.0 + np.exp(-60.0 * (self.x - 0.5) ** 2)
+
 
         elif self.init_type == "random":
             if boundary is None:
@@ -379,7 +392,7 @@ class Burgers1DGrid(GridBase):
 
             index = self.x > offset
             self.space[0] = np.full_like(self.x, u_L)
-            self.space[0, index] = np.full_like(self.x[index], u_R)
+            self.space[0, index] = u_R
 
         elif self.init_type == "sawtooth":
             if boundary is None:
@@ -399,9 +412,23 @@ class Burgers1DGrid(GridBase):
         elif self.init_type == "tophat":
             if boundary is None:
                 self.boundary = "outflow"
-            self.space[0, :] = 0.0
-            self.space[0, np.logical_and(self.x >= 0.333,
-                                       self.x <= 0.666)] = 1.0
+            x1 = params['x1'] if 'x1' in params else 1.0/3.0
+            self.init_params['x1'] = x1
+            x2 = params['x2'] if 'x2' in params else 2.0/3.0
+            self.init_params['x2'] = x2
+            u_L = params['u_L'] if 'u_L' in params else 0.0
+            self.init_params['u_L'] = u_L
+            u_M = params['u_M'] if 'u_M' in params else 1.0
+            self.init_params['u_M'] = u_M
+            u_R = params['u_R'] if 'u_R' in params else u_L
+            self.init_params['u_R'] = u_R
+
+            self.space[0] = np.full_like(self.x, u_L)
+            right_index = self.x >= x2
+            self.space[0, right_index] = u_R
+            middle_index = np.logical_and(x1 < self.x, self.x < x2)
+            self.space[0, middle_index] = u_M
+
         elif self.init_type == "sine":
             if boundary is None:
                 self.boundary = "periodic"
@@ -414,8 +441,16 @@ class Burgers1DGrid(GridBase):
         elif self.init_type == "rarefaction":
             if boundary is None:
                 self.boundary = "outflow"
-            self.space[0, :] = 1.0
-            self.space[0, self.x > 0.5] = 2.0
+            offset = params['offset'] if 'offset' in params else 0.5
+            self.init_params['offset'] = offset
+            u_L = params['u_L'] if 'u_L' in params else 1.0
+            self.init_params['u_L'] = u_L
+            u_R = params['u_R'] if 'u_R' in params else 2.0
+            self.init_params['u_R'] = u_R
+
+            index = self.x > offset
+            self.space[0] = np.full_like(self.x, u_L)
+            self.space[0, index] = u_R
 
         elif self.init_type == "zero":
             if boundary is None:
