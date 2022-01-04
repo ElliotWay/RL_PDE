@@ -29,7 +29,8 @@ The order of arguments controls the order of the legend.""",
             help="More CSV files containing training data.")
     parser.add_argument('--avg', type=str, nargs='+', action='append', dest='curves',
             metavar='FILE',
-            help="CSV files for which the mean with a confidence\ninterval will be plotted.")
+            help="CSV files for which the GEOMETRIC mean with a\n"
+                + "confidence interval will be plotted.")
     parser.add_argument('--ci-type', type=str, default='range', help="""\
 The type of confidence interval to plot.
 Options are: (default: range)
@@ -211,7 +212,7 @@ Options are: (default: range)
     if 'reward' in args.parts:
         reward_fig = plots.create_avg_plot(reward_and_l2_episodes, reward_data,
                 labels=reward_and_l2_labels, kwargs_list=reward_and_l2_kwargs,
-                ci_type=args.ci_type)
+                ci_type=args.ci_type, avg_type='geometric')
         ax = reward_fig.gca()
         if len(reward_data) < 3:
             if args.paper_mode:
@@ -249,7 +250,7 @@ Options are: (default: range)
     if 'l2' in args.parts:
         l2_fig = plots.create_avg_plot(reward_and_l2_episodes, l2_data,
                 labels=reward_and_l2_labels, kwargs_list=reward_and_l2_kwargs,
-                ci_type=args.ci_type)
+                ci_type=args.ci_type, avg_type='geometric')
         ax = l2_fig.gca()
         if len(l2_data) < 3:
             if args.paper_mode:
@@ -279,7 +280,7 @@ Options are: (default: range)
     if 'loss' in args.parts:
         loss_fig = plots.create_avg_plot(loss_episodes, loss_data,
                 labels=loss_labels, kwargs_list=loss_kwargs,
-                ci_type=args.ci_type)
+                ci_type=args.ci_type, avg_type='geometric')
         if len(loss_data) > 1:
             loss_fig.legend(loc="upper right", prop={'size': plots.legend_font_size(len(loss_data))})
         ax = loss_fig.gca()

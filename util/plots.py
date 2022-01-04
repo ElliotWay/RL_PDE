@@ -10,7 +10,8 @@ import matplotlib.pyplot as plt
 import util.colors as colors
 
 
-def create_avg_plot(x_data, y_data, labels=None, kwargs_list=None, ci_type='range'):
+def create_avg_plot(x_data, y_data, labels=None, kwargs_list=None,
+        ci_type='range', avg_type='arithmetic'):
     """
     Plot data where each line can be either a single line or an averaged mean line with a
     confidence interval.
@@ -34,6 +35,8 @@ def create_avg_plot(x_data, y_data, labels=None, kwargs_list=None, ci_type='rang
         Xsig: [-X std deviations,+X std deviations] (normal dist), X > 0
         Nperc: [Nth percentile,100-Nth percentile], N in [0, 50]
         none: (only plot the average, no confidence interval)
+    avg_type : str
+        Type of average to take. Options are arithmetic and geometric.
 
     Returns
     -------
@@ -59,7 +62,7 @@ def create_avg_plot(x_data, y_data, labels=None, kwargs_list=None, ci_type='rang
 
         if take_average:
             add_average_with_ci(ax, x, y, label=label, plot_kwargs=kwargs,
-                    ci_type=ci_type)
+                    ci_type=ci_type, avg_type=avg_type)
         else:
             ax.plot(x, y, label=label, **kwargs)
     return fig
@@ -67,7 +70,7 @@ def create_avg_plot(x_data, y_data, labels=None, kwargs_list=None, ci_type='rang
 # float regex from https://stackoverflow.com/a/12929311/2860127
 FLOAT_REGEX = r'[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?'
 
-def add_average_with_ci(ax, x, ys, ci_type="range", label=None, plot_kwargs=None):
+def add_average_with_ci(ax, x, ys, ci_type="range", avg_type="arithmetic", label=None, plot_kwargs=None):
     """
     On an existing axis, plot the mean of multiple data series with a shaded region around it for a
     confidence interval.
@@ -88,16 +91,25 @@ def add_average_with_ci(ax, x, ys, ci_type="range", label=None, plot_kwargs=None
         Xsig: [-X std deviations,+X std deviations] (normal dist), X > 0
         Nperc: [Nth percentile,100-Nth percentile], N in [0, 50]
         none: (only plot the average, no confidence interval)
+    avg_type : str
+        Type of average to take. Options are arithmetic and geometric.
     label : str
         Label of the average line.
     plot_kwargs : dict
         Kwargs to pass to the plot function, e.g. color and linestyle.
+
+    Returns
+    -------
+    None. The passed axes are modified.
     """
     if plot_kwargs is None:
         plot_kwargs = {}
 
     y_data = np.array(ys)
-    y_mean = np.mean(y_data, axis=0)
+    if avg_type == "arithmetic":
+        y_mean = np.mean(y_data, axis=0)
+    elif avg_type == "geometric":
+        y_mean = scipy.stats.gmean(y_data, axis=0)
 
     if label is None:
         mean_line = ax.plot(x, y_mean, **plot_kwargs)[0]

@@ -58,7 +58,8 @@ The order of arguments controls the order of the legend.""",
             help="More CSV files containing convergence data.")
     parser.add_argument('--avg', type=str, nargs='+', action=AppendTupleGen('avg'), dest='curves',
             metavar='FILE',
-            help="CSV files for which the mean with a confidence\ninterval will be plotted.")
+            help="CSV files for which the GEOMETRIC mean with a\n"
+            +   "confidence interval will be plotted.")
     parser.add_argument('--ci-type', type=str, default='range',
             help = "The type of confidence interval to plot. (default: range)\n"
                 + " Options are:\n"
@@ -182,13 +183,20 @@ The order of arguments controls the order of the legend.""",
 
     fig = plots.create_avg_plot(grid_sizes, errors,
             labels=args.labels, kwargs_list=kwargs_list,
-            ci_type=args.ci_type)
+            ci_type=args.ci_type, avg_type='geometric')
     ax = fig.gca()
     if create_legend:
-        ax.legend(loc="upper right", bbox_to_anchor=(1.03, 1.05),
+        if args.paper_mode:
+            bbta = (1.0, 1.0)
+        else:
+            bbta = (1.03, 1.05)
+        ax.legend(loc="upper right", bbox_to_anchor=bbta,
                 ncol=1, fancybox=True, shadow=True,
                 prop={'size': plots.legend_font_size(len(grid_sizes))})
-    ax.set_xlabel("grid size")
+    if args.paper_mode:
+        ax.set_xlabel("grid size", labelpad=-8.0)
+    else:
+        ax.set_xlabel("grid size")
     ax.set_xscale('log')
     #ax.set_xticks(grid_sizes) # Use the actual grid sizes as ticks instead of powers of 10.
     ax.set_ylabel("L2 error")

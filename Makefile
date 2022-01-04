@@ -3,9 +3,9 @@
 # This file does not compile source code in anyway.
 
 ALL_INITS=$(ANALYTICAL_INITS) $(OTHER_INITS)
-ANALYTICAL_INITS=smooth_sine accelshock gaussian smooth_rare
-ANALYTICAL_EXCEPT_SMOOTH_SINE=accelshock gaussian smooth_rare
-OTHER_INITS=tophat rarefaction sine line shock para sawtooth random
+ANALYTICAL_EXCEPT_SMOOTH_SINE=accelshock gaussian smooth_rare rarefaction shock tophat random
+ANALYTICAL_INITS=smooth_sine $(ANALYTICAL_INITS_EXCEPT_SMOOTH_SINE)
+OTHER_INITS=sine line para sawtooth 
 
 #ORDER=2
 #TEST_DIR=fig_test_order2
@@ -33,7 +33,7 @@ RUN_TEST=python run_test.py -y --animate --output-mode csv plot $\
 		--order $(ORDER)
 
 all: plots
-plots: state conv tv l2 action animation training error_comparison
+plots: state convergence tv l2 action animation training error_comparison
 
 state: $(ALL_INITS:%=%_state)
 
@@ -192,6 +192,7 @@ $(FIG_DIR)/animation/%.gif: $(TEST_DIR)/%/rl/$(END_STATE)
 		-set delay '%[fx:t==(n-1) || t==0 ? 100 : 10]' $@
 
 
+conv: convergence
 convergence: conv_short conv_long
 conv_short: smooth_sine_conv gaussian_conv
 
@@ -204,21 +205,21 @@ smooth_sine_conv: $(FIG_DIR)/convergence/smooth_sine_0_05.png $(FIG_DIR)/converg
 $(FIG_DIR)/convergence/smooth_sine_0_05.png: \
        		$(CONV_SCRIPT) $(CONV_AGENTS:%=$(TEST_DIR)/convergence/smooth_sine_0_05/%/progress.csv)
 	python $^ --poly 3 5 --labels "RL" "WENO" --title "Convergence on sine" \
-		--output $(FIG_DIR)/convergence/smooth_sine_0_05.png
+		--output $@
 $(FIG_DIR)/convergence/smooth_sine_0_1.png: \
 		$(CONV_SCRIPT) $(CONV_AGENTS:%=$(TEST_DIR)/convergence/smooth_sine_0_1/%/progress.csv)
 	python $^ --labels "RL" "WENO" --title "Convergence on sine" \
-		--output $(FIG_DIR)/convergence/smooth_sine_0_1.png
+		--output $@
 
 gaussian_conv: $(FIG_DIR)/convergence/gaussian_0_05.png $(FIG_DIR)/convergence/gaussian_0_1.png
 $(FIG_DIR)/convergence/gaussian_0_05.png: \
 		$(CONV_SCRIPT) $(CONV_AGENTS:%=$(TEST_DIR)/convergence/gaussian_0_05/%/progress.csv)
 	python $^ --poly 3 5 --labels "RL" "WENO" --title "Convergence on Gaussian" \
-		--output $(FIG_DIR)/convergence/gaussian_0_05.png
+		--output $@
 $(FIG_DIR)/convergence/gaussian_0_1.png: \
         	$(CONV_SCRIPT) $(CONV_AGENTS:%=$(TEST_DIR)/convergence/gaussian_0_1/%/progress.csv)
 	python $^ --poly 3 --labels "RL" "WENO" --title "Convergence on Gaussian" \
-		--output $(FIG_DIR)/convergence/gaussian_0_1.png
+		--output $@
 
 $(TEST_DIR)/convergence/smooth_sine_0_05/rl/progress.csv:
 	$(RUN_CONV) --agent $(RL_AGENT) --init-type smooth_sine --time-max 0.05 --log-dir $(@D)
@@ -238,9 +239,20 @@ $(TEST_DIR)/convergence/gaussian_0_1/rl/progress.csv:
 $(TEST_DIR)/convergence/gaussian_0_1/weno/progress.csv:
 	$(RUN_CONV) --agent weno --init-type gaussian --C 0.5 --time-max 0.1 --log-dir $(@D)
 
-CONV_INITS=smooth_sine rarefaction accelshock random gaussian tophat
-conv_long: $(CONV_SCRIPT) $(CONV_INITS:%=$(FIG_DIR)/convergence/%.png)
-	python $^ --labels "RL" "WENO" --title "Average L2 Error"
+conv_long: $(FIG_DIR)/convergence/average.png
+
+CONV_INITS=smooth_sine rarefaction accelshock other_sine gaussian tophat
+WENO_CONV_FILES=$(CONV_INITS:%=$(TEST_DIR)/convergence/%/weno/progress.csv)
+RL_CONV_FILES=$(CONV_INITS:%=$(TEST_DIR)/convergence/%/rl/progress.csv)
+
+$(FIG_DIR)/convergence/average.png: $(CONV_SCRIPT) $(WENO_CONV_FILES) $(RL_CONV_FILES)
+	python $< --avg $(WENO_CONV_FILES) --avg $(RL_CONV_FILES) --labels "WENO" "RL" \
+		--title "Average Error Convergence" --ci-type none --output $@
+
+$(TEST_DIR)/convergence/%/weno/progress.csv:
+	$(RUN_CONV) --agent weno --init-type $* --time-max 0.2 --log-dir $(@D)
+$(TEST_DIR)/convergence/%/rl/progress.csv:
+	$(RUN_CONV) --agent $(RL_AGENT) --init-type $* --time-max 0.2 --log-dir $(@D)
 
 
 TRAINING_PLOTS=$(FIG_DIR)/training/loss.png $(FIG_DIR)/training/reward.png $(FIG_DIR)/training/l2.png
