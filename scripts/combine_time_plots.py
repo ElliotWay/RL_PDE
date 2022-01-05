@@ -45,9 +45,10 @@ def main():
             help="Title to add to the plot. By default, no title is added.")
     parser.add_argument("--output", "-o", type=str, required=True,
             help="Path to save the combined plot to.")
-    parser.add_argument("--no-default", default=False, action='store_true',
-            help="Use the original styles instead of the paper\n"
-            +    "unified styles.")
+    parser.add_argument("--paper-mode", dest='paper_mode', default=True, action='store_true',
+            help="Use paper style. Bigger text and specific tweaks.")
+    parser.add_argument("--std-mode", dest='paper_mode', action='store_false',
+            help="Use standard style. Smaller text, but generalize better to arbitrary data.")
 
     args = parser.parse_args()
     assert len(args.output) > 0
@@ -93,7 +94,7 @@ def main():
                 raise Exception(f"Cannot find '{args.ycol}' in {filename}.")
             y_values.append(csv_df[args.ycol])
 
-            if args.no_default:
+            if not args.paper_mode:
                 kwargs = {}
             else:
                 kwargs = colors.get_agent_kwargs(filename, label, just_color=True)
@@ -126,7 +127,7 @@ def main():
                     raise Exception(f"Cannot find '{args.ycol}' in {name}.")
             y_values.append([df[args.ycol] for df in dfs])
 
-            if args.no_default:
+            if not args.paper_mode:
                 kwargs = {}
             else:
                 kwargs = colors.get_agent_kwargs(filenames[0], label)
@@ -135,13 +136,18 @@ def main():
     if args.ylabel is None:
         args.ylabel = args.ycol
 
+    if args.paper_mode:
+        plt.rcParams.update({'font.size':15})
+
     fig = plots.create_avg_plot(time_values, y_values,
             labels=args.labels, kwargs_list=kwargs_list,
             ci_type=args.ci_type)
     ax = fig.gca()
     if create_legend:
-        ax.legend(loc="upper right", bbox_to_anchor=(1.03, 1.05),
-                ncol=1, fancybox=True, shadow=True,
+        #ax.legend(loc="upper right", bbox_to_anchor=(1.03, 1.05),
+                #ncol=1, fancybox=True, shadow=True,
+                #prop={'size': plots.legend_font_size(len(y_values))})
+        ax.legend(loc="best", ncol=1, fancybox=True, shadow=True,
                 prop={'size': plots.legend_font_size(len(y_values))})
     ax.set_xlabel("time")
     ax.set_xmargin(0.0)

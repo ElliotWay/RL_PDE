@@ -283,7 +283,7 @@ def convergence_plot(grid_sizes, errors, log_dir, name="convergence.png", labels
     plt.close()
 
 def action_plot(x_vals, action_vals, x_label, labels, log_dir, name="actions.png", title=None,
-        vector_parts=None, action_parts=None, kwargs_list=None):
+        vector_parts=None, action_parts=None, kwargs_list=None, paper_mode=False):
     """
     Create a plot of actions.
 
@@ -316,6 +316,8 @@ def action_plot(x_vals, action_vals, x_label, labels, log_dir, name="actions.png
         Name of each action part. [w1, w2, ...] by default.
     kwargs_list : [dict]
         Kwargs passed to plot(), e.g. color and linestyle, for each action configuration.
+    paper_mode : bool
+        Enable style configurations specific to the paper.
     """
 
     try:
@@ -351,12 +353,22 @@ def action_plot(x_vals, action_vals, x_label, labels, log_dir, name="actions.png
     # Only put the x label on the bottom row of plots
     # and the action part title on the top row.
     for action_index in range(action_dimensions):
-        axes[-1][action_index].set_xlabel(x_label)
+        if paper_mode:
+            axes[-1][action_index].set_xlabel(x_label, labelpad=-8.0)
+            # Ticks need to be adjusted on every plot.
+            for vector_index in range(vector_dimensions):
+                ax = axes[vector_index][action_index]
+                ax.set_xmargin(0.0)
+                ax.set_xticks([0.0, 1.0])
+                ax.locator_params(axis='y', nbins=6)
+        else:
+            axes[-1][action_index].set_xlabel(x_label)
         axes[0][action_index].set_title(action_parts[action_index])
 
     # And the vector part label on the left column row.
     for vector_index in range(vector_dimensions):
-        axes[vector_index][0].set_ylabel(vector_parts[vector_index])
+        if paper_mode:
+            axes[vector_index][0].set_ylabel(vector_parts[vector_index], labelpad=-8.0)
 
     # Add the legend in only the top right plot.
     if any([label for label in labels if label != ""]):

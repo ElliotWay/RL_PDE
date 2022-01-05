@@ -31,6 +31,10 @@ def main():
             help="Title to add to the plot. By default, no title is added.")
     parser.add_argument("--output", "-o", type=str, required=True,
             help="Path to save the plot to.")
+    parser.add_argument("--paper-mode", dest='paper_mode', default=True, action='store_true',
+            help="Use paper style. Bigger text and specific tweaks.")
+    parser.add_argument("--std-mode", dest='paper_mode', action='store_false',
+            help="Use standard style. Smaller text, but generalize better to arbitrary data.")
 
     args = parser.parse_args()
     assert len(args.output) > 0
@@ -65,7 +69,12 @@ def main():
         final_error = np.array(csv_df['l2'])[-1]
         y_errors.append(final_error)
 
-    plt.scatter(x_errors, y_errors, marker='.', color='grey')
+    if args.paper_mode:
+        plt.rcParams.update({'font.size':15})
+
+    fig = plt.figure(figsize=(4.8, 4.8))
+    ax = fig.gca()
+    ax.scatter(x_errors, y_errors, marker='.', color='grey')
     ax = plt.gca()
     ax.set_xscale('log')
     if args.xname is not None:

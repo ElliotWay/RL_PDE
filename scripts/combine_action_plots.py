@@ -3,6 +3,7 @@ import argparse
 import re
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 from util import plots
 import util.colors as colors
@@ -22,9 +23,10 @@ def main():
     parser.add_argument("--output", "-o", type=str, required=True,
             help="Path to save the combined plot to. If an existing directory is passed,"
             + " the plot will be saved to 'actions.png' in that directory.")
-    parser.add_argument("--no-default", default=False, action='store_true',
-            help="Use the original styles instead of the paper\n"
-            +    "unified styles.")
+    parser.add_argument("--paper-mode", dest='paper_mode', default=True, action='store_true',
+            help="Use paper style. Bigger text and specific tweaks.")
+    parser.add_argument("--std-mode", dest='paper_mode', action='store_false',
+            help="Use standard style. Smaller text, but generalize better to arbitrary data.")
 
     args = parser.parse_args()
     assert len(args.output) > 0
@@ -93,7 +95,7 @@ def main():
             vector_actions.append(sub_actions)
         actions.append(vector_actions)
 
-        if args.no_default:
+        if not args.paper_mode:
             kwargs = {}
         else:
             kwargs = colors.get_agent_kwargs(input_file, label, just_color=True)
@@ -103,11 +105,13 @@ def main():
     if len(dir_name) > 0:
         os.makedirs(dir_name, exist_ok=True)
 
+    if args.paper_mode:
+        plt.rcParams.update({'font.size':15})
     if file_name == "":
         file_name = "actions.png"
     plots.action_plot(x_locations, actions, x_label=x_dimension, labels=args.labels,
             log_dir=dir_name, name=file_name, title=args.title, kwargs_list=kwargs_list,
-            vector_parts=vector_parts, action_parts=action_parts)
+            vector_parts=vector_parts, action_parts=action_parts, paper_mode=args.paper_mode)
 
     # Create symlink for convenience.
     if len(dir_name) > 0:

@@ -2,10 +2,11 @@
 # This file requires that the RL_AGENT defined below already exists.
 # This file does not compile source code in anyway.
 
-ALL_INITS=$(ANALYTICAL_INITS) $(OTHER_INITS)
-ANALYTICAL_EXCEPT_SMOOTH_SINE=accelshock gaussian smooth_rare rarefaction shock tophat random
-ANALYTICAL_INITS=smooth_sine $(ANALYTICAL_INITS_EXCEPT_SMOOTH_SINE)
+ANALYTICAL_EXCEPT_SMOOTH_SINE=accelshock gaussian smooth_rare rarefaction shock tophat other_sine
+ANALYTICAL_INITS=smooth_sine $(ANALYTICAL_EXCEPT_SMOOTH_SINE)
 OTHER_INITS=sine line para sawtooth 
+ALL_INITS=$(ANALYTICAL_INITS) $(OTHER_INITS)
+EVAL_INITS=smooth_sine rarefaction accelshock other_sine gaussian tophat
 
 #ORDER=2
 #TEST_DIR=fig_test_order2
@@ -141,7 +142,7 @@ TV_AGENTS=rl weno
 $(FIG_DIR)/tv/%_tv.png: $(TV_SCRIPT) $(foreach agent,$(TV_AGENTS),$(TEST_DIR)/%/$(agent)/progress.csv)
 	python $^ --labels "RL" "WENO" --ycol tv --title "Total Variation" --output $@
 
-l2: $(ANALYTICAL_INITS:%=%_l2)
+l2: $(ANALYTICAL_INITS:%=%_l2) average_l2
 
 L2_SHORTCUTS=$(ANALYTICAL_INITS:%=%_l2)
 $(L2_SHORTCUTS): %_l2: $(FIG_DIR)/l2/%_l2.png
@@ -149,8 +150,16 @@ $(L2_SHORTCUTS): %_l2: $(FIG_DIR)/l2/%_l2.png
 L2_SCRIPT=scripts/combine_time_plots.py
 L2_AGENTS=rl weno
 
+WENO_L2_FILES=$(EVAL_INITS:%=$(TEST_DIR)/%/weno/progress.csv)
+RL_L2_FILES=$(EVAL_INITS:%=$(TEST_DIR)/%/rl/progress.csv)
+average_l2: $(FIG_DIR)/l2/average_l2.png
+$(FIG_DIR)/l2/average_l2.png: $(L2_SCRIPT) $(WENO_L2_FILES) $(RL_L2_FILES)
+	python $< --avg $(WENO_L2_FILES) --avg $(RL_L2_FILES) --labels "WENO" "RL" \
+		--ycol l2 --yscale log --ylabel "L2 Error" --ci-type none --output $@
+
 $(FIG_DIR)/l2/%_l2.png: $(L2_SCRIPT) $(foreach agent,$(L2_AGENTS),$(TEST_DIR)/%/$(agent)/progress.csv)
 	python $^ --labels "RL" "WENO" --ycol l2 --yscale log --ylabel L2 --title "L2 Error" --output $@
+
 
 
 action: action_plot action_comparison
@@ -241,7 +250,7 @@ $(TEST_DIR)/convergence/gaussian_0_1/weno/progress.csv:
 
 conv_long: $(FIG_DIR)/convergence/average.png
 
-CONV_INITS=smooth_sine rarefaction accelshock other_sine gaussian tophat
+CONV_INITS=$(EVAL_INITS)
 WENO_CONV_FILES=$(CONV_INITS:%=$(TEST_DIR)/convergence/%/weno/progress.csv)
 RL_CONV_FILES=$(CONV_INITS:%=$(TEST_DIR)/convergence/%/rl/progress.csv)
 
