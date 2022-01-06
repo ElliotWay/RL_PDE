@@ -365,10 +365,11 @@ def action_plot(x_vals, action_vals, x_label, labels, log_dir, name="actions.png
             axes[-1][action_index].set_xlabel(x_label)
         axes[0][action_index].set_title(action_parts[action_index])
 
-    # And the vector part label on the left column row.
-    for vector_index in range(vector_dimensions):
-        if paper_mode:
-            axes[vector_index][0].set_ylabel(vector_parts[vector_index], labelpad=-8.0)
+    # And the vector part label on the left column row, unless the quantity is a scalar.
+    if vector_dimensions > 1:
+        for vector_index in range(vector_dimensions):
+            axes[vector_index][0].set_ylabel(vector_parts[vector_index], labelpad=4.0,
+                    rotation='horizontal')
 
     # Add the legend in only the top right plot.
     if any([label for label in labels if label != ""]):
