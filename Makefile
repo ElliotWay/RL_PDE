@@ -295,7 +295,7 @@ $(ERROR_COMPARISON_PLOT): $(ERROR_COMPARISON_SCRIPT) \
 		--output $@
 
 RUN_RANDOM_TEST=python run_test.py -y --analytical --output-mode csv --plot-l2 \
-		--order 3 --init-params random=cont
+		--order 3 --init-params random=cont --num-cells random
 
 define RANDOM_WENO_RULE
 $$(TEST_DIR)/error_comparison/weno/$(env)/seed_$(seed)/progress.csv:

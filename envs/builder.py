@@ -2,6 +2,8 @@ import argparse
 import sys
 import re
 
+import scipy.stats
+
 from util.argparse import positive_int, nonnegative_float, positive_float, misc_dict
 from envs.abstract_pde_env import AbstractPDEEnv
 from envs import WENOBurgersEnv, SplitFluxBurgersEnv, FluxBurgersEnv
@@ -15,7 +17,7 @@ def get_env_arg_parser():
     parser = argparse.ArgumentParser(
         add_help=False,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--num-cells', '--num_cells', '--nx', type=positive_int, nargs='+',
+    parser.add_argument('--num-cells', '--num_cells', '--nx', type=str, nargs='+',
                             default=None,
                         help="Number of cells in the grid. A single value e.g."
                         + " '--num-cells 128' will use the same value for each dimension."
@@ -180,6 +182,14 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
             and env_args.time_max is None and env_args.ep_length is None)
     default_time_max = (env_args.time_max is None)
 
+    if env_args.num_cells is not None:
+        if env_args.num_cells[0] == "random":
+            random_size = int(scipy.stats.loguniform(64,1024).rvs())
+            env_args.num_cells = (random_size,)
+            print(f"{pfx}Random grid size is {random_size}.")
+        else:
+            env_args.num_cells = [int(num) for num in env_args.num_cells]
+
     # Some environments have specific defaults.
     if env_args.init_type == 'jsz7':
         assert main_args.env == "weno_burgers_2d"
@@ -202,6 +212,7 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
             env_args.min_value = (0.0,)
         if env_args.max_value is None:
             env_args.max_value = (1.0,)
+
 
     try:
         if env_args.num_cells is not None:
