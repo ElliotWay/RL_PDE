@@ -109,7 +109,14 @@ def add_average_with_ci(ax, x, ys, ci_type="range", avg_type="arithmetic", label
     if avg_type == "arithmetic":
         y_mean = np.mean(y_data, axis=0)
     elif avg_type == "geometric":
-        y_mean = scipy.stats.gmean(y_data, axis=0)
+        data_is_positive = y_data >= 0.0
+        data_is_negative = np.logical_not(data_is_positive)
+        if np.all(data_is_positive):
+            y_mean = scipy.stats.gmean(y_data, axis=0)
+        elif np.all(data_is_negative):
+            y_mean = -scipy.stats.gmean(-y_data, axis=0)
+        else:
+            raise ValueError("Cannot use geometric mean with combined positive and negative data.")
 
     if label is None:
         mean_line = ax.plot(x, y_mean, **plot_kwargs)[0]

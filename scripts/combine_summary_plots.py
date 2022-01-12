@@ -229,7 +229,7 @@ Options are: (default: range)
         ax.set_xmargin(0.0)
         ax.set_xlabel('episodes')
         if args.paper_mode:
-            ax.set_ylabel('reward', labelpad=-8.0)
+            ax.set_ylabel('reward', labelpad=-8.0, y=0.6)
         else:
             ax.set_ylabel('reward')
         ax.grid(True)

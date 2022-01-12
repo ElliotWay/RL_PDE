@@ -24,9 +24,8 @@ EVAL_INITS=smooth_sine rarefaction accelshock other_sine gaussian tophat
 ORDER=3
 TEST_DIR=fig_test_raresched
 FIG_DIR=figures_raresched
-RL_AGENT=log/weno_burgers/full/rare_schedule/model_best.zip
-TRAIN_DIR=log/weno_burgers/full/rare_schedule/
-
+RL_AGENT=log/weno_burgers/full/raresched_sweep/seed_1/model_best.zip
+TRAIN_DIR=log/weno_burgers/full/raresched_sweep/*
 
 RUN_TEST=python run_test.py -y --animate --output-mode csv plot $\
 		--plot-tv --plot-l2 --plot-error --plot-actions --evolution-plot $\
@@ -271,11 +270,8 @@ TRAIN_PLOT_SCRIPT=scripts/combine_summary_plots.py
 # Leaving off the training progress.csv as that should not change. If we're using a newly trained agent,
 # modify TRAIN_DIR instead.
 $(TRAINING_PLOTS): $(TRAIN_PLOT_SCRIPT)
-	python $(TRAIN_PLOT_SCRIPT) $(TRAIN_DIR)/progress.csv \
+	python $(TRAIN_PLOT_SCRIPT) --avg $(TRAIN_DIR)/progress.csv \
 		--std-only --output-dir $(FIG_DIR)/training
-# Do this instead to plot average with confidence interval (if TRAIN_DIR contains a bunch of seeds):
-#python $(TRAIN_PLOT_SCRIPT) --avg $(TRAIN_DIR)/*/progress.csv \
-#--std-only --output-dir $(FIG_DIR)/training
 
 
 ERROR_COMPARISON_PLOT=$(FIG_DIR)/error_comparison/comparison.png
