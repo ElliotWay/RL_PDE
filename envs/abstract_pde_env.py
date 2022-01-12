@@ -747,10 +747,17 @@ class AbstractPDEEnv(gym.Env):
             The L2 error, or list of errors if "all" is passed to timestep.
         """
         if timestep == "all":
-            l2_errors = []
-            for step in range(len(self.state_history)):
-                l2_errors.append(self.compute_l2_error(step))
-            return l2_errors
+            state_history = np.array(self.state_history)
+            solution_state_history = np.array(self.solution.get_state_history())
+            assert state_history.shape == solution_state_history.shape
+            error = solution_state_history - state_history
+
+            combined_cell_size = np.prod(self.grid.cell_size)
+
+            # We want to sum over all but the time axis.
+            sum_axes = tuple(np.arange(len(error.shape))[1:])
+            l2_error = np.sqrt(combined_cell_size * np.sum(np.square(error), axis=sum_axes))
+            return l2_error
 
         else:
             error = self.get_error(timestep=timestep, full=False)
