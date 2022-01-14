@@ -1,6 +1,7 @@
 import os
 import argparse
 import re
+import glob
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -10,6 +11,19 @@ import util.plots as plots
 import util.colors as colors
 from util.misc import soft_link_directories
 from util.argparse import ExtendAction
+
+def auto_label(path):
+    path_components = path.split(os.sep)
+    sanitized = []
+    for part in path_components:
+        # "thing_value" becomes "value"
+        if '_' in part:
+            split_index = part.index('_') + 1
+            sanitized.append(part[split_index:])
+        else:
+        # "other-string" stays "other-string"
+            sanitized.append(part)
+    return ",".join(sanitized)
 
 def main():
     parser = argparse.ArgumentParser(
@@ -31,6 +45,13 @@ The order of arguments controls the order of the legend.""",
             metavar='FILE',
             help="CSV files for which the GEOMETRIC mean with a\n"
                 + "confidence interval will be plotted.")
+    parser.add_argument('--auto', type=str, default=None, nargs='+',
+            help="Try to intelligently combine summary plots.\n"
+                + " If one directory is passed, navigate to find\n"
+                + " progress.csv files. If multiple directories are\n"
+                + " passed, use them to find progress.csv files.\n"
+                + " Overrides --files and --avg. Fills --labels if\n"
+                + " not specified.")
     parser.add_argument('--ci-type', type=str, default='range', help="""\
 The type of confidence interval to plot.
 Options are: (default: range)
@@ -67,6 +88,35 @@ Options are: (default: range)
 
     episodes = []
     intersect_names = None
+
+    if args.auto is not None:
+        if len(args.auto) == 1:
+            glob_pattern = os.path.join(args.auto[0], "**", "progress.csv")
+            auto_files = glob.glob(glob_pattern, recursive=True)
+        else:
+            auto_files = [os.path.join(dir_name, "progress.csv") for dir_name in args.auto]
+        base_path = os.path.commonpath(auto_files) # What a convenient function!
+
+        config_dict = {}
+        config_shortened = {}
+        for filename in auto_files:
+            subdir_path, _ = os.path.split(filename)
+            outer_path, subdir_name = os.path.split(subdir_path)
+            if re.fullmatch("seed_\d+", subdir_name):
+                config_name = os.path.relpath(outer_path, base_path)
+                if config_name in config_dict:
+                    assert type(config_dict[config_name]) is list
+                    config_dict[config_name].append(filename)
+                else:
+                    config_dict[config_name] = [filename]
+            else:
+                config_name = os.path.relpath(subdir_path, base_path)
+                assert config_name not in config_dict
+                config_dict[config_name] = filename
+
+        args.curves = list(config_dict.values())
+        if args.labels is None:
+            args.labels = [auto_label(config_name) for config_name in config_dict]
 
     # Verify that episodes is the same for averaged files and find the intersection of available
     # eval env names.
