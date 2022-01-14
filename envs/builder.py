@@ -2,7 +2,8 @@ import argparse
 import sys
 import re
 
-import scipy.stats
+#import scipy.stats
+import numpy as np
 
 from util.argparse import positive_int, nonnegative_float, positive_float, misc_dict
 from envs.abstract_pde_env import AbstractPDEEnv
@@ -184,7 +185,8 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
 
     if env_args.num_cells is not None:
         if env_args.num_cells[0] == "random":
-            random_size = int(scipy.stats.loguniform(64,1024).rvs())
+            random_size = int(2**np.random.uniform(6,10))
+            #random_size = int(scipy.stats.loguniform(64,1024).rvs())
             env_args.num_cells = (random_size,)
             print(f"{pfx}Random grid size is {random_size}.")
         else:
