@@ -65,7 +65,7 @@ def main():
         if not np.isclose(final_time, final_times[index]):
             raise Exception("Time of final timestep does not match between"
                     + f" {args.x_error[index]} and {filename}"
-                    + f" (final_times[index] vs final_time).")
+                    + f" ({final_times[index]} vs {final_time}).")
 
         final_error = np.array(csv_df['l2'])[-1]
         y_errors.append(final_error)

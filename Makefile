@@ -2,6 +2,8 @@
 # This file requires that the RL_AGENT defined below already exists.
 # This file does not compile source code in anyway.
 
+SHELL=/bin/bash
+
 ANALYTICAL_EXCEPT_SMOOTH_SINE=accelshock gaussian smooth_rare rarefaction shock tophat other_sine
 ANALYTICAL_INITS=smooth_sine $(ANALYTICAL_EXCEPT_SMOOTH_SINE)
 OTHER_INITS=sine line para sawtooth 
@@ -279,19 +281,19 @@ error_comparison: $(ERROR_COMPARISON_PLOT)
 
 ERROR_COMPARISON_SCRIPT=scripts/error_comparison_plot.py
 RANDOM_ENVS=random accelshock_random smooth_rare_random
-NUM_SEEDS=100
+NUM_SEEDS=5
 SEEDS=$(shell seq 1 $(NUM_SEEDS))
-
-$(ERROR_COMPARISON_PLOT): $(ERROR_COMPARISON_SCRIPT) \
-		$(foreach env,$(RANDOM_ENVS),\
+RL_ERROR_FILES=$(foreach env,$(RANDOM_ENVS),\
 			$(foreach seed,$(SEEDS),\
-				$(TEST_DIR)/error_comparison/rl/$(env)/seed_$(seed)/progress.csv)) \
-		$(foreach env,$(RANDOM_ENVS),\
+				$(TEST_DIR)/error_comparison/rl/$(env)/seed_$(seed)/progress.csv))
+WENO_ERROR_FILES=$(foreach env,$(RANDOM_ENVS),\
 			$(foreach seed,$(SEEDS),\
 				$(TEST_DIR)/error_comparison/weno/$(env)/seed_$(seed)/progress.csv))
+
+$(ERROR_COMPARISON_PLOT): $(ERROR_COMPARISON_SCRIPT) $(RL_ERROR_FILES) $(WENO_ERROR_FILES)
 	python $< \
-		--xname WENO --x-error $(TEST_DIR)/error_comparison/weno/*/*/progress.csv \
-		--yname RL --y-error $(TEST_DIR)/error_comparison/rl/*/*/progress.csv \
+		--xname WENO --x-error $(TEST_DIR)/error_comparison/weno/*/seed_{1..$(NUM_SEEDS)}/progress.csv \
+		--yname RL --y-error $(TEST_DIR)/error_comparison/rl/*/seed_{1..$(NUM_SEEDS)}/progress.csv \
 		--output $@
 
 RUN_RANDOM_TEST=python run_test.py -y --analytical --output-mode csv --plot-l2 \
