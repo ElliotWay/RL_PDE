@@ -185,7 +185,9 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
 
     if env_args.num_cells is not None:
         if env_args.num_cells[0] == "random":
-            random_size = int(2**np.random.uniform(6,10))
+            # Build a new random generator to make sure randomness depends on the seed.
+            rng = np.random.RandomState(main_args.seed)
+            random_size = int(2**rng.uniform(6,10))
             #random_size = int(scipy.stats.loguniform(64,1024).rvs())
             env_args.num_cells = (random_size,)
             print(f"{pfx}Random grid size is {random_size}.")

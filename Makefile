@@ -281,7 +281,7 @@ error_comparison: $(ERROR_COMPARISON_PLOT)
 
 ERROR_COMPARISON_SCRIPT=scripts/error_comparison_plot.py
 RANDOM_ENVS=random accelshock_random smooth_rare_random
-NUM_SEEDS=5
+NUM_SEEDS=25
 SEEDS=$(shell seq 1 $(NUM_SEEDS))
 RL_ERROR_FILES=$(foreach env,$(RANDOM_ENVS),\
 			$(foreach seed,$(SEEDS),\

@@ -77,7 +77,7 @@ def main():
     #fig = plt.figure(figsize=(4.8, 4.8))
     fig = plt.figure(figsize=(4.8, 4.8))
     ax = fig.gca()
-    ax.scatter(x_errors, y_errors, marker='.', color='grey')
+    #ax.scatter(x_errors, y_errors, marker='.', color='grey')
 
     # Color points based on how different they are.
     #cmap = LinearSegmentedColormap.from_list("redbluedark", colors=['blue', 'grey', 'red'])
@@ -85,28 +85,28 @@ def main():
             #c=np.log(x_errors / y_errors), cmap=cmap)#, vmin=-1.5, vmax=1.5)
 
     # Color points differently for each type of random environment.
-    #random_envs = {'accelshock_random': 'green',
-                   #'smooth_rare_random': 'red',
-                   #'random': 'blue'}
-    #env_full_names = {'random': 'sine waves', 'accelshock_random': 'shocks',
-                                #'smooth_rare_random': 'rarefactions'}
-    #colors = []
-    #for filename in args.x_error:
-        #invalid = True
-        #for env_name, color in random_envs.items():
-            #if env_name in filename:
-                #colors.append(color)
-                #invalid = False
-                #break
-        #if invalid:
-            #raise Exception()
-    #colors = np.array(colors)
-    #average = (x_errors + y_errors) / 2
-    #sorted_index = np.argsort(average)
-    #sorted_x = x_errors[sorted_index]
-    #sorted_y = y_errors[sorted_index]
-    #sorted_colors = colors[sorted_index]
-    #ax.scatter(sorted_x, sorted_y, marker='.', c=sorted_colors)
+    random_envs = {'accelshock_random': 'green',
+                   'smooth_rare_random': 'red',
+                   'random': 'blue'}
+    env_full_names = {'random': 'sine waves', 'accelshock_random': 'shocks',
+                                'smooth_rare_random': 'rarefactions'}
+    colors = []
+    for filename in args.x_error:
+        invalid = True
+        for env_name, color in random_envs.items():
+            if env_name in filename:
+                colors.append(color)
+                invalid = False
+                break
+        if invalid:
+            raise Exception()
+    colors = np.array(colors)
+    average = (x_errors + y_errors) / 2
+    sorted_index = np.argsort(average)
+    sorted_x = x_errors[sorted_index]
+    sorted_y = y_errors[sorted_index]
+    sorted_colors = colors[sorted_index]
+    ax.scatter(sorted_x, sorted_y, marker='.', c=sorted_colors)
     
     ax = plt.gca()
     ax.set_xscale('log')
