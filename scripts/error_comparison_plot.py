@@ -115,6 +115,9 @@ def main():
     ax.set_yscale('log')
     if args.yname is not None:
         ax.set_ylabel(args.yname)
+
+    ax.locator_params(axis='both', numticks=5)
+
     if args.title is not None:
         ax.set_title(args.title)
 
@@ -123,6 +126,8 @@ def main():
     ymin, ymax = ax.get_ylim()
     limits = [min(xmin, ymin), max(xmax, ymax)]
     ax.plot(limits, limits, color='k', linestyle='-', alpha=0.75)
+
+    # Make plot a square.
     ax.set_aspect('equal')
     ax.set_xlim(limits)
     ax.set_ylim(limits)

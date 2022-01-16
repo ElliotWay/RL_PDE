@@ -790,10 +790,17 @@ class AbstractPDEEnv(gym.Env):
             raise Exception("Cannot use compute_weno_l2_error() if separate"
                     + " WENO solution does not exist.")
         if timestep == "all":
-            l2_errors = []
-            for step in range(len(self.weno_solution.get_state_history())):
-                l2_errors.append(self.compute_weno_l2_error(step))
-            return l2_errors
+            weno_state_history = np.array(self.weno_solution.get_state_history())
+            solution_state_history = np.array(self.solution.get_state_history())
+            assert weno_state_history.shape == solution_state_history.shape
+            error = solution_state_history - weno_state_history
+
+            combined_cell_size = np.prod(self.grid.cell_size)
+
+            # We want to sum over all but the time axis.
+            sum_axes = tuple(np.arange(len(error.shape))[1:])
+            l2_error = np.sqrt(combined_cell_size * np.sum(np.square(error), axis=sum_axes))
+            return l2_error
 
         else:
             error = self.get_weno_error(timestep=timestep, full=False)

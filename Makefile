@@ -26,8 +26,11 @@ EVAL_INITS=smooth_sine rarefaction accelshock other_sine gaussian tophat
 ORDER=3
 TEST_DIR=fig_test_raresched
 FIG_DIR=figures_raresched
-RL_AGENT=log/weno_burgers/full/raresched_sweep/seed_1/model_best.zip
-TRAIN_DIR=log/weno_burgers/full/raresched_sweep/*
+#RL_AGENT=log/weno_burgers/full/raresched_sweep/seed_1/model_best.zip
+#TRAIN_DIR=log/weno_burgers/full/raresched_sweep/*
+RL_AGENT=log/weno_burgers/sweep_hyper3/layers_64_64/learning-rate_0_0003/seed_3/model_best.zip
+TRAIN_DIR=log/weno_burgers/sweep_hyper3/layers_64_64/learning-rate_0_0003/*
+
 
 RUN_TEST=python run_test.py -y --animate --output-mode csv plot $\
 		--plot-tv --plot-l2 --plot-error --plot-actions --evolution-plot $\
@@ -281,7 +284,7 @@ error_comparison: $(ERROR_COMPARISON_PLOT)
 
 ERROR_COMPARISON_SCRIPT=scripts/error_comparison_plot.py
 RANDOM_ENVS=random accelshock_random smooth_rare_random
-NUM_SEEDS=25
+NUM_SEEDS=400
 SEEDS=$(shell seq 1 $(NUM_SEEDS))
 RL_ERROR_FILES=$(foreach env,$(RANDOM_ENVS),\
 			$(foreach seed,$(SEEDS),\
@@ -297,7 +300,8 @@ $(ERROR_COMPARISON_PLOT): $(ERROR_COMPARISON_SCRIPT) $(RL_ERROR_FILES) $(WENO_ER
 		--output $@
 
 RUN_RANDOM_TEST=python run_test.py -y --analytical --output-mode csv --plot-l2 \
-		--order 3 --init-params random=cont --num-cells random
+		--order 3 --init-params random=cont --num-cells random \
+		--rk 4 --time-max 0.2 --variable-timesteps
 
 define RANDOM_WENO_RULE
 $$(TEST_DIR)/error_comparison/weno/$(env)/seed_$(seed)/progress.csv:
