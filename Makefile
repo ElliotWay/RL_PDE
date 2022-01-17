@@ -206,7 +206,8 @@ $(FIG_DIR)/animation/%.gif: $(TEST_DIR)/%/rl/$(END_STATE)
 
 
 conv: convergence
-convergence: conv_short conv_long
+convergence: conv_short conv_long conv_multiple
+
 conv_short: smooth_sine_conv gaussian_conv
 
 CONV_SCRIPT=scripts/combine_convergence_plots.py
@@ -252,9 +253,16 @@ $(TEST_DIR)/convergence/gaussian_0_1/rl/progress.csv:
 $(TEST_DIR)/convergence/gaussian_0_1/weno/progress.csv:
 	$(RUN_CONV) --agent weno --init-type gaussian --C 0.5 --time-max 0.1 --log-dir $(@D)
 
-conv_long: $(FIG_DIR)/convergence/average.png
-
 CONV_INITS=$(EVAL_INITS)
+CONV_AGENTS=weno rl
+CONV_AGENT_LABELS=WENO RL
+
+conv_long: $(CONV_INITS:%=$(FIG_DIR)/convergence/%.png) $(FIG_DIR)/convergence/average.png
+
+$(FIG_DIR)/convergence/%.png: $(CONV_SCRIPT) \
+		$(foreach agent, $(CONV_AGENTS), $(TEST_DIR)/convergence/%/$(agent)/progress.csv)
+	python $^ --labels $(CONV_AGENT_LABELS) --output $@
+
 WENO_CONV_FILES=$(CONV_INITS:%=$(TEST_DIR)/convergence/%/weno/progress.csv)
 RL_CONV_FILES=$(CONV_INITS:%=$(TEST_DIR)/convergence/%/rl/progress.csv)
 
@@ -266,6 +274,24 @@ $(TEST_DIR)/convergence/%/weno/progress.csv:
 	$(RUN_CONV) --agent weno --init-type $* --time-max 0.2 --log-dir $(@D)
 $(TEST_DIR)/convergence/%/rl/progress.csv:
 	$(RUN_CONV) --agent $(RL_AGENT) --init-type $* --time-max 0.2 --log-dir $(@D)
+
+conv_multiple: $(FIG_DIR)/convergence/multiple.png
+
+CONV_MULTI_INITS=smooth_sine rarefaction accelshock
+CONV_MULTI_INIT_LABELS="standing sine" "rarefaction" "accelerating shock"
+CONV_MULTI_FILES=$(foreach init, $(CONV_MULTI_INITS),\
+		 	$(foreach agent, $(CONV_AGENTS),\
+				$(TEST_DIR)/convergence/$(init)/$(agent)/progress.csv))
+CONV_MULTI_LABELS=$(foreach init, $(CONV_MULTI_INIT_LABELS),\
+		 	$(foreach agent, $(CONV_AGENT_LABELS),\
+				"$(agent), $(init)"))
+
+WENO_CONV_MULTI=$(CONV_MULTI_INITS:%=$(TEST_DIR)/convergence/%/weno/progress.csv)
+RL_CONV_MULTI=$(CONV_MULTI_INITS:%=$(TEST_DIR)/convergence/%/rl/progress.csv)
+
+$(FIG_DIR)/convergence/multiple.png: $(CONV_SCRIPT) $(CONV_MULTI_FILES)
+	#python $^ --labels $(CONV_MULTI_LABELS) --output $@
+	python $^ --output $@
 
 
 TRAINING_PLOTS=$(FIG_DIR)/training/loss.png $(FIG_DIR)/training/reward.png $(FIG_DIR)/training/l2.png

@@ -183,7 +183,7 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
             and env_args.time_max is None and env_args.ep_length is None)
     default_time_max = (env_args.time_max is None)
 
-    if env_args.num_cells is not None:
+    if env_args.num_cells is not None and type(env_args.num_cells) is not int:
         if env_args.num_cells[0] == "random":
             # Build a new random generator to make sure randomness depends on the seed.
             rng = np.random.RandomState(main_args.seed)

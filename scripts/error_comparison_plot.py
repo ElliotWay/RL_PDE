@@ -85,8 +85,11 @@ def main():
             #c=np.log(x_errors / y_errors), cmap=cmap)#, vmin=-1.5, vmax=1.5)
 
     # Color points differently for each type of random environment.
-    random_envs = {'accelshock_random': 'green',
-                   'smooth_rare_random': 'red',
+    # Be careful the ordering on these - since 'random' is poorly named,
+    # searching for the init condition in the file name will always match it,
+    # so it needs to be last.
+    random_envs = {'smooth_rare_random': 'red',
+                   'accelshock_random': 'green',
                    'random': 'blue'}
     env_full_names = {'random': 'sine waves', 'accelshock_random': 'shocks',
                                 'smooth_rare_random': 'rarefactions'}
@@ -101,12 +104,22 @@ def main():
         if invalid:
             raise Exception()
     colors = np.array(colors)
+
+    # We plot the points in order of the point's average error so that one color is not entirely on
+    # top of another. If both blue and green dots are in one region, this will make it look like a
+    # random mix of blue and green, instead of whichever was plotted second.
     average = (x_errors + y_errors) / 2
     sorted_index = np.argsort(average)
     sorted_x = x_errors[sorted_index]
     sorted_y = y_errors[sorted_index]
     sorted_colors = colors[sorted_index]
     ax.scatter(sorted_x, sorted_y, marker='.', c=sorted_colors)
+
+    # Create custom legend.
+    handles = [matplotlib.lines.Line2D([], [], linestyle='', marker='o',
+                    color=random_envs[env], label=env_full_names[env])
+                    for env in ['random', 'smooth_rare_random', 'accelshock_random']]
+    ax.legend(handles=handles, loc="lower right")
     
     ax = plt.gca()
     ax.set_xscale('log')
