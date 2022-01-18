@@ -14,9 +14,10 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("directory", type=str,
             help="Directory with sub-directories. Sub-directories eventually contain"
-            + " progress.csv files with 'avg_eval_reward'."
-            + " If directories named seed_N are encountered, an average is taken across them."
-            + " seed_N should be the final sub-directory containing a progress.csv file.")
+            + " progress.csv files with 'avg_eval_reward'.")
+    parser.add_argument("--seed-avg", action='store_true', default=False,
+            help="If directories named seed_N are encountered, an average is taken"
+            + " across them instead of evaluating them separately.")
     parser.add_argument("--script-mode", action='store_true', default=False,
             help="Produce output more suitable to scripts, with full paths"
             + " on separate lines and no additional information.")
@@ -37,7 +38,7 @@ def main():
         other_dirs = []
         for dir_entry in os.scandir(search_dir):
             if dir_entry.is_dir():
-                if re.fullmatch("seed_\d+", dir_entry.name):
+                if args.seed_avg and re.fullmatch("seed_\d+", dir_entry.name):
                     progress_file = os.path.join(dir_entry.path, "progress.csv")
                     seed_files.append(progress_file)
                 else:
