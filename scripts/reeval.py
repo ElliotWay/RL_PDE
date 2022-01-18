@@ -14,6 +14,7 @@ import tensorflow as tf
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 from rl_pde.run import rollout
+from rl_pde.emi import DimensionalAdapterEMI, VectorAdapterEMI
 from envs import builder as env_builder
 from envs import Plottable1DEnv, Plottable2DEnv
 from models import builder as model_builder
@@ -146,7 +147,7 @@ def main():
         arg_dict['e'] = loaded_env_manager
         arg_dict['m'] = loaded_model_manager
     else:
-        raise Exception(f"{filename} not a recognized meta file type.")
+        raise Exception(f"{reeval_args.meta} not a recognized meta file type.")
 
     args = loaded_arg_manager.args
     # Some things refer to logger to access the log_dir, so we need to set it here.
@@ -322,15 +323,48 @@ def main():
             eval_env_names = [re.fullmatch("eval_(.+)_reward", name).group(1)
                         for name in list(output_df) if re.fullmatch("eval_.+_reward", name)]
 
-            if 'avg_train_total_reward' in output_df:
-                reward_filename = os.path.join(summary_plot_dir, "rewards.png")
-                plots.plot_reward_summary(output_df, reward_filename, total_episodes)
-                l2_filename = os.path.join(summary_plot_dir, "l2.png")
-                plots.plot_l2_summary(output_df, l2_filename, total_episodes)
-            reward_filename = os.path.join(summary_plot_dir, "final_rewards.png")
-            plots.plot_reward_summary(output_df, reward_filename, total_episodes, only_eval=True)
-            l2_filename = os.path.join(summary_plot_dir, "final_l2.png")
-            plots.plot_l2_summary(output_df, l2_filename, total_episodes, only_eval=True)
+            try:
+                avg_train_reward = output_df['avg_train_total_reward']
+            except KeyError:
+                avg_train_reward = None
+            try:
+                avg_eval_reward = output_df['avg_eval_total_reward']
+            except KeyError:
+                avg_eval_reward = None
+            eval_rewards = [output_df[f"eval_{env_name}_reward"] for env_name in eval_env_names]
+            
+            if avg_train_reward is not None or avg_eval_reward is not None:
+                main_reward_filename = os.path.join(summary_plot_dir, "rewards.png")
+                plots.plot_reward_summary(main_reward_filename, episodes=episode_numbers,
+                        total_episodes=total_episodes, eval_envs=eval_rewards,
+                        eval_env_names=eval_env_names, avg_train=avg_train_reward,
+                        avg_eval=avg_eval_reward)
+            eval_reward_filename = os.path.join(summary_plot_dir, "final_rewards.png")
+            plots.plot_reward_summary(eval_reward_filename, episodes=episode_numbers,
+                    total_episodes=total_episodes, eval_envs=eval_rewards,
+                    eval_env_names=eval_env_names)
+
+            try:
+                avg_train_l2 = output_df['avg_train_end_l2']
+            except KeyError:
+                avg_train_l2 = None
+            try:
+                avg_eval_l2 = output_df['avg_eval_end_l2']
+            except KeyError:
+                avg_eval_l2 = None
+            eval_l2s = [output_df[f"eval_{env_name}_end_l2"] for env_name in eval_env_names]
+            
+            if avg_train_l2 is not None or avg_eval_l2 is not None:
+                main_l2_filename = os.path.join(summary_plot_dir, "l2.png")
+                plots.plot_l2_summary(main_l2_filename, episodes=episode_numbers,
+                        total_episodes=total_episodes, eval_envs=eval_l2s,
+                        eval_env_names=eval_env_names, avg_train=avg_train_l2,
+                        avg_eval=avg_eval_l2)
+            eval_l2_filename = os.path.join(summary_plot_dir, "final_l2.png")
+            plots.plot_l2_summary(eval_l2_filename, episodes=episode_numbers,
+                    total_episodes=total_episodes, eval_envs=eval_l2s,
+                    eval_env_names=eval_env_names)
+
             print(f"Updated plots in {summary_plot_dir}.")
 
     # Create symlink for convenience.
