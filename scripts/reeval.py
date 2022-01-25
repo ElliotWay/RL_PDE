@@ -14,6 +14,7 @@ import tensorflow as tf
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
 from rl_pde.run import rollout
+from rl_pde.emi import DimensionalAdapterEMI, VectorAdapterEMI
 from envs import builder as env_builder
 from envs import Plottable1DEnv, Plottable2DEnv
 from models import builder as model_builder
@@ -43,7 +44,7 @@ def main():
                         + " The directory of the meta file must contain the other experiment files.")
     parser.add_argument('--help-env', default=False, action='store_true',
                         help="Show the environment parameters not listed here.")
-    parser.add_argument('--env', type=str, default="weno_burgers",
+    parser.add_argument('--env', type=str, default="weno_euler",
                         help="Name of the environment to test on.")
     parser.add_argument('--model', type=str, default="full",
                         help="This model will not be used; however, some environment defaults"
@@ -58,11 +59,11 @@ def main():
     parser.add_argument('--copy', default=False, action='store_true',
                         help="Copy the data of the original experiment files into the new"
                         + " directory.")
-    parser.add_argument('--output-mode', '--output_mode', default=['csv'], nargs='+',
+    parser.add_argument('--output-mode', '--output_mode', default=['plot', 'csv'], nargs='+',
                         help="Which kinds of files to create/update. csv creates/updates"
                         + " progress.csv with the reward and L2 error for each run. plot creates"
                         + " evolution plots for each run. Multiple output modes can be selected.")
-    parser.add_argument('--replot', default=False, action='store_true',
+    parser.add_argument('--replot', default=True, action='store_true',
                         help="If --output-mode csv is used, create/update summary plots using"
                         + " the new data.")
     parser.add_argument('--env-name', default=None, type=str,
@@ -84,6 +85,13 @@ def main():
         sys.exit(0)
 
     old_log_dir, file_name = os.path.split(reeval_args.meta)
+
+    reeval_args.output_dir = os.path.join(os.path.dirname(reeval_args.meta), 'sonic_rarefaction')
+    reeval_args.e.order = 3
+    reeval_args.e.init_type = 'sonic_rarefaction'
+    reeval_args.e.min_value = -0.5
+    reeval_args.e.max_value = 0.5
+    reeval_args.e.time_max = 0.2
 
     if reeval_args.output_dir is not None:
         if reeval_args.append:
@@ -156,7 +164,7 @@ def main():
     # Get a list of all the agents to run.
     old_csv_filename = os.path.join(old_log_dir, 'progress.csv')
     old_csv_df = pd.read_csv(old_csv_filename, comment='#')
-    episode_numbers = old_csv_df['episodes']
+    episode_numbers = old_csv_df['episodes'][100:]  # start from episode 1010 agent
     # Some work needed to check for possible variable number formatting.
     agent_filenames = {num: None for num in episode_numbers}
     for entry in os.scandir(old_log_dir):
@@ -167,10 +175,10 @@ def main():
             number = int(match.group(1))
             assert agent_filenames[number] is None, f"Already have agent for {number}"
             agent_filenames[number] = entry.path
-    missing_filenames = [num for num, name in agent_filenames.items() if name is None]
-    if len(missing_filenames) > 0:
-        raise Exception("Can't reevaluate, missing agents for logged episodes:\n"
-                + str(missing_filenames[:20]))
+    # missing_filenames = [num for num, name in agent_filenames.items() if name is None]
+    # if len(missing_filenames) > 0:
+    #     raise Exception("Can't reevaluate, missing agents for logged episodes:\n"
+    #             + str(missing_filenames[:20]))
 
     # Build the emi and model to load parameters into. (Copied from run_test.py.)
     obs_adjust = numpy_fn(args.obs_scale)
@@ -327,10 +335,23 @@ def main():
                 plots.plot_reward_summary(output_df, reward_filename, total_episodes)
                 l2_filename = os.path.join(summary_plot_dir, "l2.png")
                 plots.plot_l2_summary(output_df, l2_filename, total_episodes)
+
+            episodes = output_df['episodes']
+            if f"eval_{eval_env_names[0]}_reward" in output_df:
+                eval_env_prefixes = [f"eval_{name}" for name in eval_env_names]
+            else:
+                # Old name format for backwards compatability.
+                eval_env_prefixes = [f"eval{num + 1}" for num in range(len(eval_env_names))]
+
             reward_filename = os.path.join(summary_plot_dir, "final_rewards.png")
-            plots.plot_reward_summary(output_df, reward_filename, total_episodes, only_eval=True)
+            plots.plot_reward_summary(reward_filename, episodes, total_episodes,
+                                      eval_envs=[output_df[f"{prefix}_reward"] for prefix in eval_env_prefixes],
+                                      eval_env_names=eval_env_names)
             l2_filename = os.path.join(summary_plot_dir, "final_l2.png")
-            plots.plot_l2_summary(output_df, l2_filename, total_episodes, only_eval=True)
+            plots.plot_l2_summary(l2_filename, episodes, total_episodes,
+                                  eval_envs=[output_df[f"{prefix}_end_l2"] for prefix in eval_env_prefixes],
+                                  eval_env_names=eval_env_names,
+                                  )
             print(f"Updated plots in {summary_plot_dir}.")
 
     # Create symlink for convenience.

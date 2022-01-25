@@ -75,7 +75,7 @@ class Plottable1DEnv(AbstractPDEEnv):
         original_state[1] = state[1] / (state[0] + epsilon)  # v
         original_state[3] = (state[2] - original_state[0] * original_state[1] ** 2 / 2) / (original_state[0] + epsilon)
         original_state[2] = (self.eos_gamma - 1) * (state[2] - original_state[0] * original_state[1] ** 2 / 2)
-        return original_state
+        return original_state[:-1]
 
     def save_state(self,
             timestep=None, location=None,
@@ -262,7 +262,8 @@ class Plottable1DEnv(AbstractPDEEnv):
 
         if 'Euler' in str(self):
             eqn_type = 'euler'
-            ylabels = ['rho', 'u', 'p', 'e']
+            # ylabels = ['rho', 'u', 'p', 'e']
+            ylabels = ['rho', 'u', 'p']
         else:
             eqn_type = 'burgers'
             ylabels = ['u']
@@ -348,7 +349,7 @@ class Plottable1DEnv(AbstractPDEEnv):
                 weno_state_history = self.euler_state_conversion(weno_state_history)
 
         vec_len = len(state_history)
-        fig, ax = plt.subplots(nrows=vec_len, ncols=1, figsize=[6.4, 4.8 * vec_len], dpi=100)
+        fig, ax = plt.subplots(nrows=1, ncols=vec_len, figsize=[3 * vec_len, 3], dpi=300)
         try:
             len(ax)
         except TypeError:
@@ -421,7 +422,7 @@ class Plottable1DEnv(AbstractPDEEnv):
             ax[i].set_xlabel('x')
             ax[i].set_ylabel(f'{ylabels[i]}')
 
-        ax[0].set_title(title)
+        ax[1].set_title(title)
 
         # Restrict y-axis if plotting abs error.
         # Can't have negative, cut off extreme errors.
