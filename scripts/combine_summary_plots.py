@@ -118,6 +118,9 @@ Options are: (default: range)
         if args.labels is None:
             args.labels = [auto_label(config_name) for config_name in config_dict]
 
+    glob_pattern = os.path.join('../log/param_sweep_euler/eval_progress', "**", "progress.csv")
+    auto_files_eval = glob.glob(glob_pattern, recursive=True)
+
     # Verify that episodes is the same for averaged files and find the intersection of available
     # eval env names.
     for curve in args.curves:
@@ -248,16 +251,23 @@ Options are: (default: range)
                         'linestyle': eval_linestyle} for eval_index, _ in enumerate(intersect_names)])
                 reward_and_l2_episodes.extend([episodes[outer_index] for _ in intersect_names])
 
-        if 'loss' in args.parts:
-            loss_labels.append(outer_label)
-            if len(args.curves) == 1:
-                loss_kwargs.append({'color': 'black'})
-            else:
-                loss_kwargs.append({}) # Use matplotlib color cycle.
-            loss_episodes.append(episodes[outer_index])
+        # if 'loss' in args.parts:
+        #     loss_labels.append(outer_label)
+        #     if len(args.curves) == 1:
+        #         loss_kwargs.append({'color': 'black'})
+        #     else:
+        #         loss_kwargs.append({}) # Use matplotlib color cycle.
+        #     loss_episodes.append(episodes[outer_index])
 
     if args.paper_mode:
         plt.rcParams.update({'font.size':15})
+
+    dfs_eval = [pd.read_csv(sub_curve) for sub_curve in auto_files_eval]
+    episodes_eval = dfs_eval[0]['episodes']
+    rewards_eval = [a.iloc[:, 1] for a in dfs_eval]
+    reward_and_l2_episodes[1] = episodes_eval
+    reward_data[1] = rewards_eval
+    reward_and_l2_labels = ['train', 'avg_eval']
 
     if 'reward' in args.parts:
         reward_fig = plots.create_avg_plot(reward_and_l2_episodes, reward_data,
@@ -297,59 +307,59 @@ Options are: (default: range)
         plt.close(reward_fig)
         print(f"Created {reward_filename}.")
 
-    if 'l2' in args.parts:
-        l2_fig = plots.create_avg_plot(reward_and_l2_episodes, l2_data,
-                labels=reward_and_l2_labels, kwargs_list=reward_and_l2_kwargs,
-                ci_type=args.ci_type, avg_type='geometric')
-        ax = l2_fig.gca()
-        if len(l2_data) < 3:
-            if args.paper_mode:
-                bbta=(0.5, 1.11)
-            else:
-                bbta=(0.5, 1.08)
-            ax.legend(loc='upper center', bbox_to_anchor=bbta,
-                    ncol=len(reward_data), fancybox=True, shadow=True,
-                    prop={'size': 'medium'})
-            ax.set_title("L2 Error with WENO at End of Episode", pad=24.0)
-        else:
-            ax.legend(loc="upper right", prop={'size': plots.legend_font_size(len(l2_data))})
-            ax.set_title("L2 Error with WENO at End of Episode")
-        ax.set_xmargin(0.0)
-        ax.set_xlabel('episodes')
-        ax.set_ylabel('L2 error')
-        ax.grid(True)
-        ax.set_yscale('log')
-        plots.crop_early_shift(ax, "normal")
-        l2_fig.tight_layout()
-
-        l2_filename = os.path.join(args.output_dir, 'l2.png')
-        l2_fig.savefig(l2_filename)
-        plt.close(l2_fig)
-        print(f"Created {l2_filename}.")
-
-    if 'loss' in args.parts:
-        loss_fig = plots.create_avg_plot(loss_episodes, loss_data,
-                labels=loss_labels, kwargs_list=loss_kwargs,
-                ci_type=args.ci_type, avg_type='geometric')
-        if len(loss_data) > 1:
-            loss_fig.legend(loc="upper right", prop={'size': plots.legend_font_size(len(loss_data))})
-        ax = loss_fig.gca()
-        ax.set_title("Loss Function")
-        ax.set_xmargin(0.0)
-        ax.set_xlabel('episodes')
-        if args.paper_mode:
-            ax.set_ylabel('loss', labelpad=-8.0)
-        else:
-            ax.set_ylabel('loss')
-        ax.grid(True)
-        ax.set_yscale('log')
-        plots.crop_early_shift(ax, "normal")
-        loss_fig.tight_layout()
-
-        loss_filename = os.path.join(args.output_dir, 'loss.png')
-        loss_fig.savefig(loss_filename)
-        plt.close(loss_fig)
-        print(f"Created {loss_filename}.")
+    # if 'l2' in args.parts:
+    #     l2_fig = plots.create_avg_plot(reward_and_l2_episodes, l2_data,
+    #             labels=reward_and_l2_labels, kwargs_list=reward_and_l2_kwargs,
+    #             ci_type=args.ci_type, avg_type='geometric')
+    #     ax = l2_fig.gca()
+    #     if len(l2_data) < 3:
+    #         if args.paper_mode:
+    #             bbta=(0.5, 1.11)
+    #         else:
+    #             bbta=(0.5, 1.08)
+    #         ax.legend(loc='upper center', bbox_to_anchor=bbta,
+    #                 ncol=len(reward_data), fancybox=True, shadow=True,
+    #                 prop={'size': 'medium'})
+    #         ax.set_title("L2 Error with WENO at End of Episode", pad=24.0)
+    #     else:
+    #         ax.legend(loc="upper right", prop={'size': plots.legend_font_size(len(l2_data))})
+    #         ax.set_title("L2 Error with WENO at End of Episode")
+    #     ax.set_xmargin(0.0)
+    #     ax.set_xlabel('episodes')
+    #     ax.set_ylabel('L2 error')
+    #     ax.grid(True)
+    #     ax.set_yscale('log')
+    #     plots.crop_early_shift(ax, "normal")
+    #     l2_fig.tight_layout()
+    #
+    #     l2_filename = os.path.join(args.output_dir, 'l2.png')
+    #     l2_fig.savefig(l2_filename)
+    #     plt.close(l2_fig)
+    #     print(f"Created {l2_filename}.")
+    #
+    # if 'loss' in args.parts:
+    #     loss_fig = plots.create_avg_plot(loss_episodes, loss_data,
+    #             labels=loss_labels, kwargs_list=loss_kwargs,
+    #             ci_type=args.ci_type, avg_type='geometric')
+    #     if len(loss_data) > 1:
+    #         loss_fig.legend(loc="upper right", prop={'size': plots.legend_font_size(len(loss_data))})
+    #     ax = loss_fig.gca()
+    #     ax.set_title("Loss Function")
+    #     ax.set_xmargin(0.0)
+    #     ax.set_xlabel('episodes')
+    #     if args.paper_mode:
+    #         ax.set_ylabel('loss', labelpad=-8.0)
+    #     else:
+    #         ax.set_ylabel('loss')
+    #     ax.grid(True)
+    #     ax.set_yscale('log')
+    #     plots.crop_early_shift(ax, "normal")
+    #     loss_fig.tight_layout()
+    #
+    #     loss_filename = os.path.join(args.output_dir, 'loss.png')
+    #     loss_fig.savefig(loss_filename)
+    #     plt.close(loss_fig)
+    #     print(f"Created {loss_filename}.")
 
     # Create symlink for convenience.
     if len(args.output_dir) > 0:
