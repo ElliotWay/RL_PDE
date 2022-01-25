@@ -272,10 +272,12 @@ Options are: (default: range)
             ax.legend(loc='upper center', bbox_to_anchor=bbta,
                     ncol=len(reward_data), fancybox=True, shadow=True,
                     prop={'size': 'medium'})
-            ax.set_title("Total Reward per Episode", pad=24.0)
+            if not args.paper_mode:
+                ax.set_title("Total Reward per Episode", pad=24.0)
         else:
             ax.legend(loc="lower right", prop={'size': plots.legend_font_size(len(reward_data))})
-            ax.set_title("Total Reward per Episode")
+            if not args.paper_mode:
+                ax.set_title("Total Reward per Episode")
         ax.set_xmargin(0.0)
         ax.set_xlabel('episodes')
         if args.paper_mode:
@@ -296,6 +298,9 @@ Options are: (default: range)
         reward_fig.savefig(reward_filename)
         plt.close(reward_fig)
         print(f"Created {reward_filename}.")
+        if args.paper_mode:
+            reward_gray_name = os.path.join(args.output_dir, 'reward_gray.png')
+            plots.make_grayscale_copy(reward_filename, reward_gray_name)
 
     if 'l2' in args.parts:
         l2_fig = plots.create_avg_plot(reward_and_l2_episodes, l2_data,
@@ -310,10 +315,12 @@ Options are: (default: range)
             ax.legend(loc='upper center', bbox_to_anchor=bbta,
                     ncol=len(reward_data), fancybox=True, shadow=True,
                     prop={'size': 'medium'})
-            ax.set_title("L2 Error with WENO at End of Episode", pad=24.0)
+            if not args.paper_mode:
+                ax.set_title("L2 Error with WENO at End of Episode", pad=24.0)
         else:
             ax.legend(loc="upper right", prop={'size': plots.legend_font_size(len(l2_data))})
-            ax.set_title("L2 Error with WENO at End of Episode")
+            if not args.paper_mode:
+                ax.set_title("L2 Error with WENO at End of Episode")
         ax.set_xmargin(0.0)
         ax.set_xlabel('episodes')
         ax.set_ylabel('L2 error')
@@ -334,7 +341,8 @@ Options are: (default: range)
         if len(loss_data) > 1:
             loss_fig.legend(loc="upper right", prop={'size': plots.legend_font_size(len(loss_data))})
         ax = loss_fig.gca()
-        ax.set_title("Loss Function")
+        if not args.paper_mode:
+            ax.set_title("Loss Function")
         ax.set_xmargin(0.0)
         ax.set_xlabel('episodes')
         if args.paper_mode:

@@ -380,7 +380,7 @@ def action_plot(x_vals, action_vals, x_label, labels, log_dir, name="actions.png
 
     # Add the legend in only the top right plot.
     if any([label for label in labels if label != ""]):
-        axes[-1][-1].legend(loc="upper right", bbox_to_anchor=(1.03, 1.05),
+        axes[-1][-1].legend(loc="upper right", bbox_to_anchor=(1.05, 1.05),
                 ncol=1, fancybox=True, shadow=True,
                 prop={'size': legend_font_size(len(action_vals))})
 
@@ -785,3 +785,15 @@ def legend_font_size(num_lines):
         return 'x-small'
     else:
         return 'xx-small'
+
+def make_grayscale_copy(color_filename, gray_filename):
+    color_image = plt.imread(color_filename)
+    if len(color_image.shape) == 2:
+        # Already grayscale.
+        gray_image = color_image
+    else:
+        # Remove alpha channel, if it exists.
+        opaque_image = color_image[:,:,:3]
+        # Average color channels to get grayscale.
+        gray_image = np.mean(opaque_image, axis=2)
+    plt.imsave(gray_filename, gray_image, cmap='gray')

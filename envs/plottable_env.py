@@ -764,7 +764,7 @@ class Plottable1DEnv(AbstractPDEEnv):
         else:
             csv_file.write('timestep')
         if self._action_labels is None:
-            action_labels = [f"$w_{i}$" for i in range(action_dimensions)]
+            action_labels = [f"$\omega_{i}$" for i in range(action_dimensions)]
         else:
             action_labels = self._action_labels
         for vector_part_label in ylabels:

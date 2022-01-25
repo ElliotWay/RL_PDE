@@ -70,7 +70,7 @@ def main():
     if len(dir_name) > 0:
         os.makedirs(dir_name, exist_ok=True)
 
-    plt.rcParams.update({'font.size':15})
+    plt.rcParams.update({'font.size':16})
 
     for name in component_names:
         fig, ax = plt.subplots()
@@ -121,14 +121,14 @@ def main():
             ax.set_ylabel(name, labelpad=label_pad)
 
         if not args.no_legend:
-            legend_margin = 0.005
+            legend_margin = -0.03
             legend_params = {'fancybox': True, 'shadow': True}
             # Complex legend, only really works for smooth_sine.
             init_legend = ax.legend(handles=[init_line],
-                    loc='upper right', bbox_to_anchor=(1-legend_margin, 1-legend_margin),
+                    loc='upper right', bbox_to_anchor=(1.027, 1.047),
                     **legend_params)
             half_legend = ax.legend(handles=half_lines,
-                    loc='upper right', bbox_to_anchor=(1-legend_margin, 0.88),
+                    loc='upper right', bbox_to_anchor=(1.027, 0.939),
                     title=f"$t={args.times[0]}$",
                     **legend_params)
 
@@ -136,7 +136,7 @@ def main():
             ax.add_artist(half_legend)
 
             full_legend = ax.legend(handles=full_lines,
-                    loc='lower left', bbox_to_anchor=(legend_margin, legend_margin),
+                    loc='lower left', bbox_to_anchor=(-0.005, 0.03),
                     title=f"$t={args.times[1]}$",
                     **legend_params)
             
@@ -152,6 +152,13 @@ def main():
         fig.savefig(full_name)
         print(f"Saved plot to {full_name}.")
         plt.close(fig)
+
+        if len(component_names) == 1:
+            gray_name = f"{file_short}_gray{file_ext}"
+        else:
+            gray_name = f"{file_short}_{name}_gray{file_ext}"
+        full_gray_name = os.path.join(dir_name, gray_name)
+        plots.make_grayscale_copy(full_name, full_gray_name)
 
     # Create symlink for convenience.
     if len(dir_name) > 0:

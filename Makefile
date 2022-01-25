@@ -24,12 +24,14 @@ EVAL_INITS=smooth_sine rarefaction accelshock other_sine gaussian tophat
 #TRAIN_DIR="log/weno_burgers/full/order3_arch_sweep_again/layers_32_32/"
 
 ORDER=3
-TEST_DIR=fig_test_raresched
-FIG_DIR=figures_raresched
+TEST_DIR=fig_test_128
+FIG_DIR=figures_128
 #RL_AGENT=log/weno_burgers/full/raresched_sweep/seed_1/model_best.zip
 #TRAIN_DIR=log/weno_burgers/full/raresched_sweep/*
-RL_AGENT=log/weno_burgers/sweep_hyper3/layers_64_64/learning-rate_0_0003/seed_3/model_best.zip
-TRAIN_DIR=log/weno_burgers/sweep_hyper3/layers_64_64/learning-rate_0_0003/*
+#RL_AGENT=log/weno_burgers/sweep_hyper3/layers_64_64/learning-rate_0_0003/seed_3/model_best.zip
+#TRAIN_DIR=log/weno_burgers/sweep_hyper3/layers_64_64/learning-rate_0_0003/*
+RL_AGENT=log/weno_burgers/sweep_hyper3/layers_128_128/learning-rate_0_0003/seed_1/model_best.zip
+TRAIN_DIR=log/weno_burgers/sweep_hyper3/layers_128_128/learning-rate_0_0003/seed_{1..6}
 
 
 RUN_TEST=python run_test.py -y --animate --output-mode csv plot $\
@@ -177,7 +179,7 @@ ACTION_AGENTS=rl weno
 
 $(FIG_DIR)/actions/%_actions.png: $(ACTION_PLOT_SCRIPT) \
 		$(foreach agent,$(ACTION_AGENTS),$(TEST_DIR)/%/$(agent)/action_step499.csv)
-	python $^ --labels "RL" "WENO" --title "Actions at t=1.9996" --output $@
+	python $^ --labels "RL" "WENO" --output $@
 
 ACTION_COMP_SHORTCUTS=$(ALL_INITS:%=%_action_comparison)
 action_comparison: $(ACTION_COMP_SHORTCUTS)

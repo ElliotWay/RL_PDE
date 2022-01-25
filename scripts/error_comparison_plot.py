@@ -72,7 +72,8 @@ def main():
     y_errors = np.array(y_errors)
 
     if args.paper_mode:
-        plt.rcParams.update({'font.size':15})
+        #plt.rcParams.update({'font.size':15.7})
+        plt.rcParams.update({'font.size':16.0})
 
     #fig = plt.figure(figsize=(4.8, 4.8))
     fig = plt.figure(figsize=(4.8, 4.8))
@@ -88,9 +89,9 @@ def main():
     # Be careful the ordering on these - since 'random' is poorly named,
     # searching for the init condition in the file name will always match it,
     # so it needs to be last.
-    random_envs = {'smooth_rare_random': 'red',
-                   'accelshock_random': 'green',
-                   'random': 'blue'}
+    random_envs = {'smooth_rare_random': [1.0, 0.0, 0.0],
+                   'accelshock_random': [0.2, 1.0, 0.2],
+                   'random': [0.0, 0.0, 0.4]}
     env_full_names = {'random': 'sine waves', 'accelshock_random': 'shocks',
                                 'smooth_rare_random': 'rarefactions'}
     colors = []
@@ -119,7 +120,12 @@ def main():
     handles = [matplotlib.lines.Line2D([], [], linestyle='', marker='o',
                     color=random_envs[env], label=env_full_names[env])
                     for env in ['random', 'smooth_rare_random', 'accelshock_random']]
-    ax.legend(handles=handles, loc="lower right")
+    if args.paper_mode:
+        #ax.legend(handles=handles, loc="lower right", bbox_to_anchor=(1.01, -0.01),
+        ax.legend(handles=handles, loc="lower right", bbox_to_anchor=(1.05, -0.01),
+                fancybox=True, shadow=True)
+    else:
+        ax.legend(handles=handles, loc="lower right")
     
     ax = plt.gca()
     ax.set_xscale('log')
@@ -153,6 +159,11 @@ def main():
 
     plt.savefig(args.output)
     print(f"Saved plot to {args.output}.")
+
+    if args.paper_mode:
+        name, ext = os.path.splitext(args.output)
+        gray_name = f"{name}_gray{ext}"
+        plots.make_grayscale_copy(args.output, gray_name)
 
     # Create symlink for convenience.
     if len(dir_name) > 0:

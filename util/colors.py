@@ -6,18 +6,21 @@ import matplotlib.colors as colors
 INIT_COLOR = 'black'
 INIT_KWARGS = {'color':INIT_COLOR, 'linestyle':'--'}
 WENO_COLOR = 'tab:blue'
-WENO_KWARGS = {'color':WENO_COLOR, 'linestyle':'', 'marker':'x'}
+WENO_KWARGS = {'color':WENO_COLOR, 'linestyle':'', 'marker':'x',
+        'markersize':1.5*mpl.rcParams['lines.markersize']}
 # Second WENO kwargs for WENO that should be similar but different.
 WENO_COLOR2 = [0.51, 0.68, 0.80]
 # Intentionally use the original WENO color if using WENO_KWARGS2, as the markers will distinguish
 # the difference.
 WENO_KWARGS2 = {'color':WENO_COLOR, 'linestyle':'', 'marker':'+',
-        'markersize':1.5*mpl.rcParams['lines.markersize']}
-RL_COLOR = 'tab:orange'
+        'markersize':2.25*mpl.rcParams['lines.markersize']}
+RL_COLOR = [1.0, 0.67, 0.25]#'tab:orange'
 RL_KWARGS = {'color':RL_COLOR, 'linestyle':'', 'marker':'.'}
 # Second RL kwargs for RL that should be similar but different.
 #RL_COLOR2 = [0.95, 0.70, 0.48]
-RL_COLOR2 = [1.0, 0.67, 0.25]
+#RL_COLOR2 = [1.0, 0.67, 0.25]
+RL_COLOR2 = [0.8, 0.8, 0.4]
+
 RL_KWARGS2= {'color':RL_COLOR2, 'linestyle':'', 'marker':'.'}
 ANALYTICAL_COLOR = 'black' #'tab:pink'
 ANALYTICAL_KWARGS = {'color':ANALYTICAL_COLOR, 'linestyle':'-', 'marker':'', 'linewidth':0.75}
@@ -50,9 +53,9 @@ def get_agent_kwargs(filename, label, just_color=False):
         else:
             return dict(RL_KWARGS)
 
-TRAIN_COLOR = 'tab:gray' #'black'
+TRAIN_COLOR = [0.25,0.25,0.25]#'dimgray'#'tab:gray' #'black'
 # avg eval color is the same as RL color because they both refer to the agent in test environments.
-AVG_EVAL_COLOR = 'tab:orange'
+AVG_EVAL_COLOR = RL_COLOR#'tab:orange'
 EVAL_ENV_COLORS = ['b', 'r', 'g', 'm', 'c', 'y']
 
 WENO_ORDER_COLORS = [None, None, 'g', 'b', 'r', 'y', 'c', 'm']

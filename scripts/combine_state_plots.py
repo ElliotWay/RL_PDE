@@ -32,9 +32,10 @@ def main():
             help="Path to save the combined plot to. If state is a vector,"
             + "the component names will be inserted into the name e.g."
             + "state.png -> [state_rho.png, state_u.png, ...]")
-    parser.add_argument("--no-default", default=False, action='store_true',
-            help="Use matplotlib defaults styles instead of the styles in"
-            + "util/colors.py")
+    parser.add_argument("--paper-mode", dest='paper_mode', default=True, action='store_true',
+            help="Use paper style. Bigger text and specific tweaks.")
+    parser.add_argument("--std-mode", dest='paper_mode', action='store_false',
+            help="Use standard style. Smaller text, but generalize better to arbitrary data.")
 
     args = parser.parse_args()
     assert len(args.output) > 0
@@ -74,7 +75,7 @@ def main():
     for name in component_names:
         fig, ax = plt.subplots()
         for x, state, label, filename in zip(x_data, state_data[name], args.labels, args.files):
-            if args.no_default:
+            if not args.paper_mode:
                 kwargs = {}
             else:
                 kwargs = colors.get_agent_kwargs(filename, label)

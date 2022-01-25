@@ -131,7 +131,8 @@ The order of arguments controls the order of the legend.""",
             if not args.paper_mode:
                 kwargs = {}
             else:
-                kwargs = colors.get_agent_kwargs(file_name, args.labels[index], just_color=True)
+                kwargs = colors.get_agent_kwargs(file_name, args.labels[index], just_color=False)
+                kwargs['linestyle'] = '-'
             kwargs_list.append(kwargs)
         elif curve_type == "avg":
             names = curve_id
@@ -179,7 +180,7 @@ The order of arguments controls the order of the legend.""",
         errors.append(error_list)
 
     if args.paper_mode:
-        plt.rcParams.update({'font.size':15})
+        plt.rcParams.update({'font.size':18})
 
     fig = plots.create_avg_plot(grid_sizes, errors,
             labels=args.labels, kwargs_list=kwargs_list,

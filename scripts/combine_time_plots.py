@@ -137,7 +137,7 @@ def main():
         args.ylabel = args.ycol
 
     if args.paper_mode:
-        plt.rcParams.update({'font.size':15})
+        plt.rcParams.update({'font.size':17})
 
     fig = plots.create_avg_plot(time_values, y_values,
             labels=args.labels, kwargs_list=kwargs_list,

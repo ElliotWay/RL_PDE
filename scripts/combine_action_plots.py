@@ -98,7 +98,7 @@ def main():
         if not args.paper_mode:
             kwargs = {}
         else:
-            kwargs = colors.get_agent_kwargs(input_file, label, just_color=True)
+            kwargs = colors.get_agent_kwargs(input_file, label, just_color=False)
         kwargs_list.append(kwargs)
 
     dir_name, file_name = os.path.split(args.output)
@@ -106,7 +106,7 @@ def main():
         os.makedirs(dir_name, exist_ok=True)
 
     if args.paper_mode:
-        plt.rcParams.update({'font.size':15})
+        plt.rcParams.update({'font.size':17})
     if file_name == "":
         file_name = "actions.png"
     plots.action_plot(x_locations, actions, x_label=x_dimension, labels=args.labels,
