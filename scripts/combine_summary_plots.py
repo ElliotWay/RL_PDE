@@ -61,7 +61,7 @@ Options are: (default: range)
   Nperc: [Nth percentile,100-Nth], N in [0, 50]""")
     parser.add_argument("--labels", type=str, nargs='+', default=None,
             help="Labels for each file/average. Required for more\nthan one file/average.")
-    parser.add_argument("--parts", type=str, nargs='+', default=['loss', 'reward', 'l2'],
+    parser.add_argument("--parts", type=str, nargs='+', default=['reward'],
             help="Which parts of the summary to combine. All of them by default.")
     parser.add_argument("--eval-only", default=False, action='store_true',
             help="For reward and L2 plots, only plot the eval envs,\n"
@@ -191,7 +191,7 @@ Options are: (default: range)
             dfs = [pd.read_csv(sub_curve) for sub_curve in curve]
             if not args.eval_only:
                 if 'reward' in args.parts:
-                    reward_data.append([df['avg_train_total_reward'] for df in dfs])
+                    reward_data.append([df['eval_sod_reward'] for df in dfs])
                 if 'l2' in args.parts:
                     l2_data.append([df['avg_train_end_l2'] for df in dfs])
                 if len(intersect_names) > 1 or args.std_only:
@@ -264,7 +264,10 @@ Options are: (default: range)
 
     dfs_eval = [pd.read_csv(sub_curve) for sub_curve in auto_files_eval]
     episodes_eval = dfs_eval[0]['episodes']
-    rewards_eval = [a.iloc[:, 1] for a in dfs_eval]
+    rewards_eval_all_inits = [a.iloc[:, 1] for a in dfs_eval]
+    rewards_eval = []
+    for i in range(len(rewards_eval_all_inits) // 3):
+        rewards_eval.append(sum(rewards_eval_all_inits[3*i: 3*i+3])/3)
     reward_and_l2_episodes[1] = episodes_eval
     reward_data[1] = rewards_eval
     reward_and_l2_labels = ['train', 'avg_eval']
