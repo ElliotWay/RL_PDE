@@ -824,7 +824,7 @@ class Plottable1DEnv(AbstractPDEEnv):
             action_dimensions = np.prod(list(self.action_space.shape)[2:])
             vector_dimensions = self.action_space.shape[0]
             eqn_type = 'euler'
-            ylabels = [r'$\rho$', '$u$', '$p$', '$e$']
+            ylabels = ['mass', 'momentum', 'energy']
         else:  # Burgers
             action_dimensions = np.prod(list(self.action_space.shape)[1:])
             vector_dimensions = 1
@@ -919,7 +919,7 @@ class Plottable1DEnv(AbstractPDEEnv):
                 ax.set_title(self._action_labels[id])
 
         for id, ax in enumerate(axes[:, 0]):
-            ax.set_ylabel(f"{ylabels[id]} actions")
+            ax.set_ylabel(f"{ylabels[id]}")
 
         fig.tight_layout()
 
