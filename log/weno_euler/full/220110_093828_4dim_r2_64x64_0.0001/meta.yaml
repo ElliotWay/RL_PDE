@@ -1,0 +1,66 @@
+# log\weno_euler\full\220110_093828\meta.yaml
+# Experiment Parameter File
+# time started: 2022/01/10, 09:38:28 AM (Eastern Standard Time), Mon
+# time finished: 2022/01/14, 12:55:52 PM (Eastern Standard Time), Fri
+# status: finished cleanly
+# initiated by user: UNKNOWN (run on Windows machine)
+# git commit hash: 6f4b7b6278895dc5a9b84292ae1d59cdd6030278
+# git status: uncommited changes
+# git branch: euler_4_dim_rewards
+# pid: 19140
+
+help_env: false
+help_model: false
+model: full
+env: weno_euler # (Explicit)
+emi: batch-global
+obs_scale: z_score_last
+action_scale: softmax
+eval_env: same # (Explicit)
+log_dir: log\weno_euler\full\220110_093828
+total_episodes: 10000 # (Explicit)
+log_freq: 10
+n_best_models: 5
+seed: 1
+repeat: null
+y: false
+n: false
+
+e: # Environment Parameters
+  num_cells: 128 # (Explicit)
+  min_value: -0.5
+  max_value: 0.5
+  order: 2 # (Explicit)
+  state_order: null
+  fixed_timesteps: true
+  timestep: 0.0001 # (Explicit)
+  C: null
+  time_max: 0.1
+  ep_length: 1000
+  init_type: sod # (Explicit)
+  schedule: null
+  boundary: null
+  rk: euler
+  solution_rk: null
+  init_params: null
+  nu: 0.0
+  srca: 0.0
+  analytical: false
+  precise_order: null
+  precise_scale: 1
+  reward_adjustment: 1000.0
+  reward_mode: one-step_adjacent_avg_arctansquash
+  memoize: false
+  follow_solution: false
+  
+m: # Model Parameters
+  layers: # (Explicit)
+  - 64
+  - 64
+  activation: relu
+  optimizer: adam
+  momentum: null
+  layer_norm: false
+  learning_rate: 0.0003
+  batch_size: 1 # (Explicit)
+  
