@@ -209,7 +209,7 @@ class WENOEulerEnv(AbstractEulerEnv, Plottable1DEnv):
         elif not isinstance(self.solution, WENOSolution):
             self.solution.set_record_actions("weno")
 
-        self._action_labels = ["$w^{}_{}$".format(sign, num) for sign in ['+', '-']
+        self._action_labels = ["$\omega^{}_{}$".format(sign, num) for sign in ['+', '-']
                                for num in range(1, self.weno_order + 1)]
 
     def _prep_state(self):

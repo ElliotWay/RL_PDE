@@ -263,7 +263,7 @@ class Plottable1DEnv(AbstractPDEEnv):
         if 'Euler' in str(self):
             eqn_type = 'euler'
             # ylabels = ['rho', 'u', 'p', 'e']
-            ylabels = ['rho', 'u', 'p']
+            ylabels = [r'$\rho$', '$u$', '$p$']
         else:
             eqn_type = 'burgers'
             ylabels = ['u']
@@ -422,7 +422,7 @@ class Plottable1DEnv(AbstractPDEEnv):
             ax[i].set_xlabel('x')
             ax[i].set_ylabel(f'{ylabels[i]}')
 
-        ax[1].set_title(title)
+        # ax[1].set_title(title)
 
         # Restrict y-axis if plotting abs error.
         # Can't have negative, cut off extreme errors.
@@ -716,7 +716,7 @@ class Plottable1DEnv(AbstractPDEEnv):
             action_dimensions = np.prod(list(self.action_space.shape)[2:])
             vector_dimensions = self.action_space.shape[0]
             eqn_type = 'euler'
-            ylabels = ['rho', 'u', 'p', 'e']
+            ylabels = [r'$\rho$', '$u$', '$p$', '$e$']
         else:  # Burgers
             action_dimensions = np.prod(list(self.action_space.shape)[1:])
             vector_dimensions = 1
@@ -765,7 +765,7 @@ class Plottable1DEnv(AbstractPDEEnv):
         else:
             csv_file.write('timestep')
         if self._action_labels is None:
-            action_labels = [f"$w_{i}$" for i in range(action_dimensions)]
+            action_labels = [f"$\omega_{i}$" for i in range(action_dimensions)]
         else:
             action_labels = self._action_labels
         for vector_part_label in ylabels:
@@ -824,7 +824,7 @@ class Plottable1DEnv(AbstractPDEEnv):
             action_dimensions = np.prod(list(self.action_space.shape)[2:])
             vector_dimensions = self.action_space.shape[0]
             eqn_type = 'euler'
-            ylabels = ['rho', 'u', 'p', 'e']
+            ylabels = [r'$\rho$', '$u$', '$p$', '$e$']
         else:  # Burgers
             action_dimensions = np.prod(list(self.action_space.shape)[1:])
             vector_dimensions = 1
@@ -878,11 +878,11 @@ class Plottable1DEnv(AbstractPDEEnv):
             if weno_action_history is not None:
                 weno_action_history = weno_action_history[timestep, :, :, :].transpose()
 
-            if title is None:
-                actual_time = self.timestep_history[timestep]
-                fig.suptitle("actions at t = {:.4} (step {})".format(actual_time, timestep))
-            else:
-                fig.suptitle(title)
+            # if title is None:
+            #     actual_time = self.timestep_history[timestep]
+            #     fig.suptitle("actions at t = {:.4} (step {})".format(actual_time, timestep))
+            # else:
+            #     fig.suptitle(title)
 
         if location is None:
             x_values = self.grid.inter_x[self.ng:-self.ng]
