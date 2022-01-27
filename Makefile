@@ -311,7 +311,8 @@ $(TRAINING_PLOTS): $(TRAIN_PLOT_SCRIPT)
 
 $(FIG_DIR)/supervised/reward.png:
 	python scripts/make_supervised_summary.py \
-		--avg $(TRAIN_DIR)/progress.csv --avg supervised_reeval/analytical_false/*/progress.csv \
+		--avg burgers_train_reeval/*/progress.csv \
+		--avg supervised_reeval/analytical_false/*/progress.csv \
 		--avg supervised_reeval/analytical_true/*/progress.csv \
 		--labels "Markovian" "fixed WENO" "fixed True" --std-only --parts reward \
 		--output-dir $(FIG_DIR)/supervised
