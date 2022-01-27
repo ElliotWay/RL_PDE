@@ -300,7 +300,7 @@ $(FIG_DIR)/convergence/multiple.png: $(CONV_SCRIPT) $(CONV_MULTI_FILES)
 
 
 TRAINING_PLOTS=$(FIG_DIR)/training/loss.png $(FIG_DIR)/training/reward.png $(FIG_DIR)/training/l2.png
-training: $(TRAINING_PLOTS)
+training: $(TRAINING_PLOTS) $(FIG_DIR)/supervised/reward.png
 TRAIN_PLOT_SCRIPT=scripts/combine_summary_plots.py
 
 # Leaving off the training progress.csv as that should not change. If we're using a newly trained agent,
@@ -308,6 +308,13 @@ TRAIN_PLOT_SCRIPT=scripts/combine_summary_plots.py
 $(TRAINING_PLOTS): $(TRAIN_PLOT_SCRIPT)
 	python $(TRAIN_PLOT_SCRIPT) --avg $(TRAIN_DIR)/progress.csv \
 		--std-only --output-dir $(FIG_DIR)/training
+
+$(FIG_DIR)/supervised/reward.png:
+	python scripts/make_supervised_summary.py \
+		--avg $(TRAIN_DIR)/progress.csv --avg supervised_reeval/analytical_false/*/progress.csv \
+		--avg supervised_reeval/analytical_true/*/progress.csv \
+		--labels "Markovian" "fixed WENO" "fixed True" --std-only --parts reward \
+		--output-dir $(FIG_DIR)/supervised
 
 
 ERROR_COMPARISON_PLOT=$(FIG_DIR)/error_comparison/comparison.png
