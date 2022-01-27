@@ -165,7 +165,7 @@ $(FIG_DIR)/l2/average_l2.png: $(L2_SCRIPT) $(WENO_L2_FILES) $(RL_L2_FILES)
 		--ycol l2 --yscale log --ylabel "L2 Error" --ci-type none --output $@
 
 $(FIG_DIR)/l2/%_l2.png: $(L2_SCRIPT) $(foreach agent,$(L2_AGENTS),$(TEST_DIR)/%/$(agent)/progress.csv)
-	python $^ --labels "RL" "WENO" --ycol l2 --yscale log --ylabel L2 --title "L2 Error" --output $@
+	python $^ --labels "RL" "WENO" --ycol l2 --yscale log --ylabel L2 --output $@
 
 
 
