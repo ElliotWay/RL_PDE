@@ -215,7 +215,9 @@ conv_short: smooth_sine_conv gaussian_conv
 CONV_SCRIPT=scripts/combine_convergence_plots.py
 CONV_AGENTS=rl weno
 
-RUN_CONV=python run_test.py --convergence-plot -y --order $(ORDER) --rk rk4 --variable-timesteps
+CONV_SIZES=64 128 256 512 1024
+
+RUN_CONV=python run_test.py --convergence-plot $(CONV_SIZES) -y --order $(ORDER) --rk rk4 --variable-timesteps
 
 smooth_sine_conv: $(FIG_DIR)/convergence/smooth_sine_0_05.png $(FIG_DIR)/convergence/smooth_sine_0_1.png
 $(FIG_DIR)/convergence/smooth_sine_0_05.png: \
@@ -263,7 +265,7 @@ conv_long: $(CONV_INITS:%=$(FIG_DIR)/convergence/%.png) $(FIG_DIR)/convergence/a
 
 $(FIG_DIR)/convergence/%.png: $(CONV_SCRIPT) \
 		$(foreach agent, $(CONV_AGENTS), $(TEST_DIR)/convergence/%/$(agent)/progress.csv)
-	python $^ --labels $(CONV_AGENT_LABELS) --output $@
+	python $^ --labels $(CONV_AGENT_LABELS) --output $@ --output-mode plot csv
 
 WENO_CONV_FILES=$(CONV_INITS:%=$(TEST_DIR)/convergence/%/weno/progress.csv)
 RL_CONV_FILES=$(CONV_INITS:%=$(TEST_DIR)/convergence/%/rl/progress.csv)

@@ -98,7 +98,7 @@ def main():
         if not args.paper_mode:
             kwargs = {}
         else:
-            kwargs = colors.get_agent_kwargs(input_file, label, just_color=False)
+            kwargs = colors.get_agent_kwargs(input_file, label, just_color=True)
         kwargs_list.append(kwargs)
 
     dir_name, file_name = os.path.split(args.output)

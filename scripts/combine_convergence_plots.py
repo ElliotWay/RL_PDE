@@ -93,6 +93,9 @@ The order of arguments controls the order of the legend.""",
             help="Path to save the combined plot to. If an existing\n"
             +    "directory is passed, the file will be saved to\n"
             +    "'convergence.png' in that directory.")
+    parser.add_argument("--output-mode", type=str, nargs='+', default=['plot'],
+            help="If you want to create a combined CSV file, this\n"
+            + " script can do that too. Use --output-mode csv.")
     parser.add_argument("--paper-mode", dest='paper_mode', default=True, action='store_true',
             help="Use paper style. Bigger text and specific tweaks.")
     parser.add_argument("--std-mode", dest='paper_mode', action='store_false',
@@ -179,44 +182,81 @@ The order of arguments controls the order of the legend.""",
         grid_sizes.append(sizes)
         errors.append(error_list)
 
-    if args.paper_mode:
-        plt.rcParams.update({'font.size':18})
-
-    fig = plots.create_avg_plot(grid_sizes, errors,
-            labels=args.labels, kwargs_list=kwargs_list,
-            ci_type=args.ci_type, avg_type='geometric')
-    ax = fig.gca()
-    if create_legend:
-        if args.paper_mode:
-            bbta = (1.0, 1.0)
-        else:
-            bbta = (1.03, 1.05)
-        ax.legend(loc="upper right", bbox_to_anchor=bbta,
-                ncol=1, fancybox=True, shadow=True,
-                prop={'size': plots.legend_font_size(len(grid_sizes))})
-    if args.paper_mode:
-        ax.set_xlabel("grid size", labelpad=-8.0)
-    else:
-        ax.set_xlabel("grid size")
-    ax.set_xscale('log')
-    #ax.set_xticks(grid_sizes) # Use the actual grid sizes as ticks instead of powers of 10.
-    ax.set_ylabel("L2 error")
-    ax.set_yscale('log')
-    if args.title is not None:
-        ax.set_title(args.title)
-    plt.tight_layout()
-
     dir_name, file_name = os.path.split(args.output)
     if len(dir_name) > 0:
         os.makedirs(dir_name, exist_ok=True)
 
-    if file_name == "":
-        file_name = "convergence.png"
-        args.output = os.path.join(dir_name, file_name)
+    if 'plot' in args.output_mode:
+        if args.paper_mode:
+            plt.rcParams.update({'font.size':18})
 
-    plt.savefig(args.output)
-    print(f"Saved plot to {args.output}.")
-    plt.close()
+        fig = plots.create_avg_plot(grid_sizes, errors,
+                labels=args.labels, kwargs_list=kwargs_list,
+                ci_type=args.ci_type, avg_type='geometric')
+        ax = fig.gca()
+        if create_legend:
+            if args.paper_mode:
+                bbta = (1.0, 1.0)
+            else:
+                bbta = (1.03, 1.05)
+            ax.legend(loc="upper right", bbox_to_anchor=bbta,
+                    ncol=1, fancybox=True, shadow=True,
+                    prop={'size': plots.legend_font_size(len(grid_sizes))})
+        if args.paper_mode:
+            ax.set_xlabel("grid size", labelpad=-8.0)
+        else:
+            ax.set_xlabel("grid size")
+        ax.set_xscale('log')
+        #ax.set_xticks(grid_sizes) # Use the actual grid sizes as ticks instead of powers of 10.
+        ax.set_ylabel("L2 error")
+        ax.set_yscale('log')
+        if args.title is not None:
+            ax.set_title(args.title)
+        plt.tight_layout()
+
+        if file_name == "":
+            file_name = "convergence.png"
+            plot_file_name = os.path.join(dir_name, file_name)
+        else:
+            name, ext = os.path.splitext(file_name)
+            if ext == '.csv':
+                new_file_name = f"{name}.png"
+            else:
+                new_file_name = file_name
+            plot_file_name = os.path.join(dir_name, new_file_name)
+
+        plt.savefig(plot_file_name)
+        print(f"Saved plot to {plot_file_name}.")
+        plt.close()
+
+    if 'csv' in args.output_mode:
+        if args.labels is None or len(args.labels[0]) == 0:
+            raise Exception("Need to specify labels to save combined CSV data.")
+
+        # Check that all grid sizes are the same.
+        first_grid_sizes = grid_sizes[0]
+        for sizes in grid_sizes[1:]:
+            if any(sizes != first_grid_sizes):
+                raise Exception("Combining into CSV data only works if all grid sizes"
+                        + " are the same, but you have both\n"
+                        + f"{first_grid_sizes}\nand\n{sizes}")
+
+        csv_dict = {'nx':first_grid_sizes}
+        for label, error_list in zip(args.labels, errors):
+            csv_dict[label] = error_list
+        combined_df = pd.DataFrame(csv_dict)
+
+        if file_name == "":
+            file_name = "convergence.csv"
+            csv_file_name = os.path.join(dir_name, file_name)
+        else:
+            name, ext = os.path.splitext(file_name)
+            if ext != '.csv':
+                new_file_name = f"{name}.csv"
+            csv_file_name = os.path.join(dir_name, new_file_name)
+
+        combined_df.to_csv(csv_file_name, index=False)
+        print(f"Saved combined data to {csv_file_name}.")
 
     # Create symlink for convenience.
     if len(dir_name) > 0:

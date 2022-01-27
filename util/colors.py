@@ -15,13 +15,16 @@ WENO_COLOR2 = [0.51, 0.68, 0.80]
 WENO_KWARGS2 = {'color':WENO_COLOR, 'linestyle':'', 'marker':'+',
         'markersize':2.25*mpl.rcParams['lines.markersize']}
 RL_COLOR = [1.0, 0.67, 0.25]#'tab:orange'
-RL_KWARGS = {'color':RL_COLOR, 'linestyle':'', 'marker':'.'}
+RL_KWARGS = {'color':RL_COLOR, 'linestyle':'', 'marker':'o'}
 # Second RL kwargs for RL that should be similar but different.
 #RL_COLOR2 = [0.95, 0.70, 0.48]
 #RL_COLOR2 = [1.0, 0.67, 0.25]
-RL_COLOR2 = [0.8, 0.8, 0.4]
+#RL_COLOR2 = [0.8, 0.8, 0.4]
+#RL_COLOR2 = [154/255, 113/255, 151/255]
+#RL_COLOR2 = [168/255, 87/255, 126/255]
+RL_COLOR2 = [143/255, 37/255, 12/255]
 
-RL_KWARGS2= {'color':RL_COLOR2, 'linestyle':'', 'marker':'.'}
+RL_KWARGS2= {'color':RL_COLOR2, 'linestyle':'', 'marker':'o'}
 ANALYTICAL_COLOR = 'black' #'tab:pink'
 ANALYTICAL_KWARGS = {'color':ANALYTICAL_COLOR, 'linestyle':'-', 'marker':'', 'linewidth':0.75}
 

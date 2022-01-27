@@ -80,14 +80,6 @@ def main():
         half_lines = []
         full_lines = []
         
-        if args.true:
-            half_df, full_df = true_dfs
-            kwargs = colors.ANALYTICAL_KWARGS
-            line = ax.plot(half_df['x'], half_df[name], label="true solution", **kwargs)[0]
-            half_lines.append(line)
-            line = ax.plot(full_df['x'], full_df[name], label="true solution", **kwargs)[0]
-            full_lines.append(line)
-
         if args.weno:
             half_df, full_df = weno_dfs
             line = ax.plot(half_df['x'], half_df[name], label="WENO solution",
@@ -105,6 +97,15 @@ def main():
             line = ax.plot(full_df['x'], full_df[name], label="RL solution",
                                 **colors.RL_KWARGS)[0]
             full_lines.append(line)
+
+        if args.true:
+            half_df, full_df = true_dfs
+            kwargs = colors.ANALYTICAL_KWARGS
+            line = ax.plot(half_df['x'], half_df[name], label="true solution", **kwargs)[0]
+            half_lines.append(line)
+            line = ax.plot(full_df['x'], full_df[name], label="true solution", **kwargs)[0]
+            full_lines.append(line)
+
 
         label_pad = -8.0 # Default is 4.0.
         ax.set_xlabel('$x$', labelpad=label_pad)
