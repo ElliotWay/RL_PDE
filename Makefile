@@ -31,7 +31,8 @@ FIG_DIR=figures_128
 #RL_AGENT=log/weno_burgers/sweep_hyper3/layers_64_64/learning-rate_0_0003/seed_3/model_best.zip
 #TRAIN_DIR=log/weno_burgers/sweep_hyper3/layers_64_64/learning-rate_0_0003/*
 RL_AGENT=log/weno_burgers/sweep_hyper3/layers_128_128/learning-rate_0_0003/seed_1/model_best.zip
-TRAIN_DIR=log/weno_burgers/sweep_hyper3/layers_128_128/learning-rate_0_0003/seed_{1..6}
+#TRAIN_DIR=log/weno_burgers/sweep_hyper3/layers_128_128/learning-rate_0_0003/seed_{1..6}
+TRAIN_DIR=burgers_reeval/seed_{1..6}
 
 
 RUN_TEST=python run_test.py -y --animate --output-mode csv plot $\
