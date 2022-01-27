@@ -282,9 +282,14 @@ def main():
                 if os.path.exists(output_filename):
                     num_rows = len(output_df.index)
                     existing_df = pd.read_csv(output_filename, comment='#')
+                    old_rows = len(existing_df)
                     output_df = output_df.merge(existing_df)
                     if len(output_df.index) != num_rows:
-                        raise Exception("Problem merging old csv file with new one.")
+                        raise Exception("Something went wrong merging the old csv file"
+                                + " with the new one. The original experiment file has"
+                                + f" {num_rows} rows, the csv file in the target directory"
+                                + f" has {old_rows} rows, and the merged filed has"
+                                + f" {len(output_df.index)} rows.")
 
         else:
             output_filename = os.path.join(new_log_dir, "progress.csv")

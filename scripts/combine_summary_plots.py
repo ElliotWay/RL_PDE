@@ -140,7 +140,8 @@ Options are: (default: range)
             for sub_curve in curve[1:]:
                 csv_df = pd.read_csv(sub_curve)
                 other_episodes = csv_df['episodes']
-                if any(first_episodes != other_episodes):
+                if (len(first_episodes) != len(other_episodes)
+                        or any(first_episodes != other_episodes)):
                     raise Exception(f"Episodes in {curve[0]} do not match episodes in"
                             + f" {sub_curve}.")
                 other_names = [re.match("eval_(.*)_end_l2", name).group(1)
