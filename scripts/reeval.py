@@ -21,6 +21,7 @@ from models import builder as model_builder
 from util import metadata
 from util import sb_logger as logger
 from util import plots
+from util import filelock
 from util.function_dict import numpy_fn
 from util.param_manager import ArgTreeManager
 from util.lookup import get_model_class, get_emi_class, get_model_dims
@@ -156,7 +157,7 @@ def main():
 
     # Get a list of all the agents to run.
     old_csv_filename = os.path.join(old_log_dir, 'progress.csv')
-    old_csv_df = pd.read_csv(old_csv_filename, comment='#')
+    old_csv_df = pd.read_csv(old_csv_filename, comment='#', float_precision='round_trip')
     episode_numbers = old_csv_df['episodes']
     # Some work needed to check for possible variable number formatting.
     agent_filenames = {num: None for num in episode_numbers}
@@ -242,84 +243,128 @@ def main():
             print('.', end='', flush=True)
 
     if 'csv' in reeval_args.output_mode:
-        if reeval_args.append or reeval_args.copy:
-            output_df = old_csv_df
-
-            # If the existing column names use the old numeric format, update them with the newer
-            # descriptive format, as the new entry will definitely have the new format.
-            column_names = list(output_df)
-            old_names = [name for name in column_names
-                            if re.fullmatch("eval\d+_(reward|end_l2)", name)]
-            if old_names:
-                if args.env == "weno_burgers":
-                    eval_names = {'1': 'smooth_sine', '2': 'smooth_rare', '3': 'accelshock'}
-                elif args.env == "weno_burgers_2d":
-                    eval_names = {'1': 'gaussian', '2': '1d-smooth_sine-x', '3': 'jsz7'}
-                elif args.env == "weno_euler":
-                    eval_names = {'1': 'sod'}
-                numbers = {re.match("eval(\d+)_", name).group(1) for name in old_names}
-                replacement_dict = {}
-                for name in old_names:
-                    match = re.fullmatch("eval(\d+)_(reward|end_l2)", name)
-                    try:
-                        eval_name = eval_names[match.group(1)]
-                    except KeyError:
-                        eval_name = input(f"The name of eval env {match.group(1)} is unknown."
-                                + " Enter the name here: ")
-                        if eval_name in eval_names.values():
-                            raise Exception(f"{eval_name} is already associated.")
-                        eval_names[match.group(1)] = eval_name
-                    new_name = f"eval_{eval_name}_{match.group(2)}"
-                    replacement_dict[name] = new_name
-                output_df.rename(columns=replacement_dict, inplace=True)
-
-            if reeval_args.append:
-                output_filename = old_csv_filename
-            elif reeval_args.copy:
-                output_filename = os.path.join(new_log_dir, "progress.csv")
-                # If copying the original data but the target file is non-empty, add any columns
-                # from the target file that aren't in the original data.
-                if os.path.exists(output_filename):
-                    num_rows = len(output_df.index)
-                    existing_df = pd.read_csv(output_filename, comment='#')
-                    old_rows = len(existing_df)
-                    output_df = output_df.merge(existing_df)
-                    if len(output_df.index) != num_rows:
-                        raise Exception("Something went wrong merging the old csv file"
-                                + " with the new one. The original experiment file has"
-                                + f" {num_rows} rows, the csv file in the target directory"
-                                + f" has {old_rows} rows, and the merged filed has"
-                                + f" {len(output_df.index)} rows.")
-
+        if reeval_args.append:
+            output_filename = old_csv_filename
         else:
             output_filename = os.path.join(new_log_dir, "progress.csv")
-            if os.path.exists(output_filename):
-                output_df = pd.read_csv(output_filename, comment='#')
-            else:
-                output_df = pd.DataFrame({'episodes': episode_numbers})
+        # We are plausibly running this from multiple processes; e.g. re-evaluating several environments
+        # at once. In that case, we need to handle updating the progress.csv file carefully.
+        with filelock.exclusive_open(output_filename, 'a+') as output_file:
+            
+            if reeval_args.append or reeval_args.copy:
+                if reeval_args.append:
+                    output_file.seek(0)
+                    output_df = pd.read_csv(output_file, comment='#', float_precision='round_trip')
+                else: # reeval_args.copy
+                    output_df = old_csv_df
 
-        env_name = reeval_args.env_name
-        reward_name = f"eval_{env_name}_reward"
-        l2_name = f"eval_{env_name}_end_l2"
-        original_env_name = env_name
+                # If the existing column names use the old numeric format, update them with the newer
+                # descriptive format, as the new entry will definitely have the new format.
+                column_names = list(output_df)
+                old_names = [name for name in column_names
+                                if re.fullmatch("eval\d+_(reward|end_l2)", name)]
+                if old_names:
+                    if args.env == "weno_burgers":
+                        eval_names = {'1': 'smooth_sine', '2': 'smooth_rare', '3': 'accelshock'}
+                    elif args.env == "weno_burgers_2d":
+                        eval_names = {'1': 'gaussian', '2': '1d-smooth_sine-x', '3': 'jsz7'}
+                    elif args.env == "weno_euler":
+                        eval_names = {'1': 'sod'}
+                    numbers = {re.match("eval(\d+)_", name).group(1) for name in old_names}
+                    replacement_dict = {}
+                    for name in old_names:
+                        match = re.fullmatch("eval(\d+)_(reward|end_l2)", name)
+                        try:
+                            eval_name = eval_names[match.group(1)]
+                        except KeyError:
+                            eval_name = input(f"The name of eval env {match.group(1)} is unknown."
+                                    + " Enter the name here: ")
+                            if eval_name in eval_names.values():
+                                raise Exception(f"{eval_name} is already associated.")
+                            eval_names[match.group(1)] = eval_name
+                        new_name = f"eval_{eval_name}_{match.group(2)}"
+                        replacement_dict[name] = new_name
+                    output_df.rename(columns=replacement_dict, inplace=True)
 
-        while reward_name in output_df or l2_name in output_df:
-            match = re.fullmatch("([^\d]+)(\d+)", env_name)
-            if match:
-                env_name = match.group(1) + str(int(match.group(2))+1)
-            else:
-                env_name = env_name + "1"
+                if reeval_args.copy:
+                    # If copying the original data but the target file is non-empty, add any columns
+                    # from the target file that aren't in the original data.
+                    try:
+                        output_file.seek(0)
+                        existing_df = pd.read_csv(output_file, comment='#',
+                                float_precision='round_trip')
+                    except pd.errors.EmptyDataError:
+                        # The file does not yet exist. We can use the data already copied from the
+                        # original experiment file.
+                        pass
+                    else:
+                        num_rows = len(output_df.index)
+                        old_rows = len(existing_df)
+                        merged_df = output_df.merge(existing_df)
+                        outer_merge_df = output_df.merge(existing_df, how='outer')
+                        if len(merged_df.index) != num_rows:
+                            print("Failed to merge old csv file with the target one.")
+                            if num_rows != old_rows:
+                                raise Exception("Failed to merge CSV files."
+                                        + f"Original rows is {num_rows}, target rows is {old_rows}"
+                                        + f" (merged rows is {len(merged_df.index)}).")
+                            else:
+                                cols_intersection = [name for name in output_df if name in existing_df]
+                                mismatched_cols = [name for name in cols_intersection if
+                                        any(output_df[name] != existing_df[name])]
+                                if len(mismatched_cols) > 0:
+                                    #left = output_df[mismatched_cols[0]]
+                                    #right = existing_df[mismatched_cols[0]]
+                                    #mismatched_rows = [index for index in range(len(output_df))
+                                    #        if left[index] != right[index]]
+                                    #print("row: original != target")
+                                    #for row in mismatched_rows:
+                                    #    print(f"{row}: {left[row]} != {right[row]}")
+                                    raise Exception("Failed to merge CSV files. These rows were in"
+                                            + " both files but are not identical:" +
+                                            str(mismatched_cols))
+                                else:
+                                    raise Exception("Failed to merge CSV files. The reason for"
+                                            + " this is unclear - they seem to have the"
+                                            + " same number of rows and identical matching"
+                                            + " columns.")
+                        else:
+                            output_df = merged_df
+
+            else: # not reeval.args and not reeval.copy
+                try:
+                    output_file.seek(0)
+                    output_df = pd.read_csv(output_file, comment='#', float_precision='round_trip')
+                except pd.errors.EmptyDataError:
+                    # The file does not yet exist; create a new DataFrame.
+                    output_df = pd.DataFrame({'episodes': episode_numbers})
+
+            env_name = reeval_args.env_name
             reward_name = f"eval_{env_name}_reward"
             l2_name = f"eval_{env_name}_end_l2"
-        if env_name != original_env_name:
-            print(f"Environment name '{original_env_name}' is already in {output_filename}!"
-                    + f" Adjusted to '{env_name}'.")
+            original_env_name = env_name
 
-        output_df[reward_name] = reward_data
-        output_df[l2_name] = l2_data
+            # Ensure that the specified env_name does not overwrite an existing column.
+            while reward_name in output_df or l2_name in output_df:
+                match = re.fullmatch("([^\d]+)(\d+)", env_name)
+                if match:
+                    env_name = match.group(1) + str(int(match.group(2))+1)
+                else:
+                    env_name = env_name + "1"
+                reward_name = f"eval_{env_name}_reward"
+                l2_name = f"eval_{env_name}_end_l2"
+            if env_name != original_env_name:
+                print(f"Environment name '{original_env_name}' is already in {output_filename}!"
+                        + f" Adjusted to '{env_name}'.")
 
-        output_df.to_csv(output_filename, index=False)
-        print(f'Saved data to {output_filename}.')
+            output_df[reward_name] = reward_data
+            output_df[l2_name] = l2_data
+
+            output_file.seek(0)
+            output_file.truncate()
+            output_df.to_csv(output_file, index=False)
+        # /with Close and unlock output_file.
+        reread_df = pd.read_csv(output_filename, comment='#', float_precision='round_trip')
 
         if reeval_args.replot:
             summary_plot_dir = os.path.join(new_log_dir, "summary_plots")
