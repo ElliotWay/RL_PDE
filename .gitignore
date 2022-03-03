@@ -23,5 +23,7 @@ all_src/
 agents/
 
 # Creating plots for paper.
-fig_test
-figures
+fig_test*
+figures*
+# Most of my scripts make plots, but these make specific plots.
+plot_scripts/
