@@ -2,6 +2,9 @@ import numpy as np
 
 from util.misc import create_stencil_indexes
 
+# For default WENO weights.
+from envs.weno_solution import lf_flux_split_nd, weno_weights_nd
+
 # This computation could be sped up if the memoization is not enough.
 # The denominators are the same for any target location with a given order.
 _lagrange_dict = {}
@@ -58,7 +61,31 @@ def lagrange_coefficients(order, targets):
     return np.array([_lagrange_lookup(order, target) for target in targets.flat]).reshape(
                                                             targets.shape + (order+1,))
 
-def weno_interpolation(data, weno_weights, points=1, num_ghosts=None):
+def _default_weno_weights(data, order, num_ghosts):
+    """
+    Default WENO weights implementation, adapted mainly from WENOBurgersEnv#_prep_state().
+    """
+    num_points = len(data) - 2*num_ghosts
+    # These functions expect a vector dimension.
+    data = data[None, :]
+    flux_function = lambda q: 0.5 * q ** 2
+    flux = flux_function(data)
+
+    fm, fp = lf_flux_split_nd(flux, data)
+    fm = fm[0]
+    fp = fp[0]
+    fp_stencil_indexes = create_stencil_indexes(stencil_size=order * 2 - 1,
+                                                num_stencils=num_points + 1,
+                                                offset=num_ghosts - order)
+    fm_stencil_indexes = np.flip(fp_stencil_indexes, axis=-1) + 1
+    fp_stencils = fp[fp_stencil_indexes]
+    fm_stencils = fm[fm_stencil_indexes]
+
+    state = np.stack([fp_stencils, fm_stencils], axis=1)
+    weights = weno_weights_nd(state, order)
+    return weights
+
+def weno_interpolation(data, weno_weights=None, weno_order=None, points=1, num_ghosts=None):
     """
     Interpolation based on WENO.
 
@@ -66,16 +93,25 @@ def weno_interpolation(data, weno_weights, points=1, num_ghosts=None):
     them. We can do the same thing with the actual values, then weight the polynomials based on the
     WENO weights.
 
-    Lagrange interpolation is based on the scipy version. We could just use that, but we also need
-    a TF compatible version, and we can also vectorize it across points.
+    The weights are tricky because they come in + and - directions. Averaging them together kind of
+    makes sense when interpolating a single point halfway between (which is why WENO does it this
+    way), but less so for points that are closer to one side than another. Interpolating a shock
+    creates a plateau halfway between the two flat areas.
+    To get around this, this implementation weights the + and - weights based on how far between
+    the real points we are. So 0.25 between them gives a 0.75 weight to + and 0.25 weight to -. In
+    other words, we're creating a weighted average of weighted averages.
 
     Parameters
     ----------
     data : ndarray with shape [size + num_ghosts]
         Data to interpolate between, including ghost cells.
     weno_weights : ndarray with weights [size+1, 2, WENO order]
-        Weights calculated with WENO. This is complicated by having weights for + and - directions.
-        Weights are combined by averaging them.
+        Weights calculated with WENO. These weights can by ommitted; they will be calculated using
+        the standard WENO scheme and Burgers flux.
+        The weights are complicated by having + and - directions;
+        they are combined by averaging them.
+    weno_order : int
+        Only used if weno_weights is None. The WENO order to compute default WENO weights.
     points : int
         Number of points to add, evenly spaced, between the original points.
     num_ghosts : int
@@ -89,27 +125,22 @@ def weno_interpolation(data, weno_weights, points=1, num_ghosts=None):
         interpolated points beyond each boundary if 'points' > 1.
     """
 
-    num_points = weno_weights.shape[0] - 1
+    data = np.array(data)
+
+    if weno_weights is None:
+        if num_ghosts is None:
+            num_ghosts = weno_order + 1
+        weno_weights = _default_weno_weights(data, weno_order, num_ghosts)
+
     order = weno_weights.shape[2]
     if num_ghosts is None:
         num_ghosts = order + 1
-
-    # WENO weights have indices like this:
-    # + [-1, 0, 1]
-    # -     [0, 1, 2]
-    # (Except the - weights are flipped, e.g. [2,1,0].)
-    # Averaging these together gives order+1 weights for the order-sized stencils surrounding
-    # each interface.
-    plus_weights = weno_weights[:, 0]
-    minus_weights = np.flip(weno_weights[:, 1], axis=-1)
-
-    # Attach some zeros to facilitate averaging using an offset.
-    plus_weights = np.concatenate([plus_weights, np.zeros((order,1))], axis=1)
-    minus_weights = np.concatenate([np.zeros((order,1))], minus_weights, axis=1)
-    weights = (plus_weights + minus_weights) / 2
+    num_points = len(data) - 2*num_ghosts
+    assert (weno_weights.shape[0] == (num_points + 1))
 
     fractional_indexes = [(n+1)/(points+1) for n in range(points)]
-    poly_targets = [[index + frac for frac in fractional_indexes] for index in range(order)]
+    poly_targets = [[index + frac for frac in fractional_indexes]
+                        for index in (np.arange(order+1)-1)]
     # poly_targets have shape [interp group, interp point]. Interp group refers to the
     # region between 2 points where we are interpolating, and interp point refers to the specific
     # point we are interpolating to.
@@ -118,7 +149,26 @@ def weno_interpolation(data, weno_weights, points=1, num_ghosts=None):
     coef = lagrange_coefficients(order-1, poly_targets)
     # coef has shape [interpolation group, interpolation point, order]
 
-    # num_points + order + 1 stencils because stencils must extend to 'order' points past the real
+    # WENO weights have indices like this:
+    # + [-1, 0, 1]
+    # -     [0, 1, 2]
+    # (Except the - weights are flipped, e.g. [2,1,0].)
+    # Averaging these together gives order+1 weights for the order-sized stencils surrounding
+    # each interface. This average is, in turn, a weighted average based where between points we
+    # are interpolating (a simple average for one point halfway).
+    plus_weights = weno_weights[:, 0]
+    minus_weights = np.flip(weno_weights[:, 1], axis=-1)
+
+    # Attach some zeros to facilitate averaging using an offset.
+    plus_weights = np.concatenate([plus_weights, np.zeros((num_points+1,1))], axis=1)
+    minus_weights = np.concatenate([np.zeros((num_points+1,1)), minus_weights], axis=1)
+
+    all_weights = np.stack([plus_weights, minus_weights])
+    fractional_weights = np.stack([1 - np.array(fractional_indexes), fractional_indexes])
+    weights = np.sum(all_weights[:, :, None, :] * fractional_weights[:, None, :, None], axis=0)
+    # weights has shape [interface/interp group, stencil, interpolation point]
+
+    # num_stencils=num_points+order+1 because stencils must extend to 'order' points past the real
     # points. One way to think of this is 1 for the stencil all in the left ghosts, and 'order' for
     # each stencil that extends into the right ghosts.
     stencil_indexes = create_stencil_indexes(stencil_size=order,
@@ -128,15 +178,19 @@ def weno_interpolation(data, weno_weights, points=1, num_ghosts=None):
     interpolated = np.sum(data_stencils[:, None, None, :] * coef[None, :, :, :], axis=-1)
     # interpolated has shape [stencil, interp group, interp point].
     # That is, for each stencil, we have a list of (groups of) points we can interpolate with that
-    # stencil. We need to reorganize this into a structure where, for each point, we have a list
-    # of possible interpolations, which we can then combine with a weighted sum.
-
+    # stencil. We need to reorganize this into a structure where, for each (group of) point(s),
+    # we have a list of possible interpolations, which we can then combine with a weighted sum.
+    # Simply transposing will not work, however, since each stencil corresponds to a different set
+    # of interp groups. To collect all the points for a given interp group, we need to collect
+    # along diagonals.
+    interpolated = np.flip(interpolated, axis=1) # Flip interp group order so diagonal is correct.
     interpolated_per_point = np.array(
-            [np.diagonal(interpolated, offset=offset) for offset in range(num_points + 1)])
-    weighted_interp = np.sum(interpolated_per_point * weights[:, None, :], axis=-1)
+            [np.diagonal(interpolated, offset=-offset) for offset in range(num_points + 1)])
+    # interpolated_per_point has shape [interp group, stencil, interp point]
+    weighted_interp = np.sum(interpolated_per_point * weights, axis=-1)
 
     # Now we just need to insert our interpolated data into the real data.
-    almost_real_data = data[num_ghosts - 1:num_ghosts]
+    almost_real_data = data[num_ghosts - 1:-num_ghosts]
     # "almost" because it includes one ghost on the left.
     combined_data = np.concatenate([almost_real_data[:, None], weighted_interp], axis=1).ravel()
     # Then we cut off that ghost.
