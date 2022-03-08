@@ -1,9 +1,18 @@
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = "2"
+os.environ['CUDA_VISIBLE_DEVICES'] = "-1" #Block GPU for now.
 import numpy as np
+import tensorflow as tf
+tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
+
+from tensorflow.python.ops.gen_array_ops import matrix_diag_part_v2
+# tf.linalg.diag_part should refer to matrix_diag_part_v2, but it doesn't.
+# See github.com/tensorflow/tensorflow/issues/45203.
 
 from util.misc import create_stencil_indexes
 
 # For default WENO weights.
-from envs.weno_solution import lf_flux_split_nd, weno_weights_nd
+from envs.weno_solution import lf_flux_split_nd, weno_weights_nd, tf_lf_flux_split, tf_weno_weights
 
 # This computation could be sped up if the memoization is not enough.
 # The denominators are the same for any target location with a given order.
@@ -197,3 +206,87 @@ def weno_interpolation(data, weno_weights=None, weno_order=None, points=1, num_g
     combined_data = np.array(combined_data[1:])
 
     return combined_data
+
+def _tf_default_weno_weights(data, order, num_ghosts):
+    # See _default_weno_weights().
+    num_points = int(data.shape[0]) - 2*num_ghosts
+    # These functions expect a vector dimension.
+    data = data[None, :]
+    flux = 0.5 * data ** 2
+
+    fm, fp = tf_lf_flux_split(flux, data)
+    fm = fm[0]
+    fp = fp[0]
+    fp_stencil_indexes = create_stencil_indexes(stencil_size=order * 2 - 1,
+                                                num_stencils=num_points + 1,
+                                                offset=num_ghosts - order)
+    fm_stencil_indexes = np.flip(fp_stencil_indexes, axis=-1) + 1
+    fp_stencils = tf.gather(fp, fp_stencil_indexes)
+    fm_stencils = tf.gather(fm, fm_stencil_indexes)
+
+    state = tf.stack([fp_stencils, fm_stencils], axis=1)
+    weights = tf_weno_weights(state, order)
+    return weights
+
+def tf_weno_interpolation(data, weno_weights=None, weno_order=None, points=1, num_ghosts=None):
+    """
+    Interpolation based on WENO. Implemented in TF, see weno_interpolation().
+
+    It is STRONGLY recommended to pass in your own calculated WENO weights instead of using the
+    defaults.
+    """
+    # See weno_interpolation() for additional comments.
+
+    if weno_weights is None:
+        if num_ghosts is None:
+            num_ghosts = weno_order + 1
+        weno_weights = _tf_default_weno_weights(data, weno_order, num_ghosts)
+
+    order = int(weno_weights.shape[2])
+    if num_ghosts is None:
+        num_ghosts = order + 1
+    num_points = int(data.shape[0]) - 2*num_ghosts
+    assert (weno_weights.shape[0] == (num_points + 1))
+
+    fractional_indexes = [(n+1)/(points+1) for n in range(points)]
+    poly_targets = [[index + frac for frac in fractional_indexes]
+                        for index in (np.arange(order+1)-1)]
+
+    # This works because the coefficients are always the same for a given order and number of
+    # interpolation points.
+    coef = lagrange_coefficients(order-1, poly_targets)
+
+    plus_weights = weno_weights[:, 0]
+    minus_weights = tf.reverse(weno_weights[:, 1], axis=[-1])
+    plus_weights = tf.concat([plus_weights, np.zeros((num_points+1,1))], axis=1)
+    minus_weights = tf.concat([np.zeros((num_points+1,1)), minus_weights], axis=1)
+    all_weights = tf.stack([plus_weights, minus_weights])
+    # fractional_weights is just a constant, so we can use np.stack.
+    fractional_weights = np.stack([1 - np.array(fractional_indexes), fractional_indexes])
+    weights = tf.reduce_sum(all_weights[:, :, None, :] * fractional_weights[:, None, :, None], axis=0)
+
+    stencil_indexes = create_stencil_indexes(stencil_size=order,
+                                             num_stencils=num_points + order + 1,
+                                             offset=num_ghosts - order)
+    data_stencils = tf.gather(data, stencil_indexes, axis=-1)
+    interpolated = tf.reduce_sum(data_stencils[:, None, None, :] * coef[None, :, :, :], axis=-1)
+    interpolated = tf.reverse(interpolated, axis=[1])
+
+    # Should be using tf.linalg.diag_part, but a bug prevents the k parameter from functioning.
+    # This is solved by using matrix_diag_part_v2 directly.
+    # matrix_diag_part_v2 assumes the last two axes unlike np.diagonal which assumes the first two.
+    # To select the correct diagonals, we need to transpose first.
+    interpolated = tf.transpose(interpolated, perm=[2,0,1])
+    interpolated_per_point = matrix_diag_part_v2(interpolated, k=(-num_points,0), padding_value=0)
+    # Then transpose back to line up with weights.
+    interpolated_per_point = tf.transpose(interpolated_per_point, perm=[1,0,2])
+    weighted_interp = tf.reduce_sum(interpolated_per_point * weights, axis=-1)
+
+    almost_real_data = data[num_ghosts - 1:-num_ghosts]
+    combined_data = tf.concat([almost_real_data[:, None], weighted_interp], axis=1)
+    combined_data = tf.reshape(combined_data, shape=[-1])
+    combined_data = combined_data[1:]
+
+    return combined_data
+
+
