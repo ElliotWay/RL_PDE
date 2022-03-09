@@ -1,11 +1,14 @@
 import gym
 import numpy as np
 import tensorflow as tf
+import re
 
 from envs.grid import create_grid
 from envs.solutions import OneStepSolution
 from envs.weno_solution import WENOSolution, RKMethod
+from envs.weno_solution import weno_weights_nd
 from envs.source import RandomSource
+from envs.interpolate import weno_interpolation
 from util.misc import create_stencil_indexes
 from util.misc import AxisSlice
 
@@ -914,7 +917,8 @@ class AbstractPDEEnv(gym.Env):
         if (not "full" in reward_mode
                 and not "change" in reward_mode
                 and not "one-step" in reward_mode
-                and not "tv" in reward_mode):
+                and not "tv" in reward_mode
+                and not "conserve" in reward_mode):
             if "l2d" in reward_mode:
                 reward_mode += "_full"
             else:
@@ -994,6 +998,34 @@ class AbstractPDEEnv(gym.Env):
                 raise Exception("AbstractPDEEnv: reward_mode problem")
 
             return -error, done
+
+        # Use difference in conserved quantity (interpolated) for rewards.
+        # The challenge with this is that it's hard to get high-resolution rewards.
+        # Gradients still flow from every location, though; maybe that's enough.
+        if "conserve" in self.reward_mode:
+            if "Burgers" not in str(self) or self.dimensions > 1:
+                raise Exception("conservation reward not implemented for this environment")
+
+            match = re.search("n(\d+)", self.reward_mode)
+            if match is None:
+                points = 1
+            else:
+                points = match.group(1)
+
+            # TODO: calculate WENO weights instead of using the default Burgers ones.
+            # Only implemented for scalar quantity, so select 0th vector component.
+            previous_state = self.state_history[-1][0]
+            previous_state_interpolated = weno_interpolation(previous_state,
+                    weno_order=self.weno_order, points=points, num_ghosts=self.grid.ng)
+            previous_total = np.sum(previous_state)
+
+            current_state = self.solution.get_full()[0]
+            current_state_interpolated = weno_interpolation(current_state,
+                    weno_order=self.weno_order, points=points, num_ghosts=self.grid.ng)
+            current_total = np.sum(current_state)
+
+            reward = np.arctan(-np.abs(current_total - previous_total))
+            return reward, done
 
         total_reward = (0.0,) * self.dimensions
 
@@ -1102,10 +1134,6 @@ class AbstractPDEEnv(gym.Env):
                                                 for reward_part in total_reward)
         else:
             raise Exception("AbstractPDEEnv: reward_mode problem")
-
-        # Conservation-based reward.
-        # Doesn't work (always 0), but a good idea. We'll try this again eventually.
-        # reward = -np.log(np.sum(rhs[g.ilo:g.ihi+1]))
 
         # Give a penalty and end the episode if we're way off.
         current_state = self.grid.get_full()

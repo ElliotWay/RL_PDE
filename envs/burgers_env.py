@@ -12,6 +12,7 @@ from envs.weno_solution import RKMethod
 from envs.solutions import AnalyticalSolution
 from envs.solutions import MemoizedSolution, OneStepSolution
 import envs.weno_coefficients as weno_coefficients
+from envs.interpolate import tf_weno_interpolation
 from util.softmax_box import SoftmaxBox
 from util.misc import create_stencil_indexes
 
@@ -354,6 +355,38 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         real_state, rl_state, rl_action, next_real_state = args
         assert type(rl_state) is tuple and type(rl_action) is tuple
         # Note that real_state and next_real_state do not include ghost cells, but rl_state does.
+
+
+        if "conserve" in reward_mode:
+            if "Burgers" not in str(self) or self.dimensions > 1:
+                raise Exception("conservation reward not implemented for this environment")
+            match = re.search("n(\d+)", self.reward_mode)
+            if match is None:
+                points = 1
+            else:
+                points = match.group(1)
+
+            # Remove vector dimension.
+            real_state = real_state[0]
+            next_real_state = next_real_state[0]
+
+            # Compute boundaries.
+            boundary = self.grid.boundary
+            real_state_full = self.grid.tf_update_boundary(real_state, boundary)
+            next_real_state_full = self.grid.tf_update_boundary(next_real_state, boundary)
+
+            # Interpolate.
+            # TODO: calculate WENO weights instead of using the default Burgers ones.
+            real_state_interpolated = tf_weno_interpolation(real_state, weno_order=self.weno_order,
+                    points=points, num_ghosts=self.grid.ng)
+            next_real_state_interpolated = tf_weno_interpolation(real_state,
+                    weno_order=self.weno_order, points=points, num_ghosts=self.grid.ng)
+
+            previous_total = tf.reduce_sum(real_state_interpolated)
+            current_total = tf.reduce_sum(next_real_state_interpolated)
+
+            reward = tf.atan(-tf.abs(current_total - previous_total))
+            return reward, done
 
         rl_state = rl_state[0] # Extract 1st (and only) dimension.
         rl_action = rl_action[0]
