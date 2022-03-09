@@ -30,7 +30,7 @@ class Burgers1DGrid(GridBase):
     grid.x - The location values associated with each index in grid.u.
     """
 
-    DEFAULT_SCHEDULE = ["smooth_sine", "smooth_rare", "accelshock"]
+    DEFAULT_SCHEDULE = ["smooth_sine", "rarefaction", "accelshock"]
 
     def __init__(self, nx, ng, xmin=0.0, xmax=1.0,
                  init_type="sine", boundary=None,

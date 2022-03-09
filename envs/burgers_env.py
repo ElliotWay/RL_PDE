@@ -356,8 +356,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         assert type(rl_state) is tuple and type(rl_action) is tuple
         # Note that real_state and next_real_state do not include ghost cells, but rl_state does.
 
-
-        if "conserve" in reward_mode:
+        if "conserve" in self.reward_mode:
             if "Burgers" not in str(self) or self.dimensions > 1:
                 raise Exception("conservation reward not implemented for this environment")
             match = re.search("n(\d+)", self.reward_mode)

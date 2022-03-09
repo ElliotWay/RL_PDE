@@ -67,9 +67,9 @@ def main():
     parser.add_argument('--log-dir', '--log_dir', type=str, default=None,
                         help="Directory to place log file and other results. Default is"
                         + " log/env/model/timestamp.")
-    parser.add_argument('--total-episodes', '--total_episodes', type=int, default=1000,
+    parser.add_argument('--total-episodes', '--total_episodes', type=int, default=10000,
                         help="Total number of episodes to train.")
-    parser.add_argument('--log-freq', '--log_freq', type=int, default=10,
+    parser.add_argument('--log-freq', '--log_freq', type=int, default=50,
                         help="Number of episodes to wait between logging information.")
     parser.add_argument('--n-best-models', '--n_best_models', type=int, default=5,
                         help="Number of best models so far to keep track of.")
@@ -153,7 +153,9 @@ def main():
 
             # Since smooth_rare and accelshock use the same defaults, we don't need to reset and
             # call set_contingent_env_defaults() again.
-            eval_args.init_type = "smooth_rare"
+            #eval_args.init_type = "smooth_rare"
+            #eval_envs.append(env_builder.build_env(args.env, eval_args, test=True))
+            eval_args.init_type = "rarefaction"
             eval_envs.append(env_builder.build_env(args.env, eval_args, test=True))
             eval_args.init_type = "accelshock"
             eval_envs.append(env_builder.build_env(args.env, eval_args, test=True))

@@ -36,7 +36,7 @@ def get_env_arg_parser():
                         help="Upper bounds of the physical space. May have multiple values,"
                         + " see --num-cells. Default is 1.0, but some initial conditions may"
                         + " specify different defaults.")
-    parser.add_argument('--order', type=positive_int, default=2,
+    parser.add_argument('--order', type=positive_int, default=3,
                         help="Order of WENO approximation (assuming using WENO environment or agent).")
     parser.add_argument('--state_order', '--state-order', type=positive_int, default=None,
                         help="\"Order\" of state space; use a larger state that corresponds"
@@ -64,7 +64,7 @@ def get_env_arg_parser():
                         + " If --variable-timesteps is used, this is only an approximation"
                         + " based on the value of --timestep.")
 
-    parser.add_argument('--init_type', '--init-type', type=str, default="smooth_sine",
+    parser.add_argument('--init_type', '--init-type', type=str, default="schedule",
                         help="The type of initial condition.")
     parser.add_argument('--schedule', type=str, nargs='+', default=None,
                         help="List of init-types used with the 'schedule' and 'random'"

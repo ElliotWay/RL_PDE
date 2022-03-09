@@ -14,7 +14,7 @@ def get_model_arg_parser(model_type=None):
     # If the model type is specified, only the parameters relevant to that model are available.
 
     if model_type in [None, 'full', 'sac', 'ddpg', 'pg']:
-        parser.add_argument('--layers', type=positive_int, nargs='+', default=[32, 32],
+        parser.add_argument('--layers', type=positive_int, nargs='+', default=[128, 128],
                 help="Size of network layers.")
 
     if model_type in [None, 'full', 'pg']:
