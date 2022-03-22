@@ -364,7 +364,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
             if match is None:
                 points = 1
             else:
-                points = match.group(1)
+                points = int(match.group(1))
 
             # Compute boundaries.
             boundary = self.grid.boundary
