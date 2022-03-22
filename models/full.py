@@ -150,16 +150,23 @@ class GlobalBackpropModel(GlobalModel):
                 self.action_dict[boundary] = action
                 self.reward_dict[boundary] = reward
 
-                # Check reward shape - should have a reward for each timestep, batch,
-                # (optional vector part,) and physical location.
-                #TODO Temporary hack - replace when vector EMI is implemented. -Elliot
-                #assert len(reward[0].shape) == (3 if self.env.grid.vec_len > 1 else 2) + self.env.dimensions
-                assert len(reward[0].shape) == (2 if self.env.grid.vec_len > 1 else 2) + self.env.dimensions
-                # Sum over the timesteps in the trajectory (axis 0),
-                # then average over the batch and each location and the batch (axes 1 and the rest).
-                # Also average over each reward part (e.g. each dimension).
-                loss = -tf.reduce_mean([tf.reduce_mean(tf.reduce_sum(reward_part, axis=0)) for
-                                                reward_part in reward])
+                if "conserve" not in self.args.e.reward_mode:
+                    # Check reward shape - should have a reward for each timestep, batch,
+                    # (optional vector part,) and physical location.
+                    #TODO Temporary hack - replace when vector EMI is implemented. -Elliot
+                    #assert len(reward[0].shape) == (3 if self.env.grid.vec_len > 1 else 2) + self.env.dimensions
+                    assert len(reward[0].shape) == \
+                            (2 if self.env.grid.vec_len > 1 else 2) + self.env.dimensions, \
+                            (f"reward[0] has shape {reward[0].shape}," \
+                            + f" vec_len is {self.env.grid.vec_len}," \
+                            + f" dimensions is {self.env.dimensions}")
+                    # Sum over the timesteps in the trajectory (axis 0),
+                    # then average over the batch and each location and the batch (axes 1 and the rest).
+                    # Also average over each reward part (e.g. each dimension).
+                    loss = -tf.reduce_mean([tf.reduce_mean(tf.reduce_sum(reward_part, axis=0))
+                                                for reward_part in reward])
+                else:
+                    loss = -tf.reduce_mean(reward)
                 self.loss_dict[boundary] = loss
 
                 gradients = tf.gradients(loss, self.policy_params)

@@ -5,9 +5,10 @@ import numpy as np
 import tensorflow as tf
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
 
-from tensorflow.python.ops.gen_array_ops import matrix_diag_part_v2
+#from tensorflow.python.ops.gen_array_ops import matrix_diag_part_v2
 # tf.linalg.diag_part should refer to matrix_diag_part_v2, but it doesn't.
 # See github.com/tensorflow/tensorflow/issues/45203.
+# But this doesn't work either!!!
 
 from util.misc import create_stencil_indexes
 
@@ -272,14 +273,23 @@ def tf_weno_interpolation(data, weno_weights=None, weno_order=None, points=1, nu
     interpolated = tf.reduce_sum(data_stencils[:, None, None, :] * coef[None, :, :, :], axis=-1)
     interpolated = tf.reverse(interpolated, axis=[1])
 
-    # Should be using tf.linalg.diag_part, but a bug prevents the k parameter from functioning.
-    # This is solved by using matrix_diag_part_v2 directly.
-    # matrix_diag_part_v2 assumes the last two axes unlike np.diagonal which assumes the first two.
-    # To select the correct diagonals, we need to transpose first.
-    interpolated = tf.transpose(interpolated, perm=[2,0,1])
-    interpolated_per_point = matrix_diag_part_v2(interpolated, k=(-num_points,0), padding_value=0)
-    # Then transpose back to line up with weights.
-    interpolated_per_point = tf.transpose(interpolated_per_point, perm=[1,0,2])
+    # To my consternation, tf.linalg.diag_part should do what I want,
+    # but it is bugged and the k parameter has no effect.
+    # matrix_diag_part_v2 should work correctly, and it does during the forward pass, but somehow
+    # computing the gradients over this op breaks. I've looked at the source (ops/array_grad.py)
+    # for a bug, and if there is one, I can't find it.
+    # So we need to implement the diagonal selection operation manually.
+    num_stencils, num_interp_groups, _num_points = interpolated.shape
+    assert num_stencils == num_points + order + 1
+    assert num_interp_groups == order + 1
+    shifted_rows = [interpolated[row:num_stencils - num_interp_groups + row + 1, row]
+                        for row in range(num_interp_groups)]
+    interpolated_per_point = tf.stack(shifted_rows, axis=1)
+    # This operation misaligns the axes, need to flip the last 2. I'm still not clear why they end
+    # up flipped, but I've run tests and at least the forward pass is working identically to the
+    # Numpy version.
+    interpolated_per_point = tf.transpose(interpolated_per_point, perm=[0,2,1])
+    
     weighted_interp = tf.reduce_sum(interpolated_per_point * weights, axis=-1)
 
     almost_real_data = data[num_ghosts - 1:-num_ghosts]

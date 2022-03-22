@@ -2,6 +2,7 @@ import gym
 import numpy as np
 import tensorflow as tf
 from gym import spaces
+import re
 
 from envs.abstract_pde_env import AbstractPDEEnv
 from envs.plottable_env import Plottable1DEnv
@@ -365,27 +366,27 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
             else:
                 points = match.group(1)
 
-            # Remove vector dimension.
-            real_state = real_state[0]
-            next_real_state = next_real_state[0]
-
             # Compute boundaries.
             boundary = self.grid.boundary
             real_state_full = self.grid.tf_update_boundary(real_state, boundary)
             next_real_state_full = self.grid.tf_update_boundary(next_real_state, boundary)
 
+            # Remove vector dimension.
+            real_state_full = real_state_full[0]
+            next_real_state_full = next_real_state_full[0]
+
             # Interpolate.
             # TODO: calculate WENO weights instead of using the default Burgers ones.
-            real_state_interpolated = tf_weno_interpolation(real_state, weno_order=self.weno_order,
-                    points=points, num_ghosts=self.grid.ng)
-            next_real_state_interpolated = tf_weno_interpolation(real_state,
+            real_state_interpolated = tf_weno_interpolation(real_state_full,
+                    weno_order=self.weno_order, points=points, num_ghosts=self.grid.ng)
+            next_real_state_interpolated = tf_weno_interpolation(next_real_state_full,
                     weno_order=self.weno_order, points=points, num_ghosts=self.grid.ng)
 
             previous_total = tf.reduce_sum(real_state_interpolated)
             current_total = tf.reduce_sum(next_real_state_interpolated)
 
             reward = tf.atan(-tf.abs(current_total - previous_total))
-            return reward, done
+            return (reward,)
 
         rl_state = rl_state[0] # Extract 1st (and only) dimension.
         rl_action = rl_action[0]
