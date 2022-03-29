@@ -4,6 +4,7 @@ import tensorflow as tf
 from gym import spaces
 import re
 
+from envs.grid import create_grid
 from envs.abstract_pde_env import AbstractPDEEnv
 from envs.plottable_env import Plottable1DEnv
 from envs.weno_solution import WENOSolution, PreciseWENOSolution, PreciseWENOSolution2D
@@ -104,6 +105,31 @@ class AbstractBurgersEnv(AbstractPDEEnv):
                 raise NotImplementedError("{}-dim solution".format(self.grid.ndim)
                         + " not implemented.")
 
+        if "consistency" in self.reward_mode:
+            if self.dimensions != 1:
+                raise Exception("Consistency reward not implemented for >1 dims.")
+            assert precise_scale == 1 and self.precise_weno_order == self.weno_order
+            assert self.source is None
+            match = re.search("n(\d+)", self.reward_mode)
+            if match is None:
+                points = 1
+            else:
+                points = match.group(1)
+            # Create a grid that can hold all of the interpolated points.
+            # This is tricky because we need to adjust the min and max values.
+            # Note that the new values need to be the edges of the furthest interpolated cells,
+            # not the centers of those interpolated cells.
+            nx = self.grid.nx
+            new_left = self.grid.xmin - points / (2 * nx * (points + 1))
+            new_right = self.grid.xmax + points / (2 * nx * (points + 1))
+            interpolated_grid = create_grid(1, nx * (points + 1) + points, self.grid.ng,
+                    new_left, new_right)
+
+            self.consistency_solution = PreciseWENOSolution(
+                    interpolated_grid, {}, precise_scale=1, precise_order=self.weno_order,
+                    flux_function=self.burgers_flux, source=None,
+                    nu=nu, vec_len=1, rk_method=solution_rk_method)
+
         if "one-step" in self.reward_mode:
             self.solution = OneStepSolution(self.solution, self.grid, vec_len=1)
             if memoize:
@@ -172,6 +198,15 @@ class AbstractBurgersEnv(AbstractPDEEnv):
             state = self._prep_state()
 
         return state, reward, done
+
+    def reset(self, *args, **kwargs):
+        output = super().reset(*args, **kwargs)
+
+        if "consistency" in self.reward_mode:
+            # Really only needed to set the boundary condition.
+            self.consistency_solution.reset(self.grid.init_params)
+
+        return output
 
 class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
 

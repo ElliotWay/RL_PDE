@@ -10,6 +10,13 @@ from envs.grid1d import Burgers1DGrid
 from util.misc import create_stencil_indexes
 from util.misc import AxisSlice
 
+# PreciseWENOSolution was intended so that we could train against a higher-resolution version.
+# With the realization that the one-step error was needed to be Markovian, using the high-res
+# version would require interpolation.
+# Now we have a version of this implemented, but it doesn't even use that functionality. There is
+# probably a way to get that to work, but it would mean comparing the donwsampled version instead
+# of the interpolated version.
+
 def lf_flux_split_nd(flux_array, values_array, grid_type='Burgers', *args):
     """
     Apply Lax-Friedrichs flux splitting along each dimension of the input.
@@ -509,7 +516,13 @@ class PreciseWENOSolution2D(WENOSolution):
         self.action_history = []
 
     def set(self, real_values):
-        """ Force set the current grid. Will make the state/action history confusing. """
+        """
+        Force set the current grid.
+
+        This may make the state/action history confusing.
+
+        Also updates the boundary.
+        """
         self.precise_grid.set(real_values)
 
 
@@ -702,7 +715,13 @@ class PreciseWENOSolution(WENOSolution):
         self.action_history = []
 
     def set(self, real_values):
-        """ Force set the current grid. Will make the state/action history confusing. """
+        """
+        Force set the current grid.
+
+        This may make the state/action history confusing.
+
+        Also updates the boundary.
+        """
         self.precise_grid.set(real_values)
 
     # These functions are not used. This was the original method for computing WENO. It corresponds

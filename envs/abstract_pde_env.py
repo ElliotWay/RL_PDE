@@ -918,7 +918,8 @@ class AbstractPDEEnv(gym.Env):
                 and not "change" in reward_mode
                 and not "one-step" in reward_mode
                 and not "tv" in reward_mode
-                and not "conserve" in reward_mode):
+                and not "conserve" in reward_mode
+                and not "consistency" in reward_mode):
             if "l2d" in reward_mode:
                 reward_mode += "_full"
             else:
@@ -926,7 +927,8 @@ class AbstractPDEEnv(gym.Env):
         
         if ("full" in reward_mode
                 or "change" in reward_mode
-                or "one-step" in reward_mode):
+                or "one-step" in reward_mode
+                or "consistency" in reward_mode):
 
             if (not "adjacent" in reward_mode
                     and not "stencil" in reward_mode):
@@ -1019,7 +1021,7 @@ class AbstractPDEEnv(gym.Env):
                     weno_order=self.weno_order, points=points, num_ghosts=self.grid.ng)
             previous_total = np.sum(previous_state)
 
-            current_state = self.solution.get_full()[0]
+            current_state = self.grid.get_full()[0]
             current_state_interpolated = weno_interpolation(current_state,
                     weno_order=self.weno_order, points=points, num_ghosts=self.grid.ng)
             current_total = np.sum(current_state)
@@ -1027,10 +1029,48 @@ class AbstractPDEEnv(gym.Env):
             reward = np.arctan(-np.abs(current_total - previous_total))
             return reward, done
 
-        total_reward = (0.0,) * self.dimensions
+        error = None
+
+        # Use error between interpolated higher resolution version for the reward.
+        # Interpolate previous state, evolve with WENO, interpolate current state,
+        # and compare.
+        # TODO: Could also have 'self-consistency' where it's evolved with the RL policy instead.
+        # That's weird and not RL anymore, though, so it would need some restructuring.
+        if "consistency" in self.reward_mode:
+            if "Burgers" not in str(self) or self.dimensions > 1:
+                raise Exception("consistency reward not implemented for this environment")
+
+            match = re.search("n(\d+)", self.reward_mode)
+            if match is None:
+                points = 1
+            else:
+                points = match.group(1)
+
+            previous_state = self.state_history[-1][0]
+            previous_state_interpolated = weno_interpolation(previous_state,
+                    weno_order=self.weno_order, points=points, num_ghosts=self.grid.ng)
+            
+            self.consistency_solution.set(previous_state_interpolated)
+            self.consistency_solution.update(self.timestep_history[-1], self.t)
+            weno_interpolated = self.consistency_solution.get_real()[0]
+
+            current_state = self.grid.get_full()[0]
+            current_state_interpolated = weno_interpolation(current_state,
+                    weno_order=self.weno_order, points=points, num_ghosts=self.grid.ng)
+
+            # Error is total error in nearby interpolated points.
+            # Equidistant points go to the right.
+            error_interpolated = np.abs(weno_interpolated - current_state_interpolated)
+            left_cut = points // 2
+            right_cut = points - left_cut
+            error_cut = error_interpolated[left_cut:-right_cut]
+            total_error = np.sum(error_cut.reshape(-1, points + 1), axis=1)
+            error = total_error
+            # The rest of this function expects the vector dimension.
+            error = error.reshape(1, -1)
 
         # Use error with the "true" solution as the reward.
-        if ("full" in self.reward_mode or "change" in self.reward_mode
+        elif ("full" in self.reward_mode or "change" in self.reward_mode
                 or "one-step" in self.reward_mode):
 
             error = self.solution.get_full() - self.grid.get_full()
@@ -1047,6 +1087,10 @@ class AbstractPDEEnv(gym.Env):
                 raise Exception("AbstractPDEEnv: reward_mode problem")
 
             error = np.abs(error)
+
+        total_reward = (0.0,) * self.dimensions
+
+        if error is not None:
 
             # Clip tiny errors and enhance extreme errors.
             if "clip" in self.reward_mode:
