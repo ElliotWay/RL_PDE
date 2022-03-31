@@ -477,10 +477,13 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
                 right_cut = points - left_cut
                 error_cut = error_interpolated[left_cut:-right_cut]
                 total_error = tf.reduce_sum(tf.reshape(error_cut, (-1, points + 1)), axis=1)
+                error = total_error
             else:
                 assert "consistency-lo" in self.reward_mode
-                raise Exception("not implemented")
-            error = total_error
+                # Compute error by with downsampled WENO version and next state.
+                weno_downsampled = weno_interpolated[points::points+1]
+                current_state_real = next_real_state[0]
+                error = tf.abs(weno_downsampled - current_state_real)
 
         else:
             rl_state = rl_state[0] # Extract 1st (and only) dimension.
