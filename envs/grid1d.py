@@ -33,7 +33,7 @@ class Burgers1DGrid(GridBase):
     DEFAULT_SCHEDULE = ["smooth_sine", "rarefaction", "accelshock"]
 
     def __init__(self, nx, ng, xmin=0.0, xmax=1.0,
-                 init_type="sine", boundary=None,
+                 init_type="smooth_sine", boundary=None,
                  schedule=None, deterministic_init=False):
         """
         Construct a 1D grid.
@@ -67,6 +67,9 @@ class Burgers1DGrid(GridBase):
 
         vec_len = 1  # didn't put into init as a parameter because it should be fixed, also didn't put in
         super().__init__(nx, ng, xmin, xmax, vec_len, boundary)
+
+        if init_type is None:
+            init_type = "smooth_sine"
 
         # _init_type and _boundary do not change, init_type and boundary may
         # change if init_type is scheduled or sampled.
@@ -126,10 +129,9 @@ class Burgers1DGrid(GridBase):
 
         self.init_params = {'init_type': self.init_type}
 
-        if self.init_type == "custom" or type(self.init_type) is not str:
-            assert callable(self._init_type), "Custom init must have function provided as init type."
+        if callable(self.init_type):
             assert boundary is not None, "Cannot use default boundary with custom init type."
-            new_u, custom_params = self._init_type(params)
+            new_u, custom_params = self.init_type(params)
             self.init_params.update(custom_params)
             self.space[0, self.ng:-self.ng] = new_u
 
@@ -588,6 +590,9 @@ class Euler1DGrid(GridBase):
 
         vec_len = 3  # didn't put into init as a parameter because it should be fixed
         super().__init__(nx, ng, xmin, xmax, vec_len, boundary)
+
+        if init_type is None:
+            init_type = "double_rarefaction"
 
         # _init_type and _boundary do not change, init_type and boundary may
         # change if init_type is scheduled or sampled.

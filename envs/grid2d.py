@@ -14,6 +14,9 @@ class Burgers2DGrid(GridBase):
         vec_len = 1
         super().__init__(num_cells, num_ghosts, min_value, max_value, vec_len, boundary)
 
+        if init_type is None:
+            init_type = "gaussian"
+
         # _init_type and _boundary do not change, init_type and boundary may
         # change if init_type is scheduled or sampled.
         self._init_type = init_type
@@ -50,10 +53,9 @@ class Burgers2DGrid(GridBase):
 
         new_params = {'init_type': self.init_type}
 
-        if self.init_type == "custom" or type(self.init_type) is not str:
-            assert callable(self._init_type), "Custom init must have function provided as init type."
+        if callable(self.init_type):
             assert boundary is not None, "Cannot use default boundary with custom init type."
-            new_values, custom_params = self._init_type(params)
+            new_values, custom_params = self.init_type(params)
             new_params.update(custom_params)
             self.space[0, self.real_slice] = new_values
 

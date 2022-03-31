@@ -300,6 +300,9 @@ class GridBase(AbstractGrid):
         Equivalent to grid.update_boundary(), except as a Tensorflow function that can be applied
         to an arbitrary grid with arbitrary boundaries.
 
+        This may even be applied to grids of different sizes; however, they must have the
+        same number of dimensions and use the same number of ghost cells.
+
         Returns the state extended with ghost cells.
         """
         if boundary is None:
@@ -404,6 +407,8 @@ from envs.grid2d import Burgers2DGrid
 def create_grid(num_dimensions, num_cells, num_ghosts, min_value, max_value, eqn_type='burgers',
         boundary=None, init_type=None, schedule=None,
         deterministic_init=False):
+
+
     if eqn_type == 'burgers':
         if num_dimensions == 1:
             return Burgers1DGrid(num_cells, num_ghosts, min_value, max_value,

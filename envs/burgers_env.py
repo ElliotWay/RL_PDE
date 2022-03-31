@@ -203,8 +203,11 @@ class AbstractBurgersEnv(AbstractPDEEnv):
         output = super().reset(*args, **kwargs)
 
         if "consistency" in self.reward_mode:
-            # Really only needed to set the boundary condition.
-            self.consistency_solution.reset(self.grid.init_params)
+            # Need to set the boundary condition.
+            # Other params are irrelevant as we'll overwrite the state anyway.
+            # A custom init function will break if we just use the same params, though.
+            boundary = self.grid.init_params['boundary']
+            self.consistency_solution.reset({'boundary':boundary})
 
         return output
 
@@ -305,7 +308,8 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
 
         # state (the real physical state) does not have ghost cells, but agents operate on a stencil
         # that can spill beyond the boundary, so we need to add ghost cells to create the rl_state.
-
+        nx = int(state.shape[1]) # [0] is the vector dimension.
+        
         boundary = self.grid.boundary
         full_state = self.grid.tf_update_boundary(state, boundary)
 
@@ -322,7 +326,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
         # stencil indexes to do the same thing.
         plus_indexes = create_stencil_indexes(
                         stencil_size=self.state_order * 2 - 1,
-                        num_stencils=self.nx + 1,
+                        num_stencils=nx + 1,
                         offset=self.ng - self.state_order)
         minus_indexes = np.flip(plus_indexes, axis=-1) + 1
 
@@ -423,80 +427,131 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
             reward = tf.atan(-tf.abs(current_total - previous_total))
             return (reward,)
 
-        rl_state = rl_state[0] # Extract 1st (and only) dimension.
-        rl_action = rl_action[0]
+        if "consistency" in self.reward_mode:
+            if "Burgers" not in str(self) or self.dimensions > 1:
+                raise Exception("consistency reward not implemented for this environment")
 
-        rk_method = self.solution.rk_method
-        if rk_method == RKMethod.EULER:
-            fp_stencils = rl_state[:, 0]
-            fm_stencils = rl_state[:, 1]
+            match = re.search("n(\d+)", self.reward_mode)
+            if match is None:
+                points = 1
+            else:
+                points = match.group(1)
+
+            # Compute boundaries.
+            boundary = self.grid.boundary
+            previous_state_full = self.grid.tf_update_boundary(real_state, boundary)
+            current_state_full = self.grid.tf_update_boundary(next_real_state, boundary)
+            
+            # Remove vector dimension.
+            previous_state_full = previous_state_full[0]
+            current_state_full = current_state_full[0]
+
+            # Evolve hi-res WENO solution.
+            # TODO: calculate WENO weights instead of using the default Burgers ones.
+            previous_state_interpolated = tf_weno_interpolation(previous_state_full,
+                    weno_order=self.weno_order, points=points, num_ghosts=self.grid.ng)
+            # tf_prep_state expects a singleton vector dimension.
+            previous_state_with_vec = tf.expand_dims(previous_state_interpolated, axis=0)
+            rl_state_interpolated = self.tf_prep_state(previous_state_with_vec)[0]
+
+            if self.solution.rk_method != RKMethod.EULER:
+                raise Exception("consistency reward not implemented for non-Euler RK methods.")
+            fp_stencils = rl_state_interpolated[:, 0]
+            fm_stencils = rl_state_interpolated[:, 1]
             fp_weights = tf_weno_weights(fp_stencils, self.weno_order)
             fm_weights = tf_weno_weights(fm_stencils, self.weno_order)
             weno_action = tf.stack([fp_weights, fm_weights], axis=1)
-            weno_next_real_state = self.tf_integrate((real_state, (rl_state,), (weno_action,)))
-        elif rk_method == RKMethod.RK4:
-            next_rl_state = rl_state
-            weno_substeps = []
-            dt = self.tf_timestep(real_state)
-            for stage in range(4):
-                fp_stencils = next_rl_state[:, 0]
-                fm_stencils = next_rl_state[:, 1]
+            weno_interpolated = self.tf_integrate(
+                    (previous_state_interpolated, (rl_state_interpolated,), (weno_action,)))
+            # And remove vector dim again.
+            weno_interpolated = weno_interpolated[0]
+
+            # Compute error with interpolation of next state.
+            current_state_interpolated = tf_weno_interpolation(current_state_full,
+                    weno_order=self.weno_order, points=points, num_ghosts=self.grid.ng)
+            # Error is total error in nearby interpolated points.
+            # Equidistant points go to the right.
+            error_interpolated = tf.abs(weno_interpolated - current_state_interpolated)
+            left_cut = points // 2
+            right_cut = points - left_cut
+            error_cut = error_interpolated[left_cut:-right_cut]
+            total_error = tf.reduce_sum(tf.reshape(error_cut, (-1, points + 1)), axis=1)
+            error = total_error
+
+        else:
+            rl_state = rl_state[0] # Extract 1st (and only) dimension.
+            rl_action = rl_action[0]
+
+            rk_method = self.solution.rk_method
+            if rk_method == RKMethod.EULER:
+                fp_stencils = rl_state[:, 0]
+                fm_stencils = rl_state[:, 1]
                 fp_weights = tf_weno_weights(fp_stencils, self.weno_order)
                 fm_weights = tf_weno_weights(fm_stencils, self.weno_order)
                 weno_action = tf.stack([fp_weights, fm_weights], axis=1)
-                rhs = self.tf_rk_substep((real_state, (rl_state,), (weno_action,)))
-                step = dt * rhs
-                weno_substeps.append(step)
+                weno_next_real_state = self.tf_integrate((real_state, (rl_state,), (weno_action,)))
+            elif rk_method == RKMethod.RK4:
+                next_rl_state = rl_state
+                weno_substeps = []
+                dt = self.tf_timestep(real_state)
+                for stage in range(4):
+                    fp_stencils = next_rl_state[:, 0]
+                    fm_stencils = next_rl_state[:, 1]
+                    fp_weights = tf_weno_weights(fp_stencils, self.weno_order)
+                    fm_weights = tf_weno_weights(fm_stencils, self.weno_order)
+                    weno_action = tf.stack([fp_weights, fm_weights], axis=1)
+                    rhs = self.tf_rk_substep((real_state, (rl_state,), (weno_action,)))
+                    step = dt * rhs
+                    weno_substeps.append(step)
 
-                if stage == 0:
-                    weno_next_real_state = real_state + step/2
-                elif stage == 1:
-                    weno_next_real_state = real_state + step/2
-                elif stage == 2:
-                    weno_next_real_state = real_state + step
-                elif stage == 3:
-                    weno_next_real_state = real_state + (weno_substeps[0]
-                                                        + 2*weno_substeps[1]
-                                                        + 2*weno_substeps[2]
-                                                        + weno_substeps[3]) / 6
+                    if stage == 0:
+                        weno_next_real_state = real_state + step/2
+                    elif stage == 1:
+                        weno_next_real_state = real_state + step/2
+                    elif stage == 2:
+                        weno_next_real_state = real_state + step
+                    elif stage == 3:
+                        weno_next_real_state = real_state + (weno_substeps[0]
+                                                            + 2*weno_substeps[1]
+                                                            + 2*weno_substeps[2]
+                                                            + weno_substeps[3]) / 6
 
-                if stage < 3:
-                    next_rl_state = self.tf_prep_state(weno_next_real_state)
-                    next_rl_state = next_rl_state[0]
-        else:
-            raise Exception(f"{rk_method} not implemented.")
+                    if stage < 3:
+                        next_rl_state = self.tf_prep_state(weno_next_real_state)
+                        next_rl_state = next_rl_state[0]
+            else:
+                raise Exception(f"{rk_method} not implemented.")
 
-        # This section is adapted from AbstactPDEEnv.calculate_reward()
-        if "wenodiff" in self.reward_mode:
-            last_action = rl_action
+            if "wenodiff" in self.reward_mode:
+                last_action = rl_action
 
-            action_diff = weno_action - last_action
-            partially_flattened_shape = (self.action_space.shape[0],
-                    np.prod(self.action_space.shape[1:]))
-            action_diff = tf.reshape(action_diff, partially_flattened_shape)
-            if "L1" in self.reward_mode:
-                error = tf.reduce_sum(tf.abs(action_diff), axis=-1)
-            elif "L2" in self.reward_mode:
-                error = tf.sqrt(tf.reduce_sum(action_diff**2, axis=-1))
+                action_diff = weno_action - last_action
+                partially_flattened_shape = (self.action_space.shape[0],
+                        np.prod(self.action_space.shape[1:]))
+                action_diff = tf.reshape(action_diff, partially_flattened_shape)
+                if "L1" in self.reward_mode:
+                    error = tf.reduce_sum(tf.abs(action_diff), axis=-1)
+                elif "L2" in self.reward_mode:
+                    error = tf.sqrt(tf.reduce_sum(action_diff**2, axis=-1))
+                else:
+                    raise Exception("reward_mode problem")
+
+                return -error
+
+            error = weno_next_real_state - next_real_state
+            error = tf.reduce_sum(error, axis=0)
+
+            if "one-step" in self.reward_mode:
+                pass
+                # This version is ALWAYS one-step - the others are tricky to implement in TF.
+            elif "full" in self.reward_mode:
+                raise Exception("Reward mode 'full' invalid - only 'one-step' reward implemented"
+                    " in Tensorflow functions.")
+            elif "change" in self.reward_mode:
+                raise Exception("Reward mode 'change' invalid - only 'one-step' reward implemented"
+                    " in Tensorflow functions.")
             else:
                 raise Exception("reward_mode problem")
-
-            return -error
-
-        error = weno_next_real_state - next_real_state
-        error = tf.reduce_sum(error, axis=0)
-
-        if "one-step" in self.reward_mode:
-            pass
-            # This version is ALWAYS one-step - the others are tricky to implement in TF.
-        elif "full" in self.reward_mode:
-            raise Exception("Reward mode 'full' invalid - only 'one-step' reward implemented"
-                " in Tensorflow functions.")
-        elif "change" in self.reward_mode:
-            raise Exception("Reward mode 'change' invalid - only 'one-step' reward implemented"
-                " in Tensorflow functions.")
-        else:
-            raise Exception("reward_mode problem")
 
         if "clip" in self.reward_mode:
             raise Exception("Reward clipping not implemented in Tensorflow functions.")
