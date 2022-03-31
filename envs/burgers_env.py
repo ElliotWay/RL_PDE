@@ -114,7 +114,7 @@ class AbstractBurgersEnv(AbstractPDEEnv):
             if match is None:
                 points = 1
             else:
-                points = match.group(1)
+                points = int(match.group(1))
             # Create a grid that can hold all of the interpolated points.
             # This is tricky because we need to adjust the min and max values.
             # Note that the new values need to be the edges of the furthest interpolated cells,
@@ -435,7 +435,7 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
             if match is None:
                 points = 1
             else:
-                points = match.group(1)
+                points = int(match.group(1))
 
             # Compute boundaries.
             boundary = self.grid.boundary

@@ -1012,7 +1012,7 @@ class AbstractPDEEnv(gym.Env):
             if match is None:
                 points = 1
             else:
-                points = match.group(1)
+                points = int(match.group(1))
 
             # TODO: calculate WENO weights instead of using the default Burgers ones.
             # Only implemented for scalar quantity, so select 0th vector component.
@@ -1044,7 +1044,7 @@ class AbstractPDEEnv(gym.Env):
             if match is None:
                 points = 1
             else:
-                points = match.group(1)
+                points = int(match.group(1))
 
             previous_state = self.state_history[-1][0]
             previous_state_interpolated = weno_interpolation(previous_state,
