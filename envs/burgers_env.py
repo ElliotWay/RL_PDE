@@ -466,16 +466,20 @@ class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
             # And remove vector dim again.
             weno_interpolated = weno_interpolated[0]
 
-            # Compute error with interpolation of next state.
-            current_state_interpolated = tf_weno_interpolation(current_state_full,
-                    weno_order=self.weno_order, points=points, num_ghosts=self.grid.ng)
-            # Error is total error in nearby interpolated points.
-            # Equidistant points go to the right.
-            error_interpolated = tf.abs(weno_interpolated - current_state_interpolated)
-            left_cut = points // 2
-            right_cut = points - left_cut
-            error_cut = error_interpolated[left_cut:-right_cut]
-            total_error = tf.reduce_sum(tf.reshape(error_cut, (-1, points + 1)), axis=1)
+            if "consistency-hi" in self.reward_mode:
+                # Compute error with interpolation of next state.
+                current_state_interpolated = tf_weno_interpolation(current_state_full,
+                        weno_order=self.weno_order, points=points, num_ghosts=self.grid.ng)
+                # Error is total error in nearby interpolated points.
+                # Equidistant points go to the right.
+                error_interpolated = tf.abs(weno_interpolated - current_state_interpolated)
+                left_cut = points // 2
+                right_cut = points - left_cut
+                error_cut = error_interpolated[left_cut:-right_cut]
+                total_error = tf.reduce_sum(tf.reshape(error_cut, (-1, points + 1)), axis=1)
+            else:
+                assert "consistency-lo" in self.reward_mode
+                raise Exception("not implemented")
             error = total_error
 
         else:

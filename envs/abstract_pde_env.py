@@ -1055,16 +1055,21 @@ class AbstractPDEEnv(gym.Env):
             weno_interpolated = self.consistency_solution.get_real()[0]
 
             current_state = self.grid.get_full()[0]
-            current_state_interpolated = weno_interpolation(current_state,
-                    weno_order=self.weno_order, points=points, num_ghosts=self.grid.ng)
 
-            # Error is total error in nearby interpolated points.
-            # Equidistant points go to the right.
-            error_interpolated = np.abs(weno_interpolated - current_state_interpolated)
-            left_cut = points // 2
-            right_cut = points - left_cut
-            error_cut = error_interpolated[left_cut:-right_cut]
-            total_error = np.sum(error_cut.reshape(-1, points + 1), axis=1)
+            if "consistency-hi" in self.reward_mode:
+                current_state_interpolated = weno_interpolation(current_state,
+                        weno_order=self.weno_order, points=points, num_ghosts=self.grid.ng)
+
+                # Error is total error in nearby interpolated points.
+                # Equidistant points go to the right.
+                error_interpolated = np.abs(weno_interpolated - current_state_interpolated)
+                left_cut = points // 2
+                right_cut = points - left_cut
+                error_cut = error_interpolated[left_cut:-right_cut]
+                total_error = np.sum(error_cut.reshape(-1, points + 1), axis=1)
+            else:
+                assert "consistency-lo" in self.reward_mode
+                raise Exception("not implemented")
             error = total_error
             # The rest of this function expects the vector dimension.
             error = error.reshape(1, -1)
