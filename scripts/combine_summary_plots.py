@@ -231,12 +231,12 @@ Options are: (default: range)
             if not args.eval_only:
                 reward_and_l2_labels.append(f"{outer_label}train")
                 reward_and_l2_kwargs.append({
-                    'color': colors.PERMUTATIONS[outer_index](colors.TRAIN_COLOR)})
+                    'color': colors.TRAIN_COLORS[outer_index]})
                 reward_and_l2_episodes.append(episodes[outer_index])
                 if len(intersect_names) > 1 or args.std_only:
                     reward_and_l2_labels.append(f"{outer_label}avg eval")
                     reward_and_l2_kwargs.append({
-                        'color': colors.PERMUTATIONS[outer_index](colors.AVG_EVAL_COLOR)})
+                        'color': colors.AVG_EVAL_COLORS[outer_index]})
                     reward_and_l2_episodes.append(episodes[outer_index])
                 eval_linestyle = '--'
             else:
@@ -275,6 +275,13 @@ Options are: (default: range)
                     prop={'size': 'medium'})
             if not args.paper_mode:
                 ax.set_title("Total Reward per Episode", pad=24.0)
+        elif len(reward_data) == 4:
+            bbta = (0.5, 1.25)
+            ax.legend(loc='upper center', bbox_to_anchor=bbta,
+                    ncol=2, fancybox=True, shadow=True,
+                    prop={'size': 'medium'})
+            if not args.paper_mode:
+                ax.set_title("Total Reward per Episode", pad=27.0)
         else:
             ax.legend(loc="lower right", prop={'size': plots.legend_font_size(len(reward_data))})
             if not args.paper_mode:
@@ -317,6 +324,13 @@ Options are: (default: range)
                     prop={'size': 'medium'})
             if not args.paper_mode:
                 ax.set_title("L2 Error with WENO at End of Episode", pad=24.0)
+        elif len(l2_data) == 4:
+            bbta = (0.5, 1.25)
+            ax.legend(loc='upper center', bbox_to_anchor=bbta,
+                    ncol=2, fancybox=True, shadow=True,
+                    prop={'size': 'medium'})
+            if not args.paper_mode:
+                ax.set_title("Total Reward per Episode", pad=27.0)
         else:
             ax.legend(loc="upper right", prop={'size': plots.legend_font_size(len(l2_data))})
             if not args.paper_mode:
