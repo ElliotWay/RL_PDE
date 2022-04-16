@@ -13,6 +13,10 @@ def get_model_arg_parser(model_type=None):
     # Current models are full, sac, ddpg, pg, fixed-1step, and test.
     # If the model type is specified, only the parameters relevant to that model are available.
 
+    if model_type in [None, 'full']:
+        parser.add_argument('--weight-dtype', '--weight_dtype', type=int, default=64, choices=[32,64],
+                help="dtype for network weights. float64 or float32.")
+
     if model_type in [None, 'full', 'sac', 'ddpg', 'pg']:
         parser.add_argument('--layers', type=positive_int, nargs='+', default=[128, 128],
                 help="Size of network layers.")

@@ -38,6 +38,13 @@ class GlobalBackpropModel(GlobalModel):
         gym.Env instance won't work.
         """
         self.dtype = dtype
+        if args.m.weight_dtype is not None:
+            if args.m.weight_dtype == 64:
+                self.dtype = tf.float64
+            else:
+                assert args.m.weight_dtype == 32
+                self.dtype = tf.float32
+
         self.env = env
 
         # Stop Tensorflow from eating up the entire GPU (if we're using one).
@@ -132,7 +139,7 @@ class GlobalBackpropModel(GlobalModel):
                             )
                 else:
                     raise Exception(f"{rk_method} not implemented.")
-                rnn = IntegrateRNN(cell, name="rnn_".format(boundary_name))
+                rnn = IntegrateRNN(cell, name="rnn_".format(boundary_name), dtype=self.dtype)
 
                 # initial_state_ph is the REAL physical initial state
                 # (It should not contain ghost cells - those should be handled by the prep_state function
@@ -618,8 +625,10 @@ class IntegrateCell(Layer):
 
         # Use tf.map_fn to apply function across every element in the batch.
         tuple_type = (real_state.dtype,) * spatial_dims
+
         rl_state = tf.map_fn(self.prep_state_fn, real_state, dtype=tuple_type,
                                 name='map_prep_state')
+
 
         rl_action = []
         for rl_state_part in rl_state:

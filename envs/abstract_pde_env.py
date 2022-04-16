@@ -46,7 +46,7 @@ class AbstractPDEEnv(gym.Env):
             fixed_step=0.0004, C=None, #C=0.5,
             weno_order=3, state_order=None, srca=0.0, episode_length=250, time_max=0.1,
             reward_adjustment=1000, reward_mode=None,
-            test=False):
+            test=False, dtype=np.float64):
         """
         Construct the environment.
 
@@ -127,7 +127,7 @@ class AbstractPDEEnv(gym.Env):
                                 num_cells=num_cells, min_value=min_value, max_value=max_value,
                                 num_ghosts=self.ng,
                                 boundary=boundary, init_type=init_type, schedule=schedule,
-                                deterministic_init=deterministic_init)
+                                deterministic_init=deterministic_init, dtype=dtype)
         if init_params is not None:
             self.init_params = init_params
         else:

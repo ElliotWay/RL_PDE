@@ -34,7 +34,7 @@ class Burgers1DGrid(GridBase):
 
     def __init__(self, nx, ng, xmin=0.0, xmax=1.0,
                  init_type="smooth_sine", boundary=None,
-                 schedule=None, deterministic_init=False):
+                 schedule=None, deterministic_init=False, dtype=np.float64):
         """
         Construct a 1D grid.
         
@@ -66,7 +66,7 @@ class Burgers1DGrid(GridBase):
         """
 
         vec_len = 1  # didn't put into init as a parameter because it should be fixed, also didn't put in
-        super().__init__(nx, ng, xmin, xmax, vec_len, boundary)
+        super().__init__(nx, ng, xmin, xmax, vec_len, boundary, dtype=dtype)
 
         if init_type is None:
             init_type = "smooth_sine"
@@ -557,7 +557,7 @@ class Euler1DGrid(GridBase):
 
     def __init__(self, nx, ng, xmin=0.0, xmax=1.0, eos_gamma=1.4, init_type="double_rarefaction",
                  boundary=None, schedule=None,
-                 deterministic_init=False):
+                 deterministic_init=False, dtype=np.float64):
         """
         Construct a 1D grid.
 
@@ -589,7 +589,7 @@ class Euler1DGrid(GridBase):
         """
 
         vec_len = 3  # didn't put into init as a parameter because it should be fixed
-        super().__init__(nx, ng, xmin, xmax, vec_len, boundary)
+        super().__init__(nx, ng, xmin, xmax, vec_len, boundary, dtype=dtype)
 
         if init_type is None:
             init_type = "double_rarefaction"

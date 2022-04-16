@@ -121,6 +121,8 @@ def get_env_arg_parser():
                         help="Force the environment to follow the solution. This means that"
                         + " actions produce the corresponding reward, but not the "
                         + " corresponding change in state. Only used for training environment.")
+    parser.add_argument('--dtype', type=int, default=64, choices=[32,64],
+                        help="dtype for network weights. float64 or float32.")
 
     return parser
 
@@ -322,6 +324,13 @@ def build_env(env_name, env_args, test=False):
     if env_args.fixed_timesteps:
         env_args.C = None
 
+    if env_args.dtype is not None:
+        if env_args.dtype == 64:
+            dtype = np.float64
+        else:
+            assert env_args.dtype == 32
+            dtype = np.float32
+
     rk_method = RKMethod[env_args.rk.upper()]
     if env_args.solution_rk is not None:
         solution_rk_method = RKMethod[env_args.solution_rk.upper()]
@@ -354,6 +363,7 @@ def build_env(env_name, env_args, test=False):
                 'follow_solution': env_args.follow_solution,
                 'time_max': env_args.time_max,
                 'test': test,
+                'dtype': dtype
                 }
 
     if env_name == "weno_burgers":

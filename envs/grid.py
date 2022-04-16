@@ -27,7 +27,7 @@ class AbstractGrid:
     AbstractGrid itself.
     """
 
-    def __init__(self, num_cells, num_ghosts, min_value, max_value, vec_len):
+    def __init__(self, num_cells, num_ghosts, min_value, max_value, vec_len, dtype=np.float64):
         """
         Construct a new Grid of arbitrary physical dimensions.
 
@@ -56,6 +56,7 @@ class AbstractGrid:
         vec_len : int
             Length of the state vector, corresponding to the first dimension of grid.space
         """
+        self.dtype = dtype
 
         try:
             iterator = iter(num_cells)
@@ -180,7 +181,7 @@ class AbstractGrid:
 
     def scratch_array(self):
         """ Return a zeroed array dimensioned for this grid. """
-        space = np.zeros([self.vec_len] + [len(x) for x in self.coords], dtype=np.float64)
+        space = np.zeros([self.vec_len] + [len(x) for x in self.coords], dtype=self.dtype)
         # if len(space) == 1:
         #     space = space[0]  # For backward compatibility, scalar state doesn't need 1st dim
         return space
@@ -206,8 +207,9 @@ class GridBase(AbstractGrid):
     # the get_default_schedule() function.
     DEFAULT_SCHEDULE = None
 
-    def __init__(self, num_cells, num_ghosts, min_value, max_value, vec_len, boundary="outflow"):
-        super().__init__(num_cells, num_ghosts, min_value, max_value, vec_len)
+    def __init__(self, num_cells, num_ghosts, min_value, max_value, vec_len, boundary="outflow",
+            dtype=np.float64):
+        super().__init__(num_cells, num_ghosts, min_value, max_value, vec_len, dtype=dtype)
      
         if type(boundary) is str:
             if len(self.num_cells) == 1:
@@ -406,25 +408,25 @@ from envs.grid2d import Burgers2DGrid
 
 def create_grid(num_dimensions, num_cells, num_ghosts, min_value, max_value, eqn_type='burgers',
         boundary=None, init_type=None, schedule=None,
-        deterministic_init=False):
+        deterministic_init=False, dtype=None):
 
 
     if eqn_type == 'burgers':
         if num_dimensions == 1:
             return Burgers1DGrid(num_cells, num_ghosts, min_value, max_value,
                                  init_type=init_type, boundary=boundary, schedule=schedule,
-                                 deterministic_init=deterministic_init)
+                                 deterministic_init=deterministic_init, dtype=dtype)
         elif num_dimensions == 2:
             return Burgers2DGrid(num_cells, num_ghosts, min_value, max_value,
                                  init_type=init_type, boundary=boundary, schedule=schedule,
-                                 deterministic_init=deterministic_init)
+                                 deterministic_init=deterministic_init, dtype=dtype)
         else:
             raise NotImplementedError()
     elif eqn_type == 'euler':
         if num_dimensions == 1:
             return Euler1DGrid(num_cells, num_ghosts, min_value, max_value,
                                init_type=init_type, boundary=boundary, schedule=schedule,
-                               deterministic_init=deterministic_init)
+                               deterministic_init=deterministic_init, dtype=dtype)
         else:
             raise NotImplementedError()
     else:

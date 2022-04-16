@@ -213,17 +213,17 @@ class AbstractBurgersEnv(AbstractPDEEnv):
 
 class WENOBurgersEnv(AbstractBurgersEnv, Plottable1DEnv):
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, dtype=np.float64, *args, **kwargs):
+        super().__init__(*args, dtype=dtype, **kwargs)
 
         self.nx = self.grid.nx
 
         self.action_space = SoftmaxBox(low=0.0, high=1.0,
                                        shape=(self.grid.real_length() + 1, 2, self.weno_order),
-                                       dtype=np.float64)
+                                       dtype=dtype)
         self.observation_space = spaces.Box(low=-1e7, high=1e7,
                                             shape=(self.grid.real_length() + 1, 2, 2 * self.state_order - 1),
-                                            dtype=np.float64)
+                                            dtype=dtype)
 
         self.solution.set_record_state(True)
         if self.weno_solution is not None:

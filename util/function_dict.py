@@ -108,17 +108,17 @@ _tensorflow_fn_dict[fn_key] = tf.identity
     #return logp_pi
 
 clip_obs = 5.0 # (in stddevs from the mean)
-clip_obs_tf = tf.constant(clip_obs, dtype=tf.float64)
+#clip_obs_tf = tf.constant(clip_obs, dtype=tf.float64)
 epsilon = 1e-10
-epsilon_tf = tf.constant(epsilon, dtype=tf.float64)
+#epsilon_tf = tf.constant(epsilon, dtype=tf.float64)
 def z_score_last_dim(obs):
     z_score = (obs - obs.mean(axis=-1)[..., None]) / (obs.std(axis=-1)[..., None] + epsilon)
     return np.clip(z_score, -clip_obs, clip_obs)
 @tf.function
 def z_score_last_dim_tf(obs_tensor):
     z_score = ((obs_tensor - tf.reduce_mean(obs_tensor, axis=-1)[..., None])
-            / (tf.math.reduce_std(obs_tensor, axis=-1)[..., None] + epsilon_tf))
-    return tf.clip_by_value(z_score, -clip_obs_tf, clip_obs)
+            / (tf.math.reduce_std(obs_tensor, axis=-1)[..., None] + epsilon))
+    return tf.clip_by_value(z_score, -clip_obs, clip_obs)
 
 fn_key = 'z_score_last'
 _numpy_fn_dict[fn_key] = z_score_last_dim

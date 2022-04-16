@@ -10,9 +10,10 @@ class Burgers2DGrid(GridBase):
     DEFAULT_SCHEDULE = ["gaussian"]
 
     def __init__(self, num_cells, num_ghosts, min_value, max_value, boundary=None,
-            init_type="gaussian", schedule=None, deterministic_init=False):
+            init_type="gaussian", schedule=None, deterministic_init=False, dtype=np.float64):
         vec_len = 1
-        super().__init__(num_cells, num_ghosts, min_value, max_value, vec_len, boundary)
+        super().__init__(num_cells, num_ghosts, min_value, max_value, vec_len, boundary,
+                dtype=dtype)
 
         if init_type is None:
             init_type = "gaussian"
