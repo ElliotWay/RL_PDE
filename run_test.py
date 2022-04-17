@@ -153,7 +153,10 @@ def do_test(env, agent, args):
     if args.evolution_plot:
         if 'plot' in args.output_mode:
             if isinstance(env, Plottable1DEnv):
-                env.plot_state_evolution(num_states=10, full_true=False, no_true=False, plot_weno=False)
+                if args.agent == "none":
+                    env.plot_state_evolution(num_states=10, only_true=True, paper_mode=True)
+                else:
+                    env.plot_state_evolution(num_states=10, full_true=False, no_true=False, plot_weno=False)
                 if args.plot_error:
                     env.plot_state_evolution(num_states=10, plot_error=True)
             elif isinstance(env, Plottable2DEnv):

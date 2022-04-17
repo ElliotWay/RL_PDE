@@ -472,10 +472,10 @@ class Plottable1DEnv(AbstractPDEEnv):
         return filename
 
     def plot_state_evolution(self,
-            num_states=10, full_true=False, no_true=False, plot_error=False, plot_weno=False,
+            num_states=10, full_true=False, no_true=False, only_true=False, plot_error=False, plot_weno=False,
             suffix="", title=None,
             state_history=None, solution_state_history=None, weno_state_history=None,
-            silent=False):
+            silent=False, paper_mode=False):
         """
         Plot the evolution of the state over time on a single plot.
         Ghost cells are not plotted.
@@ -498,7 +498,8 @@ class Plottable1DEnv(AbstractPDEEnv):
         no_true : bool
             Set False by default, which plots the true solution. Set True to
             ONLY plot the RL solution, if you don't care about the true solution.
-            Also useful to plot evolution of the true solution itself.
+        only_true : bool
+            ONLY plot the true solution, not the RL solution. Sets full_true=True.
         plot_weno : bool
             Plot the separate WENO solution, if it exists and it is appropriate to do so.
             Set False by default.
@@ -515,6 +516,14 @@ class Plottable1DEnv(AbstractPDEEnv):
             If False, print a message saying where the data was saved to.
         """
         self.set_colors()
+
+        if only_true:
+            full_true = True
+            no_true = False
+
+        if paper_mode:
+            original_font_size = plt.rcParams['font.size']
+            plt.rcParams.update({'font.size':15})
 
         if 'Euler' in str(self):
             eqn_type = 'euler'
@@ -617,6 +626,7 @@ class Plottable1DEnv(AbstractPDEEnv):
                 solution_state_history = np.array(self.solution.get_state_history())[:, :, self.ng:-self.ng]
                 state_history = np.abs(solution_state_history - state_history)
 
+
         if not plot_error:
             for i in range(vec_len):
                 init = ax[i].plot(x_values, state_history[0, i], ls='--', color=start_rgb)
@@ -628,23 +638,30 @@ class Plottable1DEnv(AbstractPDEEnv):
             agent_rgb = (0.0, 0.0, 0.0)
         agent_color_sequence = color_sequence(start_rgb, agent_rgb, num_states)
         sliced_history = state_history[slice_indexes]
-        for i in range(vec_len):
-            for state_values, color in zip(sliced_history[1:-1], agent_color_sequence[1:-1]):
-                ax[i].plot(x_values, state_values[i, :], ls='-', color=color)
-            agent = ax[i].plot(x_values, state_history[-1, i], ls='-', color=agent_rgb)
+        if not only_true:
+            for i in range(vec_len):
+                for state_values, color in zip(sliced_history[1:-1], agent_color_sequence[1:-1]):
+                    ax[i].plot(x_values, state_values[i, :], ls='-', color=color)
+                agent = ax[i].plot(x_values, state_history[-1, i], ls='-', color=agent_rgb)
 
         if plot_error:
             plots = [agent[0]]
             labels = ["|error|"]
         else:
-            plots = [init[0], agent[0]]
-            labels = ["init", "RL"]
+            plots = [init[0]]
+            labels = ["init"]
+            if not only_true:
+                plots.append(agent[0])
+                labels.append("RL")
             if true is not None:
                 plots.append(true[0])
                 if weno_override:
                     labels.append(self.weno_solution_label)
                 else:
-                    labels.append(self.solution_label)
+                    if only_true:
+                        labels.append("solution")
+                    else:
+                        labels.append(self.solution_label)
             if weno is not None:
                 plots.append(weno[0])
                 labels.append(self.weno_solution_label)
@@ -683,6 +700,8 @@ class Plottable1DEnv(AbstractPDEEnv):
             print('Saved plot to ' + filename + '.')
 
         plt.close(fig)
+        if paper_mode:
+            plt.rcParams.update({'font.size': original_font_size})
         return filename
 
     def save_action(self, timestep=None, location=None, suffix=None):

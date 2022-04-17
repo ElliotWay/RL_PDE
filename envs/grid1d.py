@@ -396,6 +396,18 @@ class Burgers1DGrid(GridBase):
             self.space[0] = np.full_like(self.x, u_L)
             self.space[0, index] = u_R
 
+        elif self.init_type == "shock-formation":
+            if boundary is None:
+                self.boundary = "outflow"
+            k = params['k'] if 'k' in params else 10
+            self.init_params['k'] = k
+            b = params['b'] if 'b' in params else 0.25
+            self.init_params['b'] = b
+            C = params['C'] if 'c' in params else 1.0
+            self.init_params['C'] = C
+
+            self.space[0] = C + np.tanh(-k * (self.x - b))
+
         elif self.init_type == "sawtooth":
             if boundary is None:
                 self.boundary = "outflow"
