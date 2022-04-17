@@ -259,6 +259,14 @@ class Burgers1DGrid(GridBase):
             self.init_params['C'] = C
             self.space[0] = C + A * np.tanh(k * (self.x - 0.5))
 
+        elif self.init_type == "smooth_rare2":
+            if boundary is None:
+                self.boundary = "outflow"
+            k = 10
+            b = 0.25
+            C = 1.0
+            self.space[0] = C + np.tanh(k * (self.x - b))
+
         elif self.init_type == "smooth_rare_periodic":
             self.boundary = "periodic"
             if 'A' in params:
@@ -396,7 +404,7 @@ class Burgers1DGrid(GridBase):
             self.space[0] = np.full_like(self.x, u_L)
             self.space[0, index] = u_R
 
-        elif self.init_type == "shock-formation":
+        elif self.init_type == "shock_formation":
             if boundary is None:
                 self.boundary = "outflow"
             k = params['k'] if 'k' in params else 10
