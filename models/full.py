@@ -38,7 +38,7 @@ class GlobalBackpropModel(GlobalModel):
         gym.Env instance won't work.
         """
         self.dtype = dtype
-        if args.m.weight_dtype is not None:
+        if 'weight_dtype' in args.m and args.m.weight_dtype is not None:
             if args.m.weight_dtype == 64:
                 self.dtype = tf.float64
             else:
