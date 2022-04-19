@@ -57,10 +57,10 @@ def get_agent_kwargs(filename, label, just_color=False):
             return dict(RL_KWARGS)
 
 TRAIN_COLOR = [0.25,0.25,0.25]#'dimgray'#'tab:gray' #'black'
-TRAIN_COLORS = [TRAIN_COLOR, [99/255, 163/255, 117/255]]
+TRAIN_COLORS = [TRAIN_COLOR, [99/255, 163/255, 117/255], [56/255,91/255,181/255]]
 # avg eval color is the same as RL color because they both refer to the agent in test environments.
 AVG_EVAL_COLOR = RL_COLOR#'tab:orange'
-AVG_EVAL_COLORS = [RL_COLOR, RL_COLOR2]
+AVG_EVAL_COLORS = [RL_COLOR, RL_COLOR2, [172/255,60/255,189/255]]
 EVAL_ENV_COLORS = ['b', 'r', 'g', 'm', 'c', 'y']
 
 WENO_ORDER_COLORS = [None, None, 'g', 'b', 'r', 'y', 'c', 'm']
