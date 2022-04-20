@@ -6,7 +6,7 @@ from tensorflow.keras.layers import Layer
 
 from models import GlobalModel
 from models.builder import get_optimizer
-from models.net import PolicyNet, FunctionWrapper
+from models.net import PolicyNet, NoisyPolicyNet, FunctionWrapper
 import envs.weno_coefficients as weno_coefficients
 from envs.weno_solution import RKMethod
 from util.misc import create_stencil_indexes
@@ -218,14 +218,19 @@ class GlobalBackpropModel(GlobalModel):
             # of putting everything in that layer in the scope of that name.
             # tf.variable_scope does not play well with Keras.
             a_fn = get_activation(self.args.m.activation)
-            self.policy = PolicyNet(layers=self.args.m.layers, action_shape=action_shape,
-                    layer_norm=self.args.m.layer_norm,
-                    activation_fn=a_fn, name="policy", dtype=self.dtype)
+            if self.args.m.action_noise == 0.0:
+                self.policy = PolicyNet(layers=self.args.m.layers, action_shape=action_shape,
+                        activation_fn=a_fn, name="policy", dtype=self.dtype)
+            else:
+                self.policy = NoisyPolicyNet(layers=self.args.m.layers, action_shape=action_shape,
+                        activation_fn=a_fn, name="policy", dtype=self.dtype,
+                        noise_size=self.args.m.action_noise)
 
             # Direct policy input and output used in predict() method during testing.
             self.policy_input_ph = tf.placeholder(dtype=self.dtype,
                     shape=(None,) + self.env.observation_space.shape[1:], name="policy_input")
-            self.policy_output = self.policy(self.policy_input_ph)
+            self.policy_output = self.policy(self.policy_input_ph, training=True)
+            self.policy_output_deterministic = self.policy(self.policy_input_ph, training=False)
             # See note in setup_training for why we do not apply normalizing functions here.
 
             self.policy_params = self.policy.weights
@@ -429,9 +434,10 @@ class GlobalBackpropModel(GlobalModel):
         if not self._policy_ready or (not self._training_ready and not self.preloaded):
             raise Exception("No policy to predict with yet!")
 
-        if not deterministic:
-            print("Note: this model is strictly deterministic so using deterministic=False will"
-            " have no effect.")
+        if deterministic:
+            policy_op = self.policy_output_deterministic
+        else:
+            policy_op = self.policy_output
 
         single_obs_rank = len(self.env.observation_space.shape) - 1
         input_rank = len(state.shape)
@@ -440,14 +446,14 @@ class GlobalBackpropModel(GlobalModel):
             # Single local state.
             assert state.shape == self.env.observation_space.shape[1:]
             state = state[None]
-            action = self.session.run(self.policy_output, feed_dict={self.policy_input_ph:state})
+            action = self.session.run(policy_op, feed_dict={self.policy_input_ph:state})
             action = action[0]
 
         elif input_rank == single_obs_rank + 1:
             # Batch of local states 
             # OR single global state.
             assert state.shape[1:] == self.env.observation_space.shape[1:]
-            action = self.session.run(self.policy_output, feed_dict={self.policy_input_ph:state})
+            action = self.session.run(policy_op, feed_dict={self.policy_input_ph:state})
 
         elif input_rank == single_obs_rank + 2:
             # Batch of global states.
@@ -455,7 +461,7 @@ class GlobalBackpropModel(GlobalModel):
             batch_length = state.shape[0]
             spatial_length = state.shape[1]
             flattened_state = state.reshape((batch_length * spatial_length,) + state.shape[2:])
-            flattened_action = self.session.run(self.policy_output,
+            flattened_action = self.session.run(policy_op,
                     feed_dict={self.policy_input_ph:flattened_state})
             action = flattened_action.reshape((batch_length, spatial_length,) + action.shape[1:])
 
@@ -650,7 +656,7 @@ class IntegrateCell(Layer):
             # that.)
             # This loop is equivalent to ExtendAgent2D.
 
-            shaped_action = self.policy_net(reshaped_state)
+            shaped_action = self.policy_net(reshaped_state, training=True)
 
             shaped_action_shape = shaped_action.shape.as_list()
             # Can't use rl_state_shape[:outer_dims] because rl_state_shape[0] is None; we need -1.
@@ -752,7 +758,7 @@ class RK4IntegrateCell(Layer):
                 # that.)
                 # This loop is equivalent to ExtendAgent2D.
 
-                shaped_action = self.policy_net(reshaped_state)
+                shaped_action = self.policy_net(reshaped_state, training=True)
 
                 shaped_action_shape = shaped_action.shape.as_list()
                 # Can't use rl_state_shape[:outer_dims] because rl_state_shape[0] is None; we need -1.
