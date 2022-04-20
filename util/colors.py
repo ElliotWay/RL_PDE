@@ -28,6 +28,8 @@ RL_KWARGS2= {'color':RL_COLOR2, 'linestyle':'', 'marker':'o'}
 ANALYTICAL_COLOR = 'black' #'tab:pink'
 ANALYTICAL_KWARGS = {'color':ANALYTICAL_COLOR, 'linestyle':'-', 'marker':'', 'linewidth':0.75}
 
+agent_count = 0
+
 def get_agent_kwargs(filename, label, just_color=False):
     """
     Infer whether the agent is RL, WENO, or analytical based on the filename
@@ -51,10 +53,18 @@ def get_agent_kwargs(filename, label, just_color=False):
                 or any(name in label.lower() for name in ['rl', 'agent'])):
             print(f"Warning: can't determine type of {filename};"
                     + " assuming it is from an RL agent.")
-        if just_color:
-            return {'color':RL_COLOR}
-        else:
-            return dict(RL_KWARGS)
+        global agent_count
+        agent_count += 1
+        if agent_count == 1:
+            if just_color:
+                return {'color':RL_COLOR}
+            else:
+                return dict(RL_KWARGS)
+        elif agent_count == 2:
+            if just_color:
+                return {'color':RL_COLOR2}
+            else:
+                return dict(RL_KWARGS2)
 
 TRAIN_COLOR = [0.25,0.25,0.25]#'dimgray'#'tab:gray' #'black'
 TRAIN_COLORS = [TRAIN_COLOR, [99/255, 163/255, 117/255], [56/255,91/255,181/255]]
