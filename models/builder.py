@@ -16,6 +16,8 @@ def get_model_arg_parser(model_type=None):
     if model_type in [None, 'full']:
         parser.add_argument('--weight-dtype', '--weight_dtype', type=int, default=64, choices=[32,64],
                 help="dtype for network weights. float64 or float32.")
+        parser.add_argument('--action-noise', '--action_noise', type=nonnegative_float, default=0.0,
+                help="Add noise to the action during training. This scales an N(0,1) distribution.")
 
     if model_type in [None, 'full', 'sac', 'ddpg', 'pg']:
         parser.add_argument('--layers', type=positive_int, nargs='+', default=[128, 128],
@@ -76,11 +78,6 @@ def get_model_arg_parser(model_type=None):
                 + " instead of individual locations. Use --replay-style marl."
                 + " This also forces --emi marl and increases batch size to be a multiple of the"
                 + " spatial dimension.")
-
-
-    if model_type in [None, 'full']:
-        parser.add_argument('--action-noise', '--action_noise', type=nonnegative_float, default=0.0,
-                help="Add noise to the action during training. This scales an N(0,1) distribution.")
 
     if model_type in [None, 'pg']:
         parser.add_argument('--return-style', '--return_style', type=str, default=None,
