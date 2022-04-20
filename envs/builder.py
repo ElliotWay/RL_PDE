@@ -29,13 +29,13 @@ def get_env_arg_parser():
     parser.add_argument('--min-value', '--min_value', '--xmin', type=float, nargs='+',
                             default=None,
                         help="Lower bounds of the physical space. May have multiple values,"
-                        + " see --num-cells. Default is 0.0, but some initial conditions may"
-                        + " specify different defaults.")
+                        + " see --num-cells. Default is 0.0 for Burgers and -0.5 for Euler,"
+                        + " but some initial conditions may use different defaults.")
     parser.add_argument('--max-value', '--max_value', '--xmax', type=float, nargs='+',
                             default=None,
                         help="Upper bounds of the physical space. May have multiple values,"
-                        + " see --num-cells. Default is 1.0, but some initial conditions may"
-                        + " specify different defaults.")
+                        + " see --num-cells. Default is 1.0 for Burgers and 0.5 for Euler,"
+                        + " but some initial conditions may use different defaults.")
     parser.add_argument('--order', type=positive_int, default=3,
                         help="Order of WENO approximation (assuming using WENO environment or agent).")
     parser.add_argument('--state_order', '--state-order', type=positive_int, default=None,
@@ -50,7 +50,8 @@ def get_env_arg_parser():
 
     parser.add_argument('--timestep', '--dt', type=positive_float, default=None,
                         help="Set fixed timestep length. This value is ignored if"
-                        + " --variable-timesteps is enabled. The default value is 0.0004.")
+                        + " --variable-timesteps is enabled. The default value is 0.0004"
+                        + " for Burgers and 0.0001 for Euler.")
     parser.add_argument('--C', type=positive_float, default=0.1,
                         help="Constant used in choosing variable timestep if --variable-timesteps"
                         + " is enabled, or choosing defaults if --timestep and --nx are not both"
@@ -197,23 +198,59 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
             env_args.num_cells = [int(num) for num in env_args.num_cells]
 
     # Some environments have specific defaults.
-    if env_args.init_type == 'jsz7':
-        assert main_args.env == "weno_burgers_2d"
+    if main_args.env == "weno_burgers":
         if env_args.min_value is None:
             env_args.min_value = (0.0,)
         if env_args.max_value is None:
-            env_args.max_value = (4.0,)
+            env_args.max_value = (1.0,)
+
+        if env_args.num_cells is None and env_args.timestep is None:
+            env_args.timestep = 0.0004
+    elif main_args.env == "weno_burgers_2d":
+        if env_args.init_type == "jsz7":
+            if env_args.min_value is None:
+                env_args.min_value = (0.0,)
+            if env_args.max_value is None:
+                env_args.max_value = (4.0,)
+            if env_args.num_cells is None:
+                env_args.num_cells = (160,)
+            if env_args.time_max is None:
+                env_args.time_max = 0.5
+        else:
+            if env_args.min_value is None:
+                env_args.min_value = (0.0,)
+            if env_args.max_value is None:
+                env_args.max_value = (1.0,)
+
+        if env_args.num_cells is None and env_args.timestep is None:
+            env_args.timestep = 0.0004
+    elif main_args.env == "weno_euler":
+        if env_args.init_type == "lax":
+            if env_args.time_max is None:
+                env_args.time_max = 0.14
+            if env_args.min_value is None:
+                env_args.min_value = (-0.5,)
+            if env_args.max_value is None:
+                env_args.max_value = (0.5,)
+        elif env_args.init_type == "sonic_rarefaction":
+            if env_args.min_value is None:
+                env_args.min_value = (-5.0,)
+            if env_args.max_value is None:
+                env_args.max_value = (5.0,)
+            if env_args.time_max is None:
+                env_args.time_max = 0.7
+        else:
+            if env_args.min_value is None:
+                env_args.min_value = (-0.5,)
+            if env_args.max_value is None:
+                env_args.max_value = (0.5,)
+
+        if env_args.num_cells is None and env_args.timestep is None:
+            env_args.timestep = 0.0001
         if env_args.num_cells is None:
-            env_args.num_cells = (160,)
-        if env_args.time_max is None:
-            env_args.time_max = 0.5
-    elif env_args.init_type == 'sod':
-        assert main_args.env == "weno_euler"
-        if env_args.min_value is None:
-            env_args.min_value = (-0.5)
-        if env_args.max_value is None:
-            env_args.max_value = (0.5)
+            env_args.num_cells = (128,)
     else:
+        print("{pfx}unusual environment, defaults may be weird")
         if env_args.min_value is None:
             env_args.min_value = (0.0,)
         if env_args.max_value is None:
