@@ -64,9 +64,9 @@ def get_env_arg_parser():
                         help="The number of timesteps in the episode. Overrides time-max."
                         + " If --variable-timesteps is used, this is only an approximation"
                         + " based on the value of --timestep.")
-
-    parser.add_argument('--init_type', '--init-type', type=str, default="schedule",
-                        help="The type of initial condition.")
+    parser.add_argument('--init_type', '--init-type', type=str, default=None,
+                        help="The type of initial condition. The default depends on the"
+                        + " type of environment.")
     parser.add_argument('--schedule', type=str, nargs='+', default=None,
                         help="List of init-types used with the 'schedule' and 'random'"
                         + " init-type. The default depends on the environment.")
@@ -199,6 +199,9 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
 
     # Some environments have specific defaults.
     if main_args.env == "weno_burgers":
+        if env_args.init_type is None:
+            env_args.init_type = "schedule"
+
         if env_args.min_value is None:
             env_args.min_value = (0.0,)
         if env_args.max_value is None:
@@ -207,6 +210,9 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
         if env_args.num_cells is None and env_args.timestep is None:
             env_args.timestep = 0.0004
     elif main_args.env == "weno_burgers_2d":
+        if env_args.init_type is None:
+            env_args.init_type = "gaussian"
+
         if env_args.init_type == "jsz7":
             if env_args.min_value is None:
                 env_args.min_value = (0.0,)
@@ -225,6 +231,9 @@ def set_contingent_env_defaults(main_args, env_args, arg_manager=None, test=Fals
         if env_args.num_cells is None and env_args.timestep is None:
             env_args.timestep = 0.0004
     elif main_args.env == "weno_euler":
+        if env_args.init_type is None:
+            env_args.init_type = "sod"
+
         if env_args.init_type == "lax":
             if env_args.time_max is None:
                 env_args.time_max = 0.14
