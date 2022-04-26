@@ -183,12 +183,13 @@ def main():
             eval_args.order = args.e.order
             eval_args.init_type = "gaussian"
             env_builder.set_contingent_env_defaults(args, eval_args, test=True,
-                    print_prefix="eval (gauss/1d): ")
+                    print_prefix="eval (gauss/combo): ")
 
             eval_envs.append(env_builder.build_env(args.env, eval_args, test=True))
 
-            # 1D inits use the same defaults, so we don't need to reset params.
-            eval_args.init_type = "1d-smooth_sine-x"
+            # 1D inits use the same defaults, so we don't need to reset contigent params.
+            #eval_args.init_type = "1d-smooth_sine-x"
+            eval_args.init_type = "combo-accelshock-rarefaction"
             eval_envs.append(env_builder.build_env(args.env, eval_args, test=True))
 
             # jsz7 DOES use different defaults.
