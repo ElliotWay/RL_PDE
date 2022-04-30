@@ -43,6 +43,10 @@ def main():
     parser.add_argument("--meta", type=str,
                         help="Path to the meta file of the original training run."
                         + " The directory of the meta file must contain the other experiment files.")
+    parser.add_argument("--start", type=int, default=None,
+                        help="Episode to start reevalutation on. Models from earlier episodes will not"
+                        + " be reevalutated. Note that this will probably break the --copy "
+                        + " or --append options.")
     parser.add_argument('--help-env', default=False, action='store_true',
                         help="Show the environment parameters not listed here.")
     parser.add_argument('--env', type=str, default="weno_burgers",
@@ -159,6 +163,9 @@ def main():
     old_csv_filename = os.path.join(old_log_dir, 'progress.csv')
     old_csv_df = pd.read_csv(old_csv_filename, comment='#', float_precision='round_trip')
     episode_numbers = old_csv_df['episodes']
+    if reeval_args.start is not None:
+        episode_numbers = [int(num) for num in episode_numbers if int(num) >= reeval_args.start]
+
     # Some work needed to check for possible variable number formatting.
     agent_filenames = {num: None for num in episode_numbers}
     for entry in os.scandir(old_log_dir):
@@ -167,8 +174,9 @@ def main():
         match = re.fullmatch("model(\d+).zip", entry.name)
         if match is not None:
             number = int(match.group(1))
-            assert agent_filenames[number] is None, f"Already have agent for {number}"
-            agent_filenames[number] = entry.path
+            if number in episode_numbers:
+                assert agent_filenames[number] is None, f"Already have agent for {number}"
+                agent_filenames[number] = entry.path
     missing_filenames = [num for num, name in agent_filenames.items() if name is None]
     if len(missing_filenames) > 0:
         raise Exception("Can't reevaluate, missing agents for logged episodes:\n"
