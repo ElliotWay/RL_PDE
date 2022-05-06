@@ -74,6 +74,15 @@ def main():
     parser.add_argument('--env-name', default=None, type=str,
                         help="If --output-mode csv is specified, the name of the environment"
                         + " to use as a column header. Defaults to the --init-type.")
+    parser.add_argument('--env-prefix', default=None, type=str,
+                        help="If --output-mode csv is specified, the prefix of the name to use"
+                        + " as a column header. Overrides the --eval and --train options.")
+    parser.add_argument('--eval', dest='eval', action='store_true',
+                        help="Use 'eval' as the column name prefix.")
+    parser.add_argument('--train', dest='eval', action='store_false',
+                        help="Use 'train' as the column name prefix. (If you need to repeat"
+                        + " evaluation using the training environments.)")
+    parser.set_defaults(eval=True)
 
     arg_manager.set_parser(parser)
     env_arg_manager = arg_manager.create_child("e", long_name="Environment Parameters")
@@ -112,6 +121,9 @@ def main():
     dims = env_builder.env_dimensions(reeval_args.env)
 
     # Load the meta file of the original experiment.
+    # Known problem - doesn't handle parameters created since the experiment.
+    # The right way would be to use load_from_dict instead of init_from_dict, but this introduces
+    # complications I don't want to deal with.
     if os.path.basename(reeval_args.meta) == metadata.META_FILE_NAME:
         open_file = open(reeval_args.meta, 'r')
         args_dict = yaml.safe_load(open_file)
@@ -162,7 +174,7 @@ def main():
     # Get a list of all the agents to run.
     old_csv_filename = os.path.join(old_log_dir, 'progress.csv')
     old_csv_df = pd.read_csv(old_csv_filename, comment='#', float_precision='round_trip')
-    episode_numbers = old_csv_df['episodes']
+    episode_numbers = list(old_csv_df['episodes'])
     if reeval_args.start is not None:
         episode_numbers = [int(num) for num in episode_numbers if int(num) >= reeval_args.start]
 
@@ -347,9 +359,17 @@ def main():
                     # The file does not yet exist; create a new DataFrame.
                     output_df = pd.DataFrame({'episodes': episode_numbers})
 
+            if reeval_args.env_prefix is None:
+                if reeval_args.eval:
+                    env_prefix = "eval"
+                else:
+                    env_prefix = "train"
+            else:
+                env_prefix = reeval_args.env_prefix
+
             env_name = reeval_args.env_name
-            reward_name = f"eval_{env_name}_reward"
-            l2_name = f"eval_{env_name}_end_l2"
+            reward_name = f"{env_prefix}_{env_name}_reward"
+            l2_name = f"{env_prefix}_{env_name}_end_l2"
             original_env_name = env_name
 
             # Ensure that the specified env_name does not overwrite an existing column.
@@ -359,8 +379,8 @@ def main():
                     env_name = match.group(1) + str(int(match.group(2))+1)
                 else:
                     env_name = env_name + "1"
-                reward_name = f"eval_{env_name}_reward"
-                l2_name = f"eval_{env_name}_end_l2"
+                reward_name = f"{env_prefix}_{env_name}_reward"
+                l2_name = f"{env_prefix}_{env_name}_end_l2"
             if env_name != original_env_name:
                 print(f"Environment name '{original_env_name}' is already in {output_filename}!"
                         + f" Adjusted to '{env_name}'.")
@@ -371,7 +391,9 @@ def main():
             output_file.seek(0)
             output_file.truncate()
             output_df.to_csv(output_file, index=False)
+
         # /with Close and unlock output_file.
+
         reread_df = pd.read_csv(output_filename, comment='#', float_precision='round_trip')
 
         if reeval_args.replot:

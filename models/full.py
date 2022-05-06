@@ -218,13 +218,13 @@ class GlobalBackpropModel(GlobalModel):
             # of putting everything in that layer in the scope of that name.
             # tf.variable_scope does not play well with Keras.
             a_fn = get_activation(self.args.m.activation)
-            if self.args.m.action_noise == 0.0:
-                self.policy = PolicyNet(layers=self.args.m.layers, action_shape=action_shape,
-                        activation_fn=a_fn, name="policy", dtype=self.dtype)
-            else:
+            if 'action_noise' in self.args.m and self.args.m.action_noise != 0.0:
                 self.policy = NoisyPolicyNet(layers=self.args.m.layers, action_shape=action_shape,
                         activation_fn=a_fn, name="policy", dtype=self.dtype,
                         noise_size=self.args.m.action_noise)
+            else:
+                self.policy = PolicyNet(layers=self.args.m.layers, action_shape=action_shape,
+                        activation_fn=a_fn, name="policy", dtype=self.dtype)
 
             # Direct policy input and output used in predict() method during testing.
             self.policy_input_ph = tf.placeholder(dtype=self.dtype,
