@@ -40,7 +40,7 @@ def main():
             + " since training."
             + " Note that this does not update the average eval values in existing files.",
             formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--meta", type=str,
+    parser.add_argument("--meta", type=str, default=None,
                         help="Path to the meta file of the original training run."
                         + " The directory of the meta file must contain the other experiment files.")
     parser.add_argument("--start", type=int, default=None,
@@ -64,6 +64,10 @@ def main():
     parser.add_argument('--copy', default=False, action='store_true',
                         help="Copy the data of the original experiment files into the new"
                         + " directory.")
+    parser.add_argument('--only-copy', default=False, action='store_true',
+                        help="Copy the data of the original experiment files into the new"
+                        + " directory without running any new tests. Useful if a previous"
+                        + " reevaluation run should have used --copy, but didn't.")
     parser.add_argument('--output-mode', '--output_mode', default=['csv'], nargs='+',
                         help="Which kinds of files to create/update. csv creates/updates"
                         + " progress.csv with the reward and L2 error for each run. plot creates"
@@ -98,7 +102,11 @@ def main():
         print("Unrecognized arguments: " + " ".join(rest))
         sys.exit(0)
 
-    old_log_dir, file_name = os.path.split(reeval_args.meta)
+    if reeval_args.only_copy:
+        reeval_args.copy = True
+
+    if reeval_args.env_name is None:
+        reeval_args.env_name = reeval_args.e.init_type
 
     if reeval_args.output_dir is not None:
         if reeval_args.append:
@@ -112,155 +120,158 @@ def main():
     if reeval_args.copy and reeval_args.append:
         raise Exception("Cannot use both --copy and --append.")
 
-    if reeval_args.env_name is None:
-        reeval_args.env_name = reeval_args.e.init_type
-
-    # Build the new environment
-    env_builder.set_contingent_env_defaults(reeval_args, reeval_args.e, test=True)
-    env = env_builder.build_env(reeval_args.env, reeval_args.e, test=True)
-    dims = env_builder.env_dimensions(reeval_args.env)
-
-    # Load the meta file of the original experiment.
-    # Known problem - doesn't handle parameters created since the experiment.
-    # The right way would be to use load_from_dict instead of init_from_dict, but this introduces
-    # complications I don't want to deal with.
-    if os.path.basename(reeval_args.meta) == metadata.META_FILE_NAME:
-        open_file = open(reeval_args.meta, 'r')
-        args_dict = yaml.safe_load(open_file)
-        open_file.close()
-
-        loaded_arg_manager = ArgTreeManager()
-        loaded_arg_manager.init_from_dict(args_dict, children_names=['e', 'm'])
-    elif os.path.basename(reeval_args.meta) == metadata.OLD_META_FILE_NAME:
-        env_args = vars(env_builder.get_env_arg_parser().parse_args(""))
-        model_args = vars(model_builder.get_model_arg_parser().parse_args(""))
-
-        full_dict = metadata.load_meta_file(filename)
-        main_dict = {}
-        env_dict = {}
-        model_dict = {}
-        for k, v in full_dict.items():
-            v = metadata.destring_value(v)
-            if k in META_IGNORE_KEYS:
-                pass
-            elif k in env_args:
-                env_dict[k] = v
-            elif k in model_args:
-                model_dict[k] = v
-            else:
-                main_dict[k] = v
-
-        loaded_arg_manager = ArgTreeManager()
-        loaded_arg_manager.init_from_dict(main_dict, children_names=[])
-
-        loaded_env_manager = arg_manager.create_child('e')
-        loaded_env_manager.init_from_dict(env_dict, children_names=[])
-
-        loaded_model_manager = arg_manager.create_child('m')
-        loaded_model_manager.init_from_dict(model_dict, children_names=[])
-
-        # Need to do this manually since we're initializing in an unusual way.
-        arg_dict = vars(loaded_arg_manager.args)
-        arg_dict['e'] = loaded_env_manager
-        arg_dict['m'] = loaded_model_manager
-    else:
-        raise Exception(f"{reeval_args.meta} not a recognized meta file type.")
-
-    args = loaded_arg_manager.args
-    # Some things refer to logger to access the log_dir, so we need to set it here.
-    logger.configure(folder=new_log_dir, format_strs=['stdout'])
-    logger.set_level(logger.DEBUG)
-
-    # Get a list of all the agents to run.
+    old_log_dir, file_name = os.path.split(reeval_args.meta)
     old_csv_filename = os.path.join(old_log_dir, 'progress.csv')
     old_csv_df = pd.read_csv(old_csv_filename, comment='#', float_precision='round_trip')
-    episode_numbers = list(old_csv_df['episodes'])
-    if reeval_args.start is not None:
-        episode_numbers = [int(num) for num in episode_numbers if int(num) >= reeval_args.start]
 
-    # Some work needed to check for possible variable number formatting.
-    agent_filenames = {num: None for num in episode_numbers}
-    for entry in os.scandir(old_log_dir):
-        if not entry.is_file():
-            continue
-        match = re.fullmatch("model(\d+).zip", entry.name)
-        if match is not None:
-            number = int(match.group(1))
-            if number in episode_numbers:
-                assert agent_filenames[number] is None, f"Already have agent for {number}"
-                agent_filenames[number] = entry.path
-    missing_filenames = [num for num, name in agent_filenames.items() if name is None]
-    if len(missing_filenames) > 0:
-        raise Exception("Can't reevaluate, missing agents for logged episodes:\n"
-                + str(missing_filenames[:20]))
+    if not reeval_args.only_copy:
 
-    # Build the emi and model to load parameters into. (Copied from run_test.py.)
-    obs_adjust = numpy_fn(args.obs_scale)
-    action_adjust = numpy_fn(args.action_scale)
+        # Build the new environment
+        env_builder.set_contingent_env_defaults(reeval_args, reeval_args.e, test=True)
+        env = env_builder.build_env(reeval_args.env, reeval_args.e, test=True)
+        dims = env_builder.env_dimensions(reeval_args.env)
 
-    model_cls = get_model_class(args.model)
-    emi_cls = get_emi_class(args.emi)
-    model_dims = get_model_dims(args.model)
+        # Load the meta file of the original experiment.
+        # Known problem - doesn't handle parameters created since the experiment.
+        # The right way would be to use load_from_dict instead of init_from_dict, but this introduces
+        # complications I don't want to deal with.
+        if os.path.basename(reeval_args.meta) == metadata.META_FILE_NAME:
+            open_file = open(reeval_args.meta, 'r')
+            args_dict = yaml.safe_load(open_file)
+            open_file.close()
 
-    if model_dims < dims:
-        if model_dims == 1:
-            emi = DimensionalAdapterEMI(emi_cls, env, model_cls, args,
-                    obs_adjust=obs_adjust, action_adjust=action_adjust)
+            loaded_arg_manager = ArgTreeManager()
+            loaded_arg_manager.init_from_dict(args_dict, children_names=['e', 'm'])
+        elif os.path.basename(reeval_args.meta) == metadata.OLD_META_FILE_NAME:
+            env_args = vars(env_builder.get_env_arg_parser().parse_args(""))
+            model_args = vars(model_builder.get_model_arg_parser().parse_args(""))
+
+            full_dict = metadata.load_meta_file(filename)
+            main_dict = {}
+            env_dict = {}
+            model_dict = {}
+            for k, v in full_dict.items():
+                v = metadata.destring_value(v)
+                if k in META_IGNORE_KEYS:
+                    pass
+                elif k in env_args:
+                    env_dict[k] = v
+                elif k in model_args:
+                    model_dict[k] = v
+                else:
+                    main_dict[k] = v
+
+            loaded_arg_manager = ArgTreeManager()
+            loaded_arg_manager.init_from_dict(main_dict, children_names=[])
+
+            loaded_env_manager = arg_manager.create_child('e')
+            loaded_env_manager.init_from_dict(env_dict, children_names=[])
+
+            loaded_model_manager = arg_manager.create_child('m')
+            loaded_model_manager.init_from_dict(model_dict, children_names=[])
+
+            # Need to do this manually since we're initializing in an unusual way.
+            arg_dict = vars(loaded_arg_manager.args)
+            arg_dict['e'] = loaded_env_manager
+            arg_dict['m'] = loaded_model_manager
         else:
-            raise Exception("Cannot adapt {}-dimensional model to {}-dimensional environment."
-                    .format(model_dims, dims))
-    elif args.env == 'weno_euler':
-        emi = VectorAdapterEMI(emi_cls, env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
-    else:
-        emi = emi_cls(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
+            raise Exception(f"{reeval_args.meta} not a recognized meta file type.")
 
-    # Run tests with each agent.
-    reward_data = []
-    l2_data = []
-    ep_precision = int(np.ceil(np.log(1+args.total_episodes) / np.log(10)))
-    for index, ep_num in enumerate(episode_numbers):
-        agent_file = agent_filenames[ep_num]
+        args = loaded_arg_manager.args
+        # Some things refer to logger to access the log_dir, so we need to set it here.
+        logger.configure(folder=new_log_dir, format_strs=['stdout'])
+        logger.set_level(logger.DEBUG)
 
-        emi.load_model(agent_file)
-        agent = emi.get_policy()
- 
-        _, _, rewards, _, _ = rollout(env, agent, deterministic=True)
+        # Get a list of all the agents to run.
+        episode_numbers = list(old_csv_df['episodes'])
+        if reeval_args.start is not None:
+            episode_numbers = [int(num) for num in episode_numbers if int(num) >= reeval_args.start]
 
-        ep_string = ("{:0" + str(ep_precision) + "}").format(ep_num)
-        if 'csv' in reeval_args.output_mode:
-            reward_parts = list(zip(*rewards))
-            avg_total_reward = np.mean([np.mean(np.sum(reward_part, axis=0))
-                                            for reward_part in reward_parts])
-            reward_data.append(avg_total_reward)
-            l2_data.append(env.compute_l2_error())
+        # Some work needed to check for possible variable number formatting.
+        agent_filenames = {num: None for num in episode_numbers}
+        for entry in os.scandir(old_log_dir):
+            if not entry.is_file():
+                continue
+            match = re.fullmatch("model(\d+).zip", entry.name)
+            if match is not None:
+                number = int(match.group(1))
+                if number in episode_numbers:
+                    assert agent_filenames[number] is None, f"Already have agent for {number}"
+                    agent_filenames[number] = entry.path
+        missing_filenames = [num for num, name in agent_filenames.items() if name is None]
+        if len(missing_filenames) > 0:
+            raise Exception("Can't reevaluate, missing agents for logged episodes:\n"
+                    + str(missing_filenames[:20]))
 
-            if reeval_args.plot_l2:
-                times = env.timestep_history
-                l2s = env.compute_l2_error(timestep="all")
-                episode_filename = os.path.join(new_log_dir, f"ep_{ep_string}_progress.csv")
-                progress_df = pd.DataFrame({'t':times, 'l2': l2s})
-                progress_df.to_csv(episode_filename, index=False)
+        # Build the emi and model to load parameters into. (Copied from run_test.py.)
+        obs_adjust = numpy_fn(args.obs_scale)
+        action_adjust = numpy_fn(args.action_scale)
 
-        if 'plot' in reeval_args.output_mode:
-            ep_string = ("{:0" + str(ep_precision) + "}").format(ep_num)
-            suffix = f"_{reeval_args.env_name}_ep_{ep_string}"
-            if isinstance(env, Plottable1DEnv):
-                env.plot_state_evolution(num_states=10, full_true=False, no_true=False,
-                        plot_weno=False, suffix=suffix, silent=True)
-            elif isinstance(env, Plottable2DEnv):
-                env.plot_state_evolution(num_frames=20, suffix=suffix, silent=True)
+        model_cls = get_model_class(args.model)
+        emi_cls = get_emi_class(args.emi)
+        model_dims = get_model_dims(args.model)
+
+        if model_dims < dims:
+            if model_dims == 1:
+                emi = DimensionalAdapterEMI(emi_cls, env, model_cls, args,
+                        obs_adjust=obs_adjust, action_adjust=action_adjust)
             else:
-                raise Exception()
-            if reeval_args.plot_l2:
-                times = env.timestep_history
-                l2s = env.compute_l2_error(timestep="all")
-                filename = f"ep_{ep_string}_l2.png"
-                plots.plot_over_time(times, l2s, log_dir=new_log_dir, name=filename,
-                        title="L2 Error", silent=False)
-        if index % 10 == 9:
-            print(ep_num, flush=True)
+                raise Exception("Cannot adapt {}-dimensional model to {}-dimensional environment."
+                        .format(model_dims, dims))
+        elif args.env == 'weno_euler':
+            emi = VectorAdapterEMI(emi_cls, env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
         else:
-            print('.', end='', flush=True)
+            emi = emi_cls(env, model_cls, args, obs_adjust=obs_adjust, action_adjust=action_adjust)
+
+        # Run tests with each agent.
+        reward_data = []
+        l2_data = []
+        ep_precision = int(np.ceil(np.log(1+args.total_episodes) / np.log(10)))
+        for index, ep_num in enumerate(episode_numbers):
+            agent_file = agent_filenames[ep_num]
+
+            emi.load_model(agent_file)
+            agent = emi.get_policy()
+     
+            _, _, rewards, _, _ = rollout(env, agent, deterministic=True)
+
+            ep_string = ("{:0" + str(ep_precision) + "}").format(ep_num)
+            if 'csv' in reeval_args.output_mode:
+                reward_parts = list(zip(*rewards))
+                avg_total_reward = np.mean([np.mean(np.sum(reward_part, axis=0))
+                                                for reward_part in reward_parts])
+                reward_data.append(avg_total_reward)
+                l2_data.append(env.compute_l2_error())
+
+                if reeval_args.plot_l2:
+                    times = env.timestep_history
+                    l2s = env.compute_l2_error(timestep="all")
+                    episode_filename = os.path.join(new_log_dir, f"ep_{ep_string}_progress.csv")
+                    progress_df = pd.DataFrame({'t':times, 'l2': l2s})
+                    progress_df.to_csv(episode_filename, index=False)
+
+            if 'plot' in reeval_args.output_mode:
+                ep_string = ("{:0" + str(ep_precision) + "}").format(ep_num)
+                suffix = f"_{reeval_args.env_name}_ep_{ep_string}"
+                if isinstance(env, Plottable1DEnv):
+                    env.plot_state_evolution(num_states=10, full_true=False, no_true=False,
+                            plot_weno=False, suffix=suffix, silent=True)
+                elif isinstance(env, Plottable2DEnv):
+                    env.plot_state_evolution(num_frames=20, suffix=suffix, silent=True)
+                else:
+                    raise Exception()
+                if reeval_args.plot_l2:
+                    times = env.timestep_history
+                    l2s = env.compute_l2_error(timestep="all")
+                    filename = f"ep_{ep_string}_l2.png"
+                    plots.plot_over_time(times, l2s, log_dir=new_log_dir, name=filename,
+                            title="L2 Error", silent=False)
+            if index % 10 == 9:
+                print(ep_num, flush=True)
+            else:
+                print('.', end='', flush=True)
+
+    # /if eval_args.only_copy
 
     if 'csv' in reeval_args.output_mode:
         if reeval_args.append:
@@ -284,11 +295,11 @@ def main():
                 old_names = [name for name in column_names
                                 if re.fullmatch("eval\d+_(reward|end_l2)", name)]
                 if old_names:
-                    if args.env == "weno_burgers":
+                    if reeval_args.env == "weno_burgers":
                         eval_names = {'1': 'smooth_sine', '2': 'smooth_rare', '3': 'accelshock'}
-                    elif args.env == "weno_burgers_2d":
+                    elif reeval_args.env == "weno_burgers_2d":
                         eval_names = {'1': 'gaussian', '2': '1d-smooth_sine-x', '3': 'jsz7'}
-                    elif args.env == "weno_euler":
+                    elif reeval_args.env == "weno_euler":
                         eval_names = {'1': 'sod'}
                     numbers = {re.match("eval(\d+)_", name).group(1) for name in old_names}
                     replacement_dict = {}
@@ -367,32 +378,33 @@ def main():
             else:
                 env_prefix = reeval_args.env_prefix
 
-            env_name = reeval_args.env_name
-            reward_name = f"{env_prefix}_{env_name}_reward"
-            l2_name = f"{env_prefix}_{env_name}_end_l2"
-            original_env_name = env_name
-
-            # Ensure that the specified env_name does not overwrite an existing column.
-            while reward_name in output_df or l2_name in output_df:
-                match = re.fullmatch("([^\d]+)(\d+)", env_name)
-                if match:
-                    env_name = match.group(1) + str(int(match.group(2))+1)
-                else:
-                    env_name = env_name + "1"
+            if not reeval_args.only_copy:
+                env_name = reeval_args.env_name
                 reward_name = f"{env_prefix}_{env_name}_reward"
                 l2_name = f"{env_prefix}_{env_name}_end_l2"
-            if env_name != original_env_name:
-                print(f"Environment name '{original_env_name}' is already in {output_filename}!"
-                        + f" Adjusted to '{env_name}'.")
+                original_env_name = env_name
 
-            output_df[reward_name] = reward_data
-            output_df[l2_name] = l2_data
+                # Ensure that the specified env_name does not overwrite an existing column.
+                while reward_name in output_df or l2_name in output_df:
+                    match = re.fullmatch("([^\d]+)(\d+)", env_name)
+                    if match:
+                        env_name = match.group(1) + str(int(match.group(2))+1)
+                    else:
+                        env_name = env_name + "1"
+                    reward_name = f"{env_prefix}_{env_name}_reward"
+                    l2_name = f"{env_prefix}_{env_name}_end_l2"
+                if env_name != original_env_name:
+                    print(f"Environment name '{original_env_name}' is already in {output_filename}!"
+                            + f" Adjusted to '{env_name}'.")
+
+                output_df[reward_name] = reward_data
+                output_df[l2_name] = l2_data
 
             output_file.seek(0)
             output_file.truncate()
             output_df.to_csv(output_file, index=False)
 
-        # /with Close and unlock output_file.
+        # /with locked file (Close and unlock output_file.)
 
         reread_df = pd.read_csv(output_filename, comment='#', float_precision='round_trip')
 
