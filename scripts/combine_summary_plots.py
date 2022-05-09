@@ -289,8 +289,8 @@ Options are: (default: range)
         ax.set_xmargin(0.0)
         ax.set_xlabel('episodes')
         ax.set_ylabel('reward')
-        if args.paper_mode:
-            ax.yaxis.set_label_coords(-0.05, 0.5)
+        #if args.paper_mode:
+            #ax.yaxis.set_label_coords(-0.05, 0.5)
         ax.grid(True)
         # Use symlog as the rewards are negative.
         # Ugh...
