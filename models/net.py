@@ -2,52 +2,6 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras.layers import Layer, Dense, LayerNormalization
 
-# Note that these are only used in models that are not global backprop.
-# If you really need them, consider copying the SB files (and adding float64 support).
-from stable_baselines.common.tf_layers import mlp, linear
-
-def gaussian_policy_net(state_tensor, action_shape, layers, activation_fn, layer_norm,
-        scope="policy", reuse=False):
-    """
-    Construct a Gaussian policy network.
-
-    The input of the network is the state, and the output is a set of means and the
-    log of standard deviations representing the multivariate Gaussian distribution from which the
-    action can be drawn.
-
-    Notably, the log standard deviation output is NOT connected to the state; it is instead just a
-    set of trainable weights like a separate bias vector. This means this style of network will not
-    function for an algorithm such as SAC that needs to control the standard deviation for
-    exploration.
-
-    Parameters
-    ----------
-    state_tensor : Tensor (probably a placeholder) containing the state.
-    action_shape : tuple representing shape of an action (e.g. env.action_space.shape)
-    layers : iterable of ints for each layer size e.g. [32, 32]. Can be empty list for no hidden
-                layers.
-    activation_fn : TensorFlow activation function, e.g. tf.nn.relu
-
-    Returns the means and log standard deviations.
-    """
-    flattened_state_size = np.prod(state_tensor.shape[1:])
-    flattened_action_size = np.prod(action_shape)
-    with tf.variable_scope(scope, reuse):
-        flat_state = tf.reshape(state_tensor, (-1, flattened_state_size))
-        # TODO Could use layer normalization - that might be a good idea, esp. with ReLU.
-        policy_latent = mlp(flat_state, layers=layers, activ_fn=activation_fn,
-                layer_norm=layer_norm)
-
-        # Not sure why the sqrt(2) hyperparameter for initialization. StableBaselines uses it.
-        flat_mean = linear(policy_latent, "mean", flattened_action_size, init_scale=np.sqrt(2))
-        flat_log_std = tf.get_variable(name='logstd', shape=[flattened_action_size],
-                                   initializer=tf.zeros_initializer())
-
-        mean = tf.reshape(flat_mean, (-1,) + action_shape)
-        log_std = tf.reshape(flat_log_std, (-1,) + action_shape)
-
-    return mean, log_std
-
 class PolicyNet(Layer):
     def __init__(self, layers, action_shape, activation_fn=tf.nn.relu, layer_norm=False,
                     name=None, dtype=None):
@@ -141,4 +95,87 @@ class FunctionWrapper(Layer):
         else:
             modified_output = output_tensor
         return modified_output
+
+
+# The rest are only used in models that are not the BPTTS model.
+
+#from stable_baselines.common.tf_layers import mlp
+def mlp(input_tensor, layers, activ_fn=tf.nn.relu, layer_norm=False):
+    """
+    Create a multi-layer fully connected neural network.
+
+    :param input_tensor: (tf.placeholder)
+    :param layers: ([int]) Network architecture
+    :param activ_fn: (tf.function) Activation function
+    :param layer_norm: (bool) Whether to apply layer normalization or not
+    :return: (tf.Tensor)
+    """
+    output = input_tensor
+    for i, layer_size in enumerate(layers):
+        output = tf.layers.dense(output, layer_size, name='fc' + str(i))
+        if layer_norm:
+            output = tf.contrib.layers.layer_norm(output, center=True, scale=True)
+        output = activ_fn(output)
+    return output
+
+#from stable_baselines.common.tf_layers import linear
+def linear(input_tensor, scope, n_hidden, *, init_scale=1.0, init_bias=0.0):
+    """
+    Creates a fully connected layer for TensorFlow
+
+    :param input_tensor: (TensorFlow Tensor) The input tensor for the fully connected layer
+    :param scope: (str) The TensorFlow variable scope
+    :param n_hidden: (int) The number of hidden neurons
+    :param init_scale: (int) The initialization scale
+    :param init_bias: (int) The initialization offset bias
+    :return: (TensorFlow Tensor) fully connected layer
+    """
+    with tf.variable_scope(scope):
+        n_input = input_tensor.get_shape()[1].value
+        weight = tf.get_variable("w", [n_input, n_hidden], initializer=ortho_init(init_scale))
+        bias = tf.get_variable("b", [n_hidden], initializer=tf.constant_initializer(init_bias))
+        return tf.matmul(input_tensor, weight) + bias
+
+def gaussian_policy_net(state_tensor, action_shape, layers, activation_fn, layer_norm,
+        scope="policy", reuse=False):
+    """
+    Construct a Gaussian policy network.
+
+    The input of the network is the state, and the output is a set of means and the
+    log of standard deviations representing the multivariate Gaussian distribution from which the
+    action can be drawn.
+
+    Notably, the log standard deviation output is NOT connected to the state; it is instead just a
+    set of trainable weights like a separate bias vector. This means this style of network will not
+    function for an algorithm such as SAC that needs to control the standard deviation for
+    exploration.
+
+    Parameters
+    ----------
+    state_tensor : Tensor (probably a placeholder) containing the state.
+    action_shape : tuple representing shape of an action (e.g. env.action_space.shape)
+    layers : iterable of ints for each layer size e.g. [32, 32]. Can be empty list for no hidden
+                layers.
+    activation_fn : TensorFlow activation function, e.g. tf.nn.relu
+
+    Returns the means and log standard deviations.
+    """
+    flattened_state_size = np.prod(state_tensor.shape[1:])
+    flattened_action_size = np.prod(action_shape)
+    with tf.variable_scope(scope, reuse):
+        flat_state = tf.reshape(state_tensor, (-1, flattened_state_size))
+        # TODO Could use layer normalization - that might be a good idea, esp. with ReLU.
+        policy_latent = mlp(flat_state, layers=layers, activ_fn=activation_fn,
+                layer_norm=layer_norm)
+
+        # Not sure why the sqrt(2) hyperparameter for initialization. StableBaselines uses it.
+        flat_mean = linear(policy_latent, "mean", flattened_action_size, init_scale=np.sqrt(2))
+        flat_log_std = tf.get_variable(name='logstd', shape=[flattened_action_size],
+                                   initializer=tf.zeros_initializer())
+
+        mean = tf.reshape(flat_mean, (-1,) + action_shape)
+        log_std = tf.reshape(flat_log_std, (-1,) + action_shape)
+
+    return mean, log_std
+
 

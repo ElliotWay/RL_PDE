@@ -3,7 +3,7 @@ import numpy as np
 
 from rl_pde.policy import Policy
 from util import sb_logger as internal_logger
-import stable_baselines.logger as external_logger
+#import stable_baselines.logger as external_logger
 
 class AbstractModel(Policy):
     """
