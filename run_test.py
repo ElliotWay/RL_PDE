@@ -27,7 +27,6 @@ import envs.solutions as solutions
 from envs import AbstractPDEEnv
 from envs import Plottable1DEnv, Plottable2DEnv
 from models import builder as model_builder
-from models import SACModel, PolicyGradientModel, TestModel
 from util import plots
 from util import metadata
 from util import colors
