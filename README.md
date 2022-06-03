@@ -96,3 +96,26 @@ and [rl_pde/agents/](rl_pde/agents) is concerned with the agents that add contro
 Files is [util/](util) are miscellaneous functions that don't belong anywhere else.
 
 
+## Citation
+
+If you find this code useful, please consider citing the following papers:
+
+[**Backpropagation through Time and Space: Learning Numerical Methods with Multi-Agent Reinforcement Learning**](https://arxiv.org/abs/2203.08937)
+
+    @article{way2022backpropagation,
+      title={Backpropagation through Time and Space: Learning Numerical Methods with Multi-Agent Reinforcement Learning},
+      author={Way, Elliot and Kapilivai, Dheeraj SK and Fu, Yiwei and Yu, Lei},
+      journal={arXiv preprint arXiv:2203.08937},
+      year={2022}
+    }
+
+[**Multi-Agent Learning of Numerical Methods for Hyperbolic PDEs with Factored Dec-MDP**](https://arxiv.org/abs/2205.15716)
+
+    @article{fu2022multiagent,
+      title={Multi-Agent Learning of Numerical Methods for Hyperbolic PDEs with Factored Dec-MDP},
+      author={Fu, Yiwei and Kapilavai, Dheeraj S. K. and Way, Elliot},
+      journal={arXiv preprint arXiv:2205.15716},
+      year={2022}
+    }
+
+
